@@ -1054,6 +1054,34 @@ class KhasiSpellChecker:
     # Gate helpers
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Run-together splits
+    # ------------------------------------------------------------------
+
+    def _split_table(self) -> dict:
+        """{solid form: spaced form}, loaded once. See khasi_spell.splits."""
+        t = getattr(self, "_splits_cache", None)
+        if t is None:
+            try:
+                from khasi_spell import splits
+                t = splits.load()
+            except Exception:
+                t = {}
+            self._splits_cache = t
+        return t
+
+    def _split_suggestion(self, word: str) -> Optional[str]:
+        """The two-word form of *word*, when the corpus says it is one.
+
+        Edit distance cannot propose a space — every candidate is drawn from
+        a vocabulary of single words — so the correct answer for `jongki`
+        (`jong ki`, written spaced 17,312 times against 2,642 solid) was not
+        merely mis-ranked, it was unreachable. The list instead offered
+        `jongka`, which is the same error with a different pronoun, and
+        `jongka` was offered `jongki` straight back.
+        """
+        return self._split_table().get((word or "").lower().strip())
+
     def _offerable(self, cand: str, word: str = "") -> bool:
         """
         May *cand* be offered as a correction (of *word*, when given)?
@@ -1118,6 +1146,13 @@ class KhasiSpellChecker:
             if low != wl and low == wl.translate(_DIACRITIC_FOLD):
                 return False
         if low in _INVALID or not any(ch in _V for ch in low):
+            return False
+
+        # Never offer a word we would ourselves flag as a run-together.
+        # `jongka` was suggested for `jongki` and `jongki` for `jongka` —
+        # both the same error with a different clitic, cycling the writer
+        # between two forms neither of which is right.
+        if " " not in low and self._split_suggestion(low):
             return False
 
         # Illegal characters are a HARD constraint, unlike the rest of
@@ -1707,6 +1742,18 @@ class KhasiSpellChecker:
                 method = "hybrid_fasttext"
             except Exception:
                 pass
+
+        # A split outranks every single-word candidate: it is a one-character
+        # insertion, and the corpus evidence behind it is far stronger than
+        # the edit distance behind the words it displaces. Inserted after the
+        # re-rankers so neither can reorder or drop it.
+        _split = self._split_suggestion(word_lower)
+        if _split:
+            suggestions = [_split] + [s for s in suggestions if s != _split]
+            suggestion_distances = [1.0] + list(suggestion_distances)
+            suggestions = suggestions[:n]
+            suggestion_distances = suggestion_distances[:n]
+            method = "runtogether_split"
 
         if not suggestions:
             method = "none"

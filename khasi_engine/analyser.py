@@ -42,6 +42,11 @@ from khasi_engine import phonology, morphology, assimilation, complex as complex
 from khasi_engine.spell_checker import KhasiSpellChecker
 
 
+# The Lynnong II noun-class clitics. `ia` in front of one of these is the
+# preposition taking its article, not the reciprocal prefix taking a root.
+_NOUN_CLASS_CLITICS = frozenset({"ka", "u", "ki", "i"})
+
+
 class KhasiAnalyser:
     """
     Main analysis engine. Thread-safe after __init__.
@@ -844,13 +849,42 @@ class KhasiAnalyser:
         """
         out = []
         for pfx in self._bound_prefixes():
-            for m in re.finditer(rf"\b({pfx})\s+({self._WORD_RE})",
-                                 text, re.IGNORECASE):
-                head, tail = m.group(1), m.group(2)
-                spaced = f"{head.lower()} {tail.lower()}"
+            # The reciprocal may sit BETWEEN the bound prefix and the root,
+            # detached from both: `jing ia mareh`. Matching only
+            # prefix + one word stopped at `jing ia` and offered `jingïa` —
+            # a prefix chain with nothing on it, which is not a word either.
+            # The bound prefix is what makes this safe: after `jing`/`pyn`
+            # the following `ia` cannot be the preposition, it is the
+            # reciprocal, so absorbing it does not touch the 143 lexicon
+            # phrases that a general "join any productive prefix" rule would
+            # have rewritten. Measured: no lexicon phrase matches
+            # `jing|pyn  ia  X` at all.
+            for m in re.finditer(
+                    rf"\b({pfx})\s+(?:(ïa|ia)\s+)?({self._WORD_RE})",
+                    text, re.IGNORECASE):
+                head, recip, tail = m.group(1), m.group(2), m.group(3)
+                parts = [head.lower()]
+                if recip:
+                    parts.append(recip.lower())
+                parts.append(tail.lower())
+                # `ia` before a noun-class clitic is the PREPOSITION and its
+                # article — `ia ka`, `ia u` — never the reciprocal prefix and
+                # a root. `ka jing ia ka` is the noun `jing` followed by
+                # exactly that, and absorbing it produced `jingïaka`: a
+                # prefix chain welded to a clitic.
+                #
+                # The four Lynnong II clitics are the test, not a part of
+                # speech: this file's own _PROTECTED_WORDS is built from
+                # FREE_MORPHEMES and contains `mareh`, a verb, so it rejects
+                # the very case this rule exists for; and `_is_content_word`
+                # leans on POS tags that generate.py records as unreliable
+                # (`rap` "to help" is tagged `other`).
+                if recip and tail.lower() in _NOUN_CLASS_CLITICS:
+                    continue
+                spaced = " ".join(parts)
                 if self.db.is_known(spaced):
                     continue                      # a recorded phrase
-                joined = f"{head}{tail}".lower()
+                joined = "".join(parts)
                 if not self._is_morphologically_valid(joined):
                     continue
                 # Land on the spelling the lexicon writes, in one step.

@@ -66,7 +66,12 @@ docs/
 
 # Curation review exports. Produced by scripts/export_*.py for a human to
 # read; grep confirms no runtime module opens them.
-data/*_review.csv
+# runtogether_candidates_review.csv IS read at runtime now (khasi_spell/splits.py),
+# so it is no longer a pure curation export.
+data/ain_candidates_review.csv
+data/borrowing_candidates_review.csv
+data/ocr_candidates_review.csv
+data/ocr_repair_review.csv
 
 # Working notes
 IMPROVEMENT_PROMPT.md

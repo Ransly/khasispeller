@@ -81,6 +81,29 @@ CONTEXT_WINDOW = 2
 _TOKEN = re.compile(r"[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*")
 
 
+def _score(lm, cand, left, right):
+    """Context score for one candidate, which may be more than one word.
+
+    A split suggestion like `jong ngi` is a single candidate string holding
+    two tokens. Passed to slot_score() whole it is looked up as if it were
+    one word, every n-gram lookup misses, and it scores at the floor — so
+    the re-ranker moved the one correct answer to the bottom of the list.
+
+    Each part is scored in the slot it would actually occupy, with the other
+    parts as its immediate context, and the MEAN is returned so a two-word
+    candidate competes on the same scale as a one-word one rather than
+    carrying twice the (negative) log score.
+    """
+    parts = cand.split()
+    if len(parts) < 2:
+        return lm.slot_score(cand, left, right)
+    total = 0.0
+    for i, part in enumerate(parts):
+        total += lm.slot_score(part, list(left) + parts[:i],
+                               parts[i + 1:] + list(right))
+    return total / len(parts)
+
+
 def rerank(
     text: str,
     corrections: Sequence[Any],
@@ -131,7 +154,7 @@ def rerank(
 
         scored = sorted(
             range(len(cands)),
-            key=lambda i: -(lm.slot_score(cands[i], left, right) + alpha * (-i)),
+            key=lambda i: -(_score(lm, cands[i], left, right) + alpha * (-i)),
         )
         reordered = [cands[i] for i in scored]
         if reordered[0] != cands[0]:
