@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "khasi-spell"
+version = "1.0.0"
+description = "Morphology-gated spellchecker for the Khasi language"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["khasi", "spellchecker", "nlp", "low-resource", "austroasiatic", "morphology"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Topic :: Text Processing :: Linguistic",
+]
+dependencies = []
+
+[project.optional-dependencies]
+embeddings = ["gensim>=4,<5", "numpy<2"]      # local FastText model
+embeddings-remote = ["requests>=2.31.0"]      # remote HF Space instead
+api = ["fastapi>=0.111.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.0.0"]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+khasi-spell = "khasi_spell.cli:main"
+
+[tool.setuptools]
+packages = ["khasi_spell", "khasi_engine", "autocorrect"]
+
+[tool.setuptools.package-data]
+autocorrect = ["data/*.json"]
+khasi_spell = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

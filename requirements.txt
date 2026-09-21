@@ -1,0 +1,13 @@
+# Core library — no third-party dependencies.
+#
+# The engine (phonology, morphology, assimilation, complex, database,
+# spell_checker) and the vendored autocorrect package are pure standard
+# library. `requests` is needed only if you enable the optional FastText
+# semantic re-ranker via KHASI_W2V_URL.
+
+# Optional — semantic re-ranking only. Neither is needed for spellchecking.
+#   local model  (bundled in models/fasttext/):
+# gensim>=4,<5
+# numpy<2
+#   remote HF Space instead:
+# requests>=2.31.0

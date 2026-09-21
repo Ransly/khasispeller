@@ -1,0 +1,2029 @@
+{
+ "meta": {
+  "created": "2026-08-27",
+  "seed": 20260827,
+  "n": 250,
+  "note": "Real deduplicated corpus sentences with one injected single-edit error at a known offset. Only items the checker flags are kept, so this measures RANKING in context, not detection.",
+  "quarantined": 1,
+  "quarantine_note": "Items with valid=false are kept, never deleted, so the frozen set is not edited for convenience. They are excluded from the headline score because no correct Khasi answer exists.",
+  "ia_prefix_corrections": 13,
+  "ia_prefix_note": "13 golds respelled ia- -> ïa- after the lexicon was normalised. Each carries a `corrected` field; typos are unchanged."
+ },
+ "items": [
+  {
+   "sentence": "Ka iing ka la dei ban dawa ia sorykar MDA ba dei ban mih noh na ka NDA mynnin hi ka sngi.",
+   "typo": "sorykar",
+   "gold": "sorkar",
+   "start": 30,
+   "end": 37,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ki nong ialp ha kine ki sngi ki long, pastor R.",
+   "typo": "ialp",
+   "gold": "ïalap",
+   "start": 8,
+   "end": 12,
+   "kind": "del",
+   "corrected": "gold respelled 'ialap' -> 'ïalap'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ka pyndonakm tang da u khulom , ula ong.",
+   "typo": "pyndonakm",
+   "gold": "pyndonkam",
+   "start": 3,
+   "end": 12,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ngan sa ioh ban ikaren bad ki khlem pep.",
+   "typo": "ikaren",
+   "gold": "ïakren",
+   "start": 16,
+   "end": 22,
+   "kind": "trans",
+   "corrected": "gold respelled 'iakren' -> 'ïakren'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Kumta ha ka jaka ban ring tang kawei ka lynkor ki lah ban ring bun ki lyngkor ha kajuh ka por.",
+   "typo": "lynkor",
+   "gold": "lyngkor",
+   "start": 40,
+   "end": 46,
+   "kind": "del"
+  },
+  {
+   "sentence": "Hap ban pyenkynmaw ia kine ki rangbah, ba kumba 38 snem ka sorkar Congress ka la pyniaid ia ka jylla Meghalaya.",
+   "typo": "pyenkynmaw",
+   "gold": "pynkynmaw",
+   "start": 8,
+   "end": 18,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Katei ka Jylla, ka don 2,100 ngut kiba ioh ia katei ka jingpng.",
+   "typo": "jingpng",
+   "gold": "jingpang",
+   "start": 55,
+   "end": 62,
+   "kind": "del"
+  },
+  {
+   "sentence": "Kitei ki jaitbynriew Scheduled Tribes bad Scheduled Castes haneng, ki lah ban thid jaka katba mon ha Meghalaya.",
+   "typo": "thid",
+   "gold": "thied",
+   "start": 78,
+   "end": 82,
+   "kind": "del"
+  },
+  {
+   "sentence": "Kane kadei ka jingkren jong u governor lynbga ka Twittwer.",
+   "typo": "lynbga",
+   "gold": "lyngba",
+   "start": 39,
+   "end": 45,
+   "kind": "trans"
+  },
+  {
+   "sentence": "U siotan u dei u Lucifer uba la kylla long u ksuid bad u soitan.",
+   "typo": "siotan",
+   "gold": "soitan",
+   "start": 2,
+   "end": 8,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka jingiap u Jisu halor dienghpna kamdei ka jingkut hynrei ka jingsdang, Namar nangne un thaw thymmai ia kita kiba ngeit baroh.",
+   "typo": "dienghpna",
+   "gold": "diengphna",
+   "start": 24,
+   "end": 33,
+   "kind": "trans"
+  },
+  {
+   "sentence": "AIS Suja   Ka jingiadei paralok hapdeng ka USA bad ka Israel ka long kaba oiajan bha naduh ki por mynshuwa bad mynta.",
+   "typo": "oiajan",
+   "gold": "ïajan",
+   "start": 74,
+   "end": 80,
+   "kind": "ins",
+   "corrected": "gold respelled 'iajan' -> 'ïajan'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ka jingphai khmat sha U Trai da ka jingduwi ka jingsngewsih ba riewblei; U Blei U sngap bad U pyllait.",
+   "typo": "jingduwi",
+   "gold": "jingduwai",
+   "start": 35,
+   "end": 43,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka jylla Meghalaya ka don ruh ia ka histyri ha kaba u jumai uba jur bha u la ju khie.",
+   "typo": "histyri",
+   "gold": "histori",
+   "start": 36,
+   "end": 43,
+   "kind": "sub"
+  },
+  {
+   "sentence": "bynhta -2  Ki bnai ki leit  ki bnai ki wan, na ka Aiom Lyur la beh sa ka lyer Synrai.",
+   "typo": "bynhta",
+   "gold": "bynta",
+   "start": 0,
+   "end": 6,
+   "kind": "ins"
+  },
+  {
+   "sentence": "All these are facts and htere is nothing false in it.",
+   "typo": "htere",
+   "gold": "there",
+   "start": 24,
+   "end": 29,
+   "kind": "trans",
+   "valid": false,
+   "invalid_reason": "gold is an English word, not Khasi — it was reachable only while English gloss text sat in the lexicon's surface_form fields, and became unanswerable when those entries were quarantined"
+  },
+  {
+   "sentence": "Uta u shynirang u la rah da ka bor ia kata ka kynthei ha jingthiah.",
+   "typo": "shynirang",
+   "gold": "shynrang",
+   "start": 6,
+   "end": 15,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Daiapherbha Lamare, Secretary, Narpuh brder Area Joint Action Committee (NBAJAC).",
+   "typo": "brder",
+   "gold": "border",
+   "start": 38,
+   "end": 43,
+   "kind": "del"
+  },
+  {
+   "sentence": "Baroh ka jingthep vote ka la iaid beit hklem don kano kano ka jingpynthut.",
+   "typo": "hklem",
+   "gold": "khlem",
+   "start": 39,
+   "end": 44,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha Mawkynrew C&RD Block na ka 41,775 ngut ki nonsgshong shnong kiba la rung kyrteng ha u Aadhaar ki don 3447 ngut kata 8.25%.",
+   "typo": "nonsgshong",
+   "gold": "nongshong",
+   "start": 45,
+   "end": 55,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha kaba leit ban thep ia ka kyrtneg u Bah Julias K.",
+   "typo": "kyrtneg",
+   "gold": "kyrteng",
+   "start": 28,
+   "end": 35,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kaba sngewttynnat ka long ba kane ka kynhun hapoh ka jing alam jong u Conrad K.",
+   "typo": "sngewttynnat",
+   "gold": "sngewtynnat",
+   "start": 5,
+   "end": 17,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka dei ka jingdih kaba la pyndonkham naduh ki hajar snem mynshuwa.",
+   "typo": "pyndonkham",
+   "gold": "pyndonkam",
+   "start": 26,
+   "end": 36,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Katei ka khuobr, ka dei kaba la pynmih da U  N.J.",
+   "typo": "khuobr",
+   "gold": "khubor",
+   "start": 9,
+   "end": 15,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ki shim kagba mon, khlem pyrkhat ia ka lawei.",
+   "typo": "kagba",
+   "gold": "katba",
+   "start": 8,
+   "end": 13,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ngin ia siew bam khoana Khristmas ne em?",
+   "typo": "khoana",
+   "gold": "khana",
+   "start": 17,
+   "end": 23,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Bad shisien ba ki la ibohsngew ka mynsiem jong ki ka kwah dik dik ban leit iathuhkhana ha ki para kynthei.",
+   "typo": "ibohsngew",
+   "gold": "iohsngew",
+   "start": 21,
+   "end": 30,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngi la rai ban don ka jingialap paidbah ban leh da ka Council bad ka sorkra bad ka Hima ,  u la ong.",
+   "typo": "sorkra",
+   "gold": "sorkar",
+   "start": 69,
+   "end": 75,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha U Naiwieng ba ladep, ki ar tylli ki Ri, ki la ia bujil ia 162 tylli ki jaka, ba la dep pynbeit.",
+   "typo": "bujil",
+   "gold": "bujli",
+   "start": 52,
+   "end": 57,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Shillong:  Ka Khasi Student Union (KSU), ka sngew thamula jur, haor ka jingkren u Lat barim ka jylla u R.",
+   "typo": "haor",
+   "gold": "halor",
+   "start": 63,
+   "end": 67,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka la kular ruh ban peit ia ka jingliong jingman ki painkhana ha Secretariat kumba lapynsngew da u MLA ka Sohra.",
+   "typo": "jingliong",
+   "gold": "jinglong",
+   "start": 31,
+   "end": 40,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ki don kiba khohnioh ruh ia ka jinghiar uateng ka jaid sha bad na ka Kynthei bad ki kwah ban pynkylla noh.",
+   "typo": "uateng",
+   "gold": "pateng",
+   "start": 40,
+   "end": 46,
+   "kind": "sub"
+  },
+  {
+   "sentence": "La ong ka kywrwoh na bah J.C Cajee, u General Secretary.",
+   "typo": "kywrwoh",
+   "gold": "kyrwoh",
+   "start": 10,
+   "end": 17,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka jingma kan wan tied jingkhang   khlem da pynlsem shuh.",
+   "typo": "pynlsem",
+   "gold": "pynslem",
+   "start": 44,
+   "end": 51,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Na ka liang jong u Rupang u la ioh lad ban iakrbn bad u Dr.",
+   "typo": "iakrbn",
+   "gold": "ïakren",
+   "start": 43,
+   "end": 49,
+   "kind": "sub",
+   "corrected": "gold respelled 'iakren' -> 'ïakren'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Kumta ka la ypntngen ruh ia la ka kmie.",
+   "typo": "ypntngen",
+   "gold": "pyntngen",
+   "start": 12,
+   "end": 20,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kumta u bah Tynsong u la btehah ia ki ophisar jong ka Veterinary Dept.",
+   "typo": "btehah",
+   "gold": "bthah",
+   "start": 25,
+   "end": 31,
+   "kind": "ins"
+  },
+  {
+   "sentence": "U la ong ba ka jingmih ka kynrum kynram ka la ktah ia ki paidbah bad khamtam ia ki nongpag.",
+   "typo": "nongpag",
+   "gold": "nongpang",
+   "start": 83,
+   "end": 90,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka balagn u blei ka lah don 117 snem bad ka ing mane ba ing ka lah don 95 snem.",
+   "typo": "balagn",
+   "gold": "balang",
+   "start": 3,
+   "end": 9,
+   "kind": "trans"
+  },
+  {
+   "sentence": "La iahuh ba katei ka phone, ka dang bam ding bad utei u briew, dang kren phone ha ryngkat ka pyndait ding.",
+   "typo": "iahuh",
+   "gold": "ïathuh",
+   "start": 3,
+   "end": 8,
+   "kind": "del",
+   "corrected": "gold respelled 'iathuh' -> 'ïathuh'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Yn pdiang 312 ngut ki Youth Coach ha Meghalaya khlem kano kano ka jiungsiew.",
+   "typo": "jiungsiew",
+   "gold": "jingsiew",
+   "start": 66,
+   "end": 75,
+   "kind": "ins"
+  },
+  {
+   "sentence": "kjumta kiei kiei kiba dei ki jong u briew kim neh junom.",
+   "typo": "kjumta",
+   "gold": "kumta",
+   "start": 0,
+   "end": 6,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Khymdeit, President ka Managing Committee, ki Nonghikai, ki kmie ki kpa lem bad ki khnnah jong katei ka skul.",
+   "typo": "khnnah",
+   "gold": "khynnah",
+   "start": 83,
+   "end": 89,
+   "kind": "del"
+  },
+  {
+   "sentence": "U Lat u la pyhnlait ruh ia ka kot sahkynmaw jong ka kolej ia kane ka jingiaid lynti san phew snem.",
+   "typo": "pyhnlait",
+   "gold": "pynlait",
+   "start": 11,
+   "end": 19,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Haba kren halor ka History ka Balang, u tymmne Basan, u Tbn.",
+   "typo": "tymmne",
+   "gold": "tymmen",
+   "start": 40,
+   "end": 46,
+   "kind": "trans"
+  },
+  {
+   "sentence": "La synran ia u, da ka kong B Giri, kaba dei ka dkhbt jong ka komishon.",
+   "typo": "dkhbt",
+   "gold": "dkhot",
+   "start": 47,
+   "end": 52,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Kum u MLA u ieid eh ia ki paidbah ka konstitwensi, bad kumjluh ia ka jylla.",
+   "typo": "kumjluh",
+   "gold": "kumjuh",
+   "start": 55,
+   "end": 62,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Kaba mut ka liang ka diang ka iaryngkat bad ka laing ka mon.",
+   "typo": "laing",
+   "gold": "liang",
+   "start": 47,
+   "end": 52,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka jingtip jong u Myntri ratngbah ka Meghalaya ha ka koit ka khiah ka kham lah ba ia nga.",
+   "typo": "ratngbah",
+   "gold": "rangbah",
+   "start": 25,
+   "end": 33,
+   "kind": "ins"
+  },
+  {
+   "sentence": "namr ba kim pat lah ban pyniapher hapdeng u Lyngngam bad u Diko ne Dko.",
+   "typo": "namr",
+   "gold": "namar",
+   "start": 0,
+   "end": 4,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ngi hap ha ki kkndon jong ka Sixth Scheduled bad ym ha ki ain ka sorkar jylla.",
+   "typo": "kkndon",
+   "gold": "kyndon",
+   "start": 14,
+   "end": 20,
+   "kind": "sub"
+  },
+  {
+   "sentence": "lane kaba kumno ka jaka shnog thait jong nga?",
+   "typo": "shnog",
+   "gold": "shong",
+   "start": 24,
+   "end": 29,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Hynrei kine ki la sdang duna um bad la sdang ruh ban jyndoong ha ka jingjylliew.",
+   "typo": "jyndoong",
+   "gold": "jyndong",
+   "start": 53,
+   "end": 61,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Philip Marwein Ka iing jong u President jong ka Ri India ka don ha New Delhi sehaphang sepngi  khyndiat na Rajpath.",
+   "typo": "sehaphang",
+   "gold": "shaphang",
+   "start": 77,
+   "end": 86,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Kam mynti ba u briew un long uba riewspah tam hynrei um ithuh pat ia ka jingieit bah u Blei.",
+   "typo": "mynti",
+   "gold": "myntoi",
+   "start": 4,
+   "end": 9,
+   "kind": "del"
+  },
+  {
+   "sentence": "Na ka gliang ma ngi ngin nym ailad ia ka bor pyniaid ban thom bor , la ong u bah Roipar.",
+   "typo": "gliang",
+   "gold": "liang",
+   "start": 6,
+   "end": 12,
+   "kind": "ins"
+  },
+  {
+   "sentence": "U Laskar, ula leit jngoh ruh ia ka Cathedral of Mary Help of Christians, gshillong.",
+   "typo": "gshillong",
+   "gold": "shillong",
+   "start": 73,
+   "end": 82,
+   "kind": "ins"
+  },
+  {
+   "sentence": "U la ong ba ki samla ki dei ban kiar bad ialeh pyrshtah ia ki jingsniew ban long ka lawei ba phynai.",
+   "typo": "pyrshtah",
+   "gold": "pyrshah",
+   "start": 47,
+   "end": 55,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Kam dei ban long mynstep da kawei, janiet da kawei.",
+   "typo": "janiet",
+   "gold": "janmiet",
+   "start": 35,
+   "end": 41,
+   "kind": "del"
+  },
+  {
+   "sentence": "Em, ko para mynsiem, ngim don jinrmut ei ei ban kren bein ne niewbein ia phi.",
+   "typo": "jinrmut",
+   "gold": "jingmut",
+   "start": 30,
+   "end": 37,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia ki khyrdop jong ka yn ym khagn namar ka miet kam don shuh hangta.",
+   "typo": "khagn",
+   "gold": "khang",
+   "start": 28,
+   "end": 33,
+   "kind": "trans"
+  },
+  {
+   "sentence": "John Pala (Education Secretary) , ki member ka JYF, ka President ka KNGCSU bad kiwei de ki riew rangbh.",
+   "typo": "rangbh",
+   "gold": "rangbah",
+   "start": 96,
+   "end": 102,
+   "kind": "del"
+  },
+  {
+   "sentence": "bad ki dei ban phah noh shwa ka 26 tarik jymamng 2019.",
+   "typo": "jymamng",
+   "gold": "jymmang",
+   "start": 41,
+   "end": 48,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha kaewi ka jingialehkai, ka  Union Christian College ka la pylliem ia ka Raid Laban College da 2-1.",
+   "typo": "kaewi",
+   "gold": "kawei",
+   "start": 3,
+   "end": 8,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Yn pynkupburom ruh ia ki MLA, MDC ba iynta bad ia ki MLA, MDC kiba rim jong ka Ri-Bhoi.",
+   "typo": "iynta",
+   "gold": "mynta",
+   "start": 37,
+   "end": 42,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Kiwei kiwei ki party ki dang ialeh hi ban pynkhreh hytnrei kim pat lah ban buh kyrtong ha bun ki Constituency.",
+   "typo": "hytnrei",
+   "gold": "hynrei",
+   "start": 51,
+   "end": 58,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka jingiplang paitbah kaba nyngkong eh jong ka CBU ka dei ha ka 6 tarik Risaw (October) 1968.",
+   "typo": "jingiplang",
+   "gold": "jingïalang",
+   "start": 3,
+   "end": 13,
+   "kind": "sub",
+   "corrected": "gold respelled 'jingialang' -> 'jingïalang'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ka HSPDP ka la dep nynbna ia ka thup ki kyrtong kham mynshwa.",
+   "typo": "nynbna",
+   "gold": "pynbna",
+   "start": 19,
+   "end": 25,
+   "kind": "sub"
+  },
+  {
+   "sentence": "32 shi kilo katba uba kham snuew ka dor ka long T.",
+   "typo": "snuew",
+   "gold": "sniew",
+   "start": 27,
+   "end": 32,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha ka juh ka mynsim la plie sa ia ka College of Home Science, Tura bad ia ka College of Agriculture, Kyrdemkulai.",
+   "typo": "mynsim",
+   "gold": "mynsiem",
+   "start": 13,
+   "end": 19,
+   "kind": "del"
+  },
+  {
+   "sentence": "Nga dei shwa u nongrep bad sa u ulit hadien.",
+   "typo": "ulit",
+   "gold": "pulit",
+   "start": 32,
+   "end": 36,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka Tamil nadhu, kan jied MLA, ha ka 6tarik Iaiong, ha kajuh ka sngi bad ka Tamil Nadu.",
+   "typo": "nadhu",
+   "gold": "naduh",
+   "start": 9,
+   "end": 14,
+   "kind": "trans"
+  },
+  {
+   "sentence": "U Blei u la leh sbun shisha ban ai ia ngi u nowgialam uba kynsai , la ong  u Dr Mukul.",
+   "typo": "nowgialam",
+   "gold": "nongïalam",
+   "start": 44,
+   "end": 53,
+   "kind": "sub",
+   "corrected": "gold respelled 'nongialam' -> 'nongïalam'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Nga la jubab,  Ka bha hi ba ngi la thnagn eh .",
+   "typo": "thnagn",
+   "gold": "thngan",
+   "start": 35,
+   "end": 41,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kat hadhu mynta, ym pat don shuh kiba iap na katei ka jingjia bad kitei ki dang shah sumar ha Hospital.",
+   "typo": "hadhu",
+   "gold": "haduh",
+   "start": 4,
+   "end": 9,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Mawkyrwat, 26 Lber: myghynnin ka sngi u Myntri ba dei khmih ia ka tnad PWD Roads u Martin M.",
+   "typo": "myghynnin",
+   "gold": "mynhynnin",
+   "start": 20,
+   "end": 29,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha West jaintwia Hills ki don 3 ngut kiba kynthup 2 ngut ki ILI case bad iwei na Khimusniang cluster.",
+   "typo": "jaintwia",
+   "gold": "jaintia",
+   "start": 8,
+   "end": 16,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Hangne pat ki briew ba sohng ha kito ki thain kum ha Singapore, Malaysia bad Indonesia ki ioh tang kawei ka samoi.",
+   "typo": "sohng",
+   "gold": "shong",
+   "start": 23,
+   "end": 28,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Bunsien ha ka jingolng briew ngi pyrkhat tang ban ioh spah te la biang ngi la long riewbha riewmiat.",
+   "typo": "jingolng",
+   "gold": "jinglong",
+   "start": 14,
+   "end": 22,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ia ka elekshon shiteng la pnylong ha ka jylla Meghalaya, Arunachal Pradesh, Jammu& Kashmir, Jharkhand, Gujarat, Utter Pradesh, Madhy Pradesh bd Telengana.",
+   "typo": "pnylong",
+   "gold": "pynlong",
+   "start": 26,
+   "end": 33,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Dei nakata kadaw ka pyllong ia ka pyrhei ban long kumba long mynta.",
+   "typo": "pyrhei",
+   "gold": "pyrthei",
+   "start": 34,
+   "end": 40,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka Lajong ka la bulji noh ia u Lalrohlua da u Alen Deory ha ka kyllamiet.",
+   "typo": "bulji",
+   "gold": "bujli",
+   "start": 16,
+   "end": 21,
+   "kind": "trans"
+  },
+  {
+   "sentence": "La ialam ia katei ka jingleit, da ki kdkhot jong ka HYC ha Lawbah Circle.",
+   "typo": "kdkhot",
+   "gold": "dkhot",
+   "start": 37,
+   "end": 43,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha ka jingiakob shad yynrai la ioh rah da ka St.",
+   "typo": "yynrai",
+   "gold": "tynrai",
+   "start": 21,
+   "end": 27,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ngi dei ban pynlong ia ka imlang shalang kaba lait na kano baroh ,  la ong u Lat ka jylla.",
+   "typo": "shalang",
+   "gold": "sahlang",
+   "start": 33,
+   "end": 40,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Nga la ioh jintgip ba u Danggo un nym wan ban risain mynta ka sngi.",
+   "typo": "jintgip",
+   "gold": "jingtip",
+   "start": 11,
+   "end": 18,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha ka por 2 baje  mynsngi yn sdnag  a prokram  da ka jingdwai kaban ai da u Rgh J.S.",
+   "typo": "sdnag",
+   "gold": "sdang",
+   "start": 29,
+   "end": 34,
+   "kind": "trans"
+  },
+  {
+   "sentence": "15.Custom:Ha ka dustyr Khasi ki khun ki shim jait na ka kmie.",
+   "typo": "dustyr",
+   "gold": "dustur",
+   "start": 16,
+   "end": 22,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Lada dei ban ther ia ka ejingbakla u Mukul te baroh kiban iahab jingmut ban khot noh mar-mar.",
+   "typo": "ejingbakla",
+   "gold": "jingbakla",
+   "start": 24,
+   "end": 34,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Une u maw u dang don hadhuh mynta ha ka shnong Nongtalang.",
+   "typo": "hadhuh",
+   "gold": "haduh",
+   "start": 21,
+   "end": 27,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka kyrwoh ka ong shuh shuh, ba ki pulit, ki dei ban mdiang, ba U bah Lieh, u dei u nongsyntiat jongki.",
+   "typo": "mdiang",
+   "gold": "pdiang",
+   "start": 52,
+   "end": 58,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ki hok bad ki Riti tynpai shano ki la leit/.",
+   "typo": "tynpai",
+   "gold": "tynrai",
+   "start": 19,
+   "end": 25,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia kptei ka jingleit jurip, la ialam da u Raja Brahma, Border Magistrate ka Ri Bhoi, u P.",
+   "typo": "kptei",
+   "gold": "katei",
+   "start": 3,
+   "end": 8,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia uta u shsbi la khot u shabi jong ka jingieit (The Key of Love).",
+   "typo": "shsbi",
+   "gold": "shabi",
+   "start": 9,
+   "end": 14,
+   "kind": "sub"
+  },
+  {
+   "sentence": "kataba ka Laitkor Flamingos ka jop ia ka Deni Linda Pumas.",
+   "typo": "kataba",
+   "gold": "katba",
+   "start": 0,
+   "end": 6,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Hato kane kan long biang kum kiwei ki jing akhih kiba neh tang shipor khlem kano kano ka jingket kaba thikna?",
+   "typo": "jingket",
+   "gold": "jingkut",
+   "start": 89,
+   "end": 96,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka jing niew vote, ka dang iaid shakhmat, na ka bpnta ka elekshon President jong ka America.",
+   "typo": "bpnta",
+   "gold": "bynta",
+   "start": 48,
+   "end": 53,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Mynta ka lajng kan pynkhreh ban iakhun ia ka Indian Arrow haka 5 tarik shabar na la iing ha nongbah Cuttack.",
+   "typo": "lajng",
+   "gold": "lajong",
+   "start": 9,
+   "end": 14,
+   "kind": "del"
+  },
+  {
+   "sentence": "4 Ki donkam ia ka iew mar-rep kaba jan ban suk ban pynktit ia ki mar ha ka dor kaba kham jem.",
+   "typo": "pynktit",
+   "gold": "pynkit",
+   "start": 51,
+   "end": 58,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngam iohi ban don uno uno u bymman hadbh mynta , u la ong.",
+   "typo": "hadbh",
+   "gold": "haduh",
+   "start": 35,
+   "end": 40,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U President ka Ri India u la tgung 3 ngut ki dkhar kum ki Nominated MLA.",
+   "typo": "tgung",
+   "gold": "thung",
+   "start": 29,
+   "end": 34,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Kane i kumba ka la kylla long shi ybnta na ka Riti ka Dustur jong ka jaitbynriew jong ngi .",
+   "typo": "ybnta",
+   "gold": "bynta",
+   "start": 34,
+   "end": 39,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kane ka jingialehkai kan sdjang ha ka por 11 baje mynstep bad ka khot sngewbha ia baroh.",
+   "typo": "sdjang",
+   "gold": "sdang",
+   "start": 25,
+   "end": 31,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka Meghalaya kan pynkshreh ia ka jingiakhun ban wan pyrshah ia ka Mizoram ha ka 8 tarik.",
+   "typo": "pynkshreh",
+   "gold": "pynkhreh",
+   "start": 17,
+   "end": 26,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Kin hap ban siew da ka dor kaba rem shibnu.",
+   "typo": "shibnu",
+   "gold": "shibun",
+   "start": 36,
+   "end": 42,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka por sdarg skul kan long naduh 9:00 am baje haduh 2:30 pm.",
+   "typo": "sdarg",
+   "gold": "sdang",
+   "start": 7,
+   "end": 12,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ki pulit ka noangbah Shillong ki dang pan ia ka jingtip bniah na ki pulit ka  Mumbai.",
+   "typo": "noangbah",
+   "gold": "nongbah",
+   "start": 12,
+   "end": 20,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngi kloi ban iakern bad no bad no ruh, tangba lada jia ba ki sangeh noh, na ki kam ialeh pyrshah.",
+   "typo": "iakern",
+   "gold": "ïakren",
+   "start": 13,
+   "end": 19,
+   "kind": "trans",
+   "corrected": "gold respelled 'iakren' -> 'ïakren'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Thomas Jones bad ki dirng pyngkiang kiba u  akynduh la ai da u Dr.",
+   "typo": "dirng",
+   "gold": "dieng",
+   "start": 20,
+   "end": 25,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka kali 108, ka la leit mar mar sha katei ka jaka, ha kaba la leit kit ia ki nongpaing sha Bhoirymbong CHC.",
+   "typo": "nongpaing",
+   "gold": "nongpang",
+   "start": 77,
+   "end": 86,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha Meghalaya dei ban don tang 12 ngut ki myntri sowrkar kynthup u Myntri Rangbah.",
+   "typo": "sowrkar",
+   "gold": "sorkar",
+   "start": 48,
+   "end": 55,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Na ka liang u Mihsalan Truh u pynpaw ka jingsngewnguh  ia ka seng na ka bynta ka jingai mygnsiem bad jingiarap.",
+   "typo": "mygnsiem",
+   "gold": "mynsiem",
+   "start": 88,
+   "end": 96,
+   "kind": "ins"
+  },
+  {
+   "sentence": "(Pule ka kot  A Book To Learn khabi, English, Bengali, Hindi bad Assamese  ba la thoh da u B.",
+   "typo": "khabi",
+   "gold": "khasi",
+   "start": 30,
+   "end": 35,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U la jied ban sai dur  a ka lwei da ki jing ashem shimet.",
+   "typo": "lwei",
+   "gold": "lawei",
+   "start": 28,
+   "end": 32,
+   "kind": "del"
+  },
+  {
+   "sentence": "U la iathuh shuh shuh ba kin nym kot bor ban phah skul sha Nongstoin ne sha Sor sillong.",
+   "typo": "sillong",
+   "gold": "shillong",
+   "start": 80,
+   "end": 87,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ki la ujor halor ka jingbym biang ia ka rukom pyndonkam ia ka pisa ka Hima bad ka jingapait iapra shnong.",
+   "typo": "jingapait",
+   "gold": "jingïapait",
+   "start": 82,
+   "end": 91,
+   "kind": "del",
+   "corrected": "gold respelled 'jingiapait' -> 'jingïapait'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ba ngin shu ia pynsheptieng bakla jubor, khlem da tip tihkna halor kino, kumno bad nangno ki nongrim ngi ieng?",
+   "typo": "tihkna",
+   "gold": "thikna",
+   "start": 54,
+   "end": 60,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha ka Gospel u Mathaios 12:49-50 haba ka kmie u Jisu bad kiba haiing ki wan wad ia u, kudmno u ong?",
+   "typo": "kudmno",
+   "gold": "kumno",
+   "start": 86,
+   "end": 92,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka paw ki shim rai tang ki katto kaltne ngut , la kynnoh u bah Ronnie.",
+   "typo": "kaltne",
+   "gold": "katne",
+   "start": 33,
+   "end": 39,
+   "kind": "ins"
+  },
+  {
+   "sentence": "U DC ka East Jaintia Hills u bah mahiam Singh Lhuid un shimti kum u Addl.",
+   "typo": "mahiam",
+   "gold": "maham",
+   "start": 33,
+   "end": 39,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Elias HSS pyrshah ia ka Tlongumniam SS bad ha ka por 11.45 hkpdeng ka Shillong College HSS pyrshah O.",
+   "typo": "hkpdeng",
+   "gold": "hapdeng",
+   "start": 59,
+   "end": 66,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka daw I mat ka long na ka jingpynher sted, U driver u la phet noh mar mar jia katei ka jigjia.",
+   "typo": "jigjia",
+   "gold": "jingjia",
+   "start": 88,
+   "end": 94,
+   "kind": "del"
+  },
+  {
+   "sentence": "U la kynther jur ia ka jingkynnkh u Zenith ba u dei uba kwah bor kwah spah.",
+   "typo": "jingkynnkh",
+   "gold": "jingkynnoh",
+   "start": 23,
+   "end": 33,
+   "kind": "sub"
+  },
+  {
+   "sentence": "balbi khlem leh ia ka  X-Ray  ia ka khlieh jongu kumba la kyrpad da ka kmie jong u Bah Marbaniang?",
+   "typo": "balbi",
+   "gold": "balei",
+   "start": 0,
+   "end": 5,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Halor ka jingioh u Bah Sosthenes Sohtun ban long u ongmihkhmat ka Jirang, u Conrad K.",
+   "typo": "ongmihkhmat",
+   "gold": "nongmihkhmat",
+   "start": 51,
+   "end": 62,
+   "kind": "del"
+  },
+  {
+   "sentence": "Une u khun u Blei, u dei u khunlangbrot jong u Blei uba kit noh ia ka pop ka pyrrthei.",
+   "typo": "pyrrthei",
+   "gold": "pyrthei",
+   "start": 77,
+   "end": 85,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngin sa peit ngin sa shong jingialang ha ka saorkar halor kane , la ong u Conrad.",
+   "typo": "saorkar",
+   "gold": "sorkar",
+   "start": 44,
+   "end": 51,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka jingialang halor kane, kan sa long biang khanng ban shim ia ka rai kaba khadduh ban pyntreikam ia ka.",
+   "typo": "khanng",
+   "gold": "khnang",
+   "start": 44,
+   "end": 50,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ia ki bynta ba kongsna ba u la iathuh ha nga nga la buh jingthoh.",
+   "typo": "kongsna",
+   "gold": "kongsan",
+   "start": 15,
+   "end": 22,
+   "kind": "trans"
+  },
+  {
+   "sentence": "shlilong:Kiba ioh pang corona thymmai mynta ka sngi, ki long 28 ngut.",
+   "typo": "shlilong",
+   "gold": "shillong",
+   "start": 0,
+   "end": 8,
+   "kind": "trans"
+  },
+  {
+   "sentence": "U la bynrap,  Ngi shaniah ha ka jingialam u Myntri arngbah u Conrad K Sangma.",
+   "typo": "arngbah",
+   "gold": "rangbah",
+   "start": 51,
+   "end": 58,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Hato kam pydnuh seh mo  a ka khei  kur khei  kha?",
+   "typo": "pydnuh",
+   "gold": "pynduh",
+   "start": 9,
+   "end": 15,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kumta kiei kiei la pyndtp katkum ka rukom kaba dei ia ka jingkyntierw kurim.",
+   "typo": "pyndtp",
+   "gold": "pyndep",
+   "start": 19,
+   "end": 25,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Scy, Bertina Langstieh-Treasurer, Diangtimai lynedoh bad Sony Kharjana kum ki Adviser.",
+   "typo": "lynedoh",
+   "gold": "lyngdoh",
+   "start": 45,
+   "end": 52,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Mynta kan wan ka Lyiur,  Kane ka pateng bynriew kan ym leit noh tad ynda la pyndep ia kine kiei kiei barh .",
+   "typo": "barh",
+   "gold": "baroh",
+   "start": 101,
+   "end": 105,
+   "kind": "del"
+  },
+  {
+   "sentence": "R Moksha, uba la long MLA la arsien kiynthih bud sa u Bah P.",
+   "typo": "kiynthih",
+   "gold": "kynthih",
+   "start": 36,
+   "end": 44,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Hynrei ngan ym ienoh ia la ki mraw ha ki diengshiah).",
+   "typo": "ienoh",
+   "gold": "iehnoh",
+   "start": 15,
+   "end": 20,
+   "kind": "del"
+  },
+  {
+   "sentence": "Kane ka Museum jong ka solrkar ka dei tang ma ka kaba lah ban ong kaba rim tam ha ka jylla Meghalaya.",
+   "typo": "solrkar",
+   "gold": "sorkar",
+   "start": 23,
+   "end": 30,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka phis jong ka UCIL, kaba ha Shillong ka don ha Nongmensong.",
+   "typo": "phis",
+   "gold": "ophis",
+   "start": 3,
+   "end": 7,
+   "kind": "del"
+  },
+  {
+   "sentence": "Mano ba die ia ka shnong dei uwei u ar ym braoh.",
+   "typo": "braoh",
+   "gold": "baroh",
+   "start": 42,
+   "end": 47,
+   "kind": "trans"
+  },
+  {
+   "sentence": "kutmta ka seng ka la leit buh ia ki sha Police Station Dawki.",
+   "typo": "kutmta",
+   "gold": "kumta",
+   "start": 0,
+   "end": 6,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka Director ka la Kumar ban pynkylla ia kine ki ktien Hindi da ka ktien pharegn bad ktien khasi.",
+   "typo": "pharegn",
+   "gold": "phareng",
+   "start": 72,
+   "end": 79,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ki ntnghikai skul, ki nongtrei MCCL, ki nongtrei municipal, ki nongtei District Council, baroh ki lyn iar lut.",
+   "typo": "ntnghikai",
+   "gold": "nonghikai",
+   "start": 3,
+   "end": 12,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha Mylliem konstitwensi ki don 31795 ngut ki nongthep vote hyyrei kiba wan ki long tang 21342 ngut kata tang 67.12%.",
+   "typo": "hyyrei",
+   "gold": "hynrei",
+   "start": 59,
+   "end": 65,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Kaei kaba nga lah ban ong ka long braoh ki Board ki dei kiba bha , la ong u Dr Laloo.",
+   "typo": "braoh",
+   "gold": "baroh",
+   "start": 34,
+   "end": 39,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka jingthoh jong u ka dei ka jtngkyrmen wat ha khmat ka jing ap; ban  aksaid ban wad ka  Jingmut ka Jingim .",
+   "typo": "jtngkyrmen",
+   "gold": "jingkyrmen",
+   "start": 29,
+   "end": 39,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U Blei u trei, ym don ba lah ban hkang.",
+   "typo": "hkang",
+   "gold": "khang",
+   "start": 33,
+   "end": 38,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha ka khlaw Amazon bad mytta ha Ri Australia.",
+   "typo": "mytta",
+   "gold": "mynta",
+   "start": 23,
+   "end": 28,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka jingioh khaw kan long 5 kg shi kelieh shi bnai ha ka dor T.",
+   "typo": "kelieh",
+   "gold": "khlieh",
+   "start": 34,
+   "end": 40,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Te nga kyrlli biang ia ki,  Hato haba iap briew phi ia kmen?",
+   "typo": "kyrlli",
+   "gold": "kylli",
+   "start": 7,
+   "end": 13,
+   "kind": "ins"
+  },
+  {
+   "sentence": "hillong 27 Lber: Ka jingialang jong ka Sohiong Block Congress Committee ka la rai ban pynieng ia u Bah Natha niel O.",
+   "typo": "hillong",
+   "gold": "shillong",
+   "start": 0,
+   "end": 7,
+   "kind": "del"
+  },
+  {
+   "sentence": "Kham mynshwa ka dor jong u swynsar uba kham bha ka long T.",
+   "typo": "swynsar",
+   "gold": "synsar",
+   "start": 27,
+   "end": 34,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha kito ki por ,ka ri India ka dang shah synishar ha ka ri Bilat.",
+   "typo": "synishar",
+   "gold": "synshar",
+   "start": 41,
+   "end": 49,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka por kan poi ba u Blei un buh hapoh jong ki Jiw ia ka hukum ha ki dohniud jong ki.",
+   "typo": "dohniud",
+   "gold": "dohnud",
+   "start": 68,
+   "end": 75,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngi kwah ban ai um dih kaba biang ia man kawei pa kawei ka sshnong bad kawei pa kawei ka long iing.",
+   "typo": "sshnong",
+   "gold": "shnong",
+   "start": 59,
+   "end": 66,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha kane ka jingialang la iasoi piadbah ruh ha ka dorkhas kaba la leit ai pat sha u Lat kham janmiet.",
+   "typo": "piadbah",
+   "gold": "paidbah",
+   "start": 31,
+   "end": 38,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka jingbthei u bom IED ka jia bikang ha Jhalupara kaba dei ka jingbthei kaba khlain bha kaba la pynkhynniuh.",
+   "typo": "bikang",
+   "gold": "biang",
+   "start": 30,
+   "end": 36,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka rukom treikam ka long tang ban bud ia kiei ba la leh da ki solrkar barim.",
+   "typo": "solrkar",
+   "gold": "sorkar",
+   "start": 62,
+   "end": 69,
+   "kind": "ins"
+  },
+  {
+   "sentence": "kiti kiba donkti ha katei ka kam, ki long U Mohammad Areef, Jollu Shiva, Jollu Naveen bad U Chintakunta Chennakeshavulu.",
+   "typo": "kiti",
+   "gold": "kitei",
+   "start": 0,
+   "end": 4,
+   "kind": "del"
+  },
+  {
+   "sentence": "U Gandhi u thoh ha kaba jubab:  Ka jingstisha  (Truth).",
+   "typo": "jingstisha",
+   "gold": "jingshisha",
+   "start": 35,
+   "end": 45,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Wan balai ka AIADMK- 37 ngut bad long byasaw ka Trinamool Congress jong ka Mamata- 34 ngut.",
+   "typo": "byasaw",
+   "gold": "basaw",
+   "start": 38,
+   "end": 44,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha Mukhap jong ka West Jaintia ills, ki don 7ngut, kiba leh screening ki long 3ngut, high risk contact iwei.",
+   "typo": "ills",
+   "gold": "hills",
+   "start": 31,
+   "end": 35,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ka Langsning bad ka TRAU ki ia kamai mar 4 point hwaduh mynta.",
+   "typo": "hwaduh",
+   "gold": "haduh",
+   "start": 49,
+   "end": 55,
+   "kind": "ins"
+  },
+  {
+   "sentence": "shillkong:U Myntri jong ka tnad bording ka Jylla, u James K.",
+   "typo": "shillkong",
+   "gold": "shillong",
+   "start": 0,
+   "end": 9,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ngi khmih lynti ban mih bun ki jignbha bad jingmyntoi na ka.",
+   "typo": "jignbha",
+   "gold": "jingbha",
+   "start": 31,
+   "end": 38,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Wat haka jingpagn ba jur jong u, u Phadar Wollaston u dap beit tang da ka mynsiem jingphuh sam rkhie.",
+   "typo": "jingpagn",
+   "gold": "jingpang",
+   "start": 9,
+   "end": 17,
+   "kind": "trans"
+  },
+  {
+   "sentence": ", la buh jingkylli ka CSWO ha ka jingpynlait khubor yhnne ka sngi.",
+   "typo": "yhnne",
+   "gold": "hynne",
+   "start": 52,
+   "end": 57,
+   "kind": "trans"
+  },
+  {
+   "sentence": "hydien ka jingshlei um ka la hiar sha ka average age 393 snem.",
+   "typo": "hydien",
+   "gold": "hadien",
+   "start": 0,
+   "end": 6,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Haba dei ba leit jinrgleit shabar na la iing ruh ka ju da beit ia lade da kaba kup jain tapmoh.",
+   "typo": "jinrgleit",
+   "gold": "jingleit",
+   "start": 17,
+   "end": 26,
+   "kind": "ins"
+  },
+  {
+   "sentence": "U la leit ai jinghikai ruh ha bun ki jaka jong kane ka thain shatei lam ihngi bad ha Ri India ruh.",
+   "typo": "ihngi",
+   "gold": "mihngi",
+   "start": 72,
+   "end": 77,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ki Nongialam ki la iakynduh ia U Branch Manager bad ia kren ba dei ban pyosangeh noh ia kane ka jingpynrung Aadhar.",
+   "typo": "pyosangeh",
+   "gold": "pynsangeh",
+   "start": 71,
+   "end": 80,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha ka jingialehkai semi final hapdeng ka Mawkyrwat Veteran pyr shah ia ka Umsaw khawn ka Mawkyrwat Veteran.",
+   "typo": "khawn",
+   "gold": "khwan",
+   "start": 80,
+   "end": 85,
+   "kind": "trans"
+  },
+  {
+   "sentence": "La pynmih ia aatei ka jing pynbna, ha ka telebishon jong ka  Myawaddy, mynta dang step phyrngab.",
+   "typo": "aatei",
+   "gold": "katei",
+   "start": 13,
+   "end": 18,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia une u runar la aiti da ki paidbah ka shnog sha ki pulit bad mynta u dang don ha ka jingtohkit.",
+   "typo": "shnog",
+   "gold": "shnong",
+   "start": 40,
+   "end": 45,
+   "kind": "del"
+  },
+  {
+   "sentence": "Nongpoh:Tang mar ia ioh jingtpi ba u Conrad K.",
+   "typo": "jingtpi",
+   "gold": "jingtip",
+   "start": 24,
+   "end": 31,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Jingpynpaw 8:7-12./Jingpynpaw 9:1-21.Kumta shwa ba u Jisu un gynshar, untei pat un shna pat iau lum seion ha Jerusalem.",
+   "typo": "gynshar",
+   "gold": "synshar",
+   "start": 61,
+   "end": 68,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U Conrad, ula ia kynduh ia shibun ki riew paidbah bad ki ophisar sorkar mynta ka sngi, ha katei ka opwis thymmai.",
+   "typo": "opwis",
+   "gold": "ophis",
+   "start": 99,
+   "end": 104,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ki lyngnogh ka la jia aiu ia ka MeECL?",
+   "typo": "lyngnogh",
+   "gold": "lyngngoh",
+   "start": 3,
+   "end": 11,
+   "kind": "trans"
+  },
+  {
+   "sentence": "La iathuh ba U Kim, uba don mynta 36 snem, um shym la mih paidbah satia, la ar taiew kynithih.",
+   "typo": "kynithih",
+   "gold": "kynthih",
+   "start": 85,
+   "end": 93,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Phi i em Thei, ka mobai ka don la ka byata bad lyngba jong ka ka wanrah ei ei.",
+   "typo": "byata",
+   "gold": "bynta",
+   "start": 37,
+   "end": 42,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka Doctor ka thoh dwaai bad ki sa ia mih noh nangta.",
+   "typo": "dwaai",
+   "gold": "dawai",
+   "start": 18,
+   "end": 23,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ia kane ka sjingpynkhuid la plie da u Lat ka jylla ka  V Shanmuganathan.",
+   "typo": "sjingpynkhuid",
+   "gold": "jingpynkhuid",
+   "start": 11,
+   "end": 24,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka briew te kaba bha bad ba palei bad syntai ka jingmut jingprykhat hynrei ka briew te ka sah hi ka briew.",
+   "typo": "jingprykhat",
+   "gold": "jingpyrkhat",
+   "start": 56,
+   "end": 67,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka INC kaba ju jop bha mynshwa, mynta ka la duna lyer.",
+   "typo": "mynshwa",
+   "gold": "mynshuwa",
+   "start": 23,
+   "end": 30,
+   "kind": "del"
+  },
+  {
+   "sentence": "Kiba la wan iashimbynta ha ka prokram ha Saiden, ki kynthsp naduh u Bah U.",
+   "typo": "kynthsp",
+   "gold": "kynthup",
+   "start": 52,
+   "end": 59,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia u Pyndit Jawaharlal Nehru la pnysmai ha ka 12/8/1947 ha Ashoka Hall da u Lord Mountbatten, Governor General ha India.",
+   "typo": "pnysmai",
+   "gold": "pynsmai",
+   "start": 32,
+   "end": 39,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kane ka hukum kan trei kam mar mar nnduh kane ka khyllip mat tad haduh ban da pynbna da kumwei pat.",
+   "typo": "nnduh",
+   "gold": "naduh",
+   "start": 35,
+   "end": 40,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha ka oyrwoh khubor ba la soi da u Bah J.",
+   "typo": "oyrwoh",
+   "gold": "kyrwoh",
+   "start": 6,
+   "end": 12,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka jingiaid bike da ki kynhdn, ka la pynkyndit ia ki briew haduh ba bun ki bym tip ki sah lyngngoh.",
+   "typo": "kynhdn",
+   "gold": "kynhun",
+   "start": 23,
+   "end": 29,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ki dwktor bad kiwei ki nongtrei jong ka hospital ki dei ban ioh mynsiem bad jingkyrmen na u Director.",
+   "typo": "dwktor",
+   "gold": "doktor",
+   "start": 3,
+   "end": 9,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Nongpule baieit, lada ngan shu pyknut noh kumta phin sa lyngngoh namarba phim tip uei uta u Ud longtheng.",
+   "typo": "pyknut",
+   "gold": "pynkut",
+   "start": 31,
+   "end": 37,
+   "kind": "trans"
+  },
+  {
+   "sentence": "U Awasthi u dei u heh ophisar jong ka snem 1985 uba hsakri ha kane ka jylla.",
+   "typo": "hsakri",
+   "gold": "shakri",
+   "start": 52,
+   "end": 58,
+   "kind": "trans"
+  },
+  {
+   "sentence": "U la ong ba lyngba ka jingialren iakhana kan ialam sha ka jingsngew iajan iajuh wat ban poi sha ka jingiatylli ruh.",
+   "typo": "jingialren",
+   "gold": "jingïakren",
+   "start": 22,
+   "end": 32,
+   "kind": "sub",
+   "corrected": "gold respelled 'jingiakren' -> 'jingïakren'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ka Vivos, ka don mynta ia shi million ngut ki dkhot bad tang ha UK, ki don 1 hjar ngut ki dkhot jongka.",
+   "typo": "hjar",
+   "gold": "hajar",
+   "start": 77,
+   "end": 81,
+   "kind": "del"
+  },
+  {
+   "sentence": "Lada phim tip ia u jaid uba bha tam jong u jingthung jong phi, kylli na ka srokar.",
+   "typo": "srokar",
+   "gold": "sorkar",
+   "start": 75,
+   "end": 81,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ia kane la pyntip lnygba ka kyrwoh khubor na ka MPCC.",
+   "typo": "lnygba",
+   "gold": "lyngba",
+   "start": 18,
+   "end": 24,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kaba kut ka long ha ka jingpynkyntang u pnadar ne Pastor.",
+   "typo": "pnadar",
+   "gold": "phadar",
+   "start": 40,
+   "end": 46,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Kumba la ai jingmut ka Lanosha u Bah Malki u la hap ban bamja pat hadien shi yknta ynda la dep dihsha.",
+   "typo": "yknta",
+   "gold": "kynta",
+   "start": 77,
+   "end": 82,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Na okitei ki 33 ngut 29 ngut ki dei ha KHADC bad 4 ngut ha JHADC.",
+   "typo": "okitei",
+   "gold": "kitei",
+   "start": 3,
+   "end": 9,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Shillong: Kiba ioh pang corona myta ka sngi, ki long 5 ngut bad kitei ki dei baroh, kiba na East Khasi Hills.",
+   "typo": "myta",
+   "gold": "mynta",
+   "start": 31,
+   "end": 35,
+   "kind": "del"
+  },
+  {
+   "sentence": "To mynta nga kwah ban kylli shai na pha Lano pha la iashong shimha bad u Bahdeng?",
+   "typo": "shimha",
+   "gold": "shisha",
+   "start": 60,
+   "end": 66,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Em, u la ong , u bieti ba nga long, ngan shuh pynlut ia ka ha kaba dih iad tat shuh shuh  ..",
+   "typo": "bieti",
+   "gold": "bieit",
+   "start": 17,
+   "end": 22,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kumba 10 tylli ki mashin EVM la don jingthut bad la gbujli noh.",
+   "typo": "gbujli",
+   "gold": "bujli",
+   "start": 52,
+   "end": 58,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Hynrei te u Blei un ym sngew lada shu duwai gkumto khlem da iasuk shwa bad u.",
+   "typo": "gkumto",
+   "gold": "kumto",
+   "start": 44,
+   "end": 50,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka jinglong jong u ka long kaba dei nasar ialade um lah shuh ban trei ban ktah.",
+   "typo": "nasar",
+   "gold": "namar",
+   "start": 36,
+   "end": 41,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U  Haricharan Das (45) na Lower New Colony, Shillong, u ioh covid ha ka 18tarik ymnta u bnai.",
+   "typo": "ymnta",
+   "gold": "mynta",
+   "start": 80,
+   "end": 85,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka dei ka jingduh kaba jia kyndit bad kaba eh ban pdiag.",
+   "typo": "pdiag",
+   "gold": "pdiang",
+   "start": 50,
+   "end": 55,
+   "kind": "del"
+  },
+  {
+   "sentence": "Nga sngtw nguh bad ka long kaba kyrpang ba nga la lah ban noh synniang snam ha India.",
+   "typo": "sngtw",
+   "gold": "sngew",
+   "start": 4,
+   "end": 9,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha jylla Sikkim ka tulop jong ki nonghikai skul SSA ka long hdauh T.",
+   "typo": "hdauh",
+   "gold": "haduh",
+   "start": 60,
+   "end": 65,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka Guwahati, hap satia ha katei ka jinigkhang internet.",
+   "typo": "jinigkhang",
+   "gold": "jingkhang",
+   "start": 35,
+   "end": 45,
+   "kind": "ins"
+  },
+  {
+   "sentence": "La dei ban pyntreikam ia ka NPR kaba la pnbna da ka sorkar ha u snem 2003.",
+   "typo": "pnbna",
+   "gold": "pynbna",
+   "start": 40,
+   "end": 45,
+   "kind": "del"
+  },
+  {
+   "sentence": "Mukul Sangma bad ruh ban pynskhem ia ki jingdawa kiba ia dei bad ka mingiada ia ka Ri bad ka Jaidbynriew.",
+   "typo": "mingiada",
+   "gold": "jingïada",
+   "start": 68,
+   "end": 76,
+   "kind": "sub",
+   "corrected": "gold respelled 'jingiada' -> 'jingïada'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ban kren ia baroh ki mat kiba don haoh une u jylli la dei ban thoh kawei ka volume.",
+   "typo": "haoh",
+   "gold": "hapoh",
+   "start": 34,
+   "end": 38,
+   "kind": "del"
+  },
+  {
+   "sentence": "Na kata ka daw bun ki khyinnah kim roi.",
+   "typo": "khyinnah",
+   "gold": "khynnah",
+   "start": 22,
+   "end": 30,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Haba ai jingkren ha katei ka jingialang na ka liang jong u samna K.S.",
+   "typo": "samna",
+   "gold": "samla",
+   "start": 59,
+   "end": 64,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka bneng bad ka khyndew kin sa leit noh, hynrie ki ktien jong nga KIN YM LEIT NOH SATIA  Mathaios 24:35.",
+   "typo": "hynrie",
+   "gold": "hynrei",
+   "start": 41,
+   "end": 47,
+   "kind": "trans"
+  },
+  {
+   "sentence": "kgmta hadien katto katne por ka mih noh nangta",
+   "typo": "kgmta",
+   "gold": "kumta",
+   "start": 0,
+   "end": 5,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ia mypnta u dang bat kum u Rangbah Shnong ka Mawlai Phudmuri.",
+   "typo": "mypnta",
+   "gold": "mynta",
+   "start": 3,
+   "end": 9,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Kharbuli    Silver in 25M Sports pistol (WomenJunior)                                                         pynykhraw Kharshiing   Silver in 25M Center fire pistol (Men senior)                                    Walsall M.",
+   "typo": "pynykhraw",
+   "gold": "pynkhraw",
+   "start": 110,
+   "end": 119,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Rymbai (OC) hakhmat u OC kiba ki la ong ba u la leh  bha ptlat ia ka thai  Pynursla.",
+   "typo": "ptlat",
+   "gold": "palat",
+   "start": 57,
+   "end": 62,
+   "kind": "sub"
+  },
+  {
+   "sentence": "La dei ban weng noh ia ki mardor bad thsung bujli noh da kiwei pat.",
+   "typo": "thsung",
+   "gold": "thung",
+   "start": 37,
+   "end": 43,
+   "kind": "ins"
+  },
+  {
+   "sentence": "hynri u Kpa ka Rida um pat wan phai satia.",
+   "typo": "hynri",
+   "gold": "hynrei",
+   "start": 0,
+   "end": 5,
+   "kind": "del"
+  },
+  {
+   "sentence": "Ha ka 24 tarmk Risaw, ki pulit ki la ioh ban tam ia met iap jong kine ar ngut ba shah rahbor.",
+   "typo": "tarmk",
+   "gold": "tarik",
+   "start": 9,
+   "end": 14,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka jigpang Covid-19 ha India, ka la kiew sha ka  31,000 ngut bad kiba iap, ki la poi sha ka  1,007 ngut.",
+   "typo": "jigpang",
+   "gold": "jingpang",
+   "start": 3,
+   "end": 10,
+   "kind": "del"
+  },
+  {
+   "sentence": "U Vilas Rikkala, u dei uba don ha  Hyderabad, bad ula pom ia ka khalai neusip, kaba  Dh15 million (USD 4.08 million).",
+   "typo": "neusip",
+   "gold": "nusip",
+   "start": 71,
+   "end": 77,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Haba iakren bad ki nongthoh khuobr, na ka liang u Bah G.",
+   "typo": "khuobr",
+   "gold": "khubor",
+   "start": 28,
+   "end": 34,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Laloo, EE, ka PWD, Nongpoh, la ong ba ka srokar ka la dep ban mang pisa haduh T.",
+   "typo": "srokar",
+   "gold": "sorkar",
+   "start": 41,
+   "end": 47,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ha ka jingilaang la pdiang ia ar ngut ki kyrtong ha ka thup kyrteng ba nyngkong na ka bynta ka elekshon.",
+   "typo": "jingilaang",
+   "gold": "jingïalang",
+   "start": 6,
+   "end": 16,
+   "kind": "trans",
+   "corrected": "gold respelled 'jingialang' -> 'jingïalang'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Hynrei la jar katta ruh ka don ka jingartatien kaba jur hwngne.",
+   "typo": "hwngne",
+   "gold": "hangne",
+   "start": 56,
+   "end": 62,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ki don ruh kiba im da kaba shong dukan bad die jingdoe ha ki rud dukan bad rud surok ha New Nongstoin.",
+   "typo": "jingdoe",
+   "gold": "jingdie",
+   "start": 47,
+   "end": 54,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Syngkli, Lyngdoh ka Raid Nongkylla, u Vikram Singhania lem bad kiwei ki riew rangbah ha katie ka shnong.",
+   "typo": "katie",
+   "gold": "katei",
+   "start": 88,
+   "end": 93,
+   "kind": "trans"
+  },
+  {
+   "sentence": "kumia u la long u Khasi ba nyngkong ban ioh ia ka Enginering Degree.",
+   "typo": "kumia",
+   "gold": "kumta",
+   "start": 0,
+   "end": 5,
+   "kind": "sub"
+  },
+  {
+   "sentence": "7088.56 lak, West Garo Hills T.12073.58 lak, East Garo hjills T.",
+   "typo": "hjills",
+   "gold": "hills",
+   "start": 55,
+   "end": 61,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ka jingteing ha kine ki por ki kynthih na kawei ka rympei sha kawei.",
+   "typo": "jingteing",
+   "gold": "jingtieng",
+   "start": 3,
+   "end": 12,
+   "kind": "trans"
+  },
+  {
+   "sentence": "28 sngi x 13 bnai long 364 sngi shi snem ha ka Calendar u ohasi.",
+   "typo": "ohasi",
+   "gold": "khasi",
+   "start": 58,
+   "end": 63,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Lada ka sorkr ka khyllem mano ban pass ia ka rai ha kum kane ka jingpluh ka jylla.",
+   "typo": "sorkr",
+   "gold": "sorkar",
+   "start": 8,
+   "end": 13,
+   "kind": "del"
+  },
+  {
+   "sentence": "Lada phi kwah ban kyntiew iaka jingkoit jingkhiah jongka sniehdho, phi dei ban sdang noh shi syndon ban pyndonkam iaki jingsleh sunscreen.",
+   "typo": "sniehdho",
+   "gold": "sniehdoh",
+   "start": 57,
+   "end": 65,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Kaba lyngngoh ka long shako ka leit lut kane ka ding ilektrik.",
+   "typo": "shako",
+   "gold": "shano",
+   "start": 22,
+   "end": 27,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Oh, ki da brdong tyngeh haduh katta katta.",
+   "typo": "brdong",
+   "gold": "bidong",
+   "start": 10,
+   "end": 16,
+   "kind": "sub"
+  },
+  {
+   "sentence": "455 klur myngba ka Ordinance kham mynshwa bad mynta ka donkam ia ka bill ban rah ha iing dorbar ban pynskhem ia ka.",
+   "typo": "myngba",
+   "gold": "lyngba",
+   "start": 9,
+   "end": 15,
+   "kind": "sub"
+  },
+  {
+   "sentence": "KA JINGPANG KLONGSNAM:  Ka jingdih duma ne sikret ka ktah bad pyansniew kloi ia u klongsnam, iaki thiedsnam bad iaka snam.",
+   "typo": "pyansniew",
+   "gold": "pynsniew",
+   "start": 62,
+   "end": 71,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Shisha pleng ki briew ba la iap ruh ki iohi ppleng iangi kiba dang im..",
+   "typo": "ppleng",
+   "gold": "pleng",
+   "start": 44,
+   "end": 50,
+   "kind": "ins"
+  },
+  {
+   "sentence": "Ha ka elekshon Lok Sabbha 2014, ka tnat elekshon, ka la ioh kuurp pisa T.1,200klur.",
+   "typo": "kuurp",
+   "gold": "kurup",
+   "start": 60,
+   "end": 65,
+   "kind": "trans"
+  },
+  {
+   "sentence": "Ka Meghalaya ka dep gynrung tang 3.2%  katba ka 2.8%,   la ong une u heh nongialam BJP .",
+   "typo": "gynrung",
+   "gold": "pynrung",
+   "start": 20,
+   "end": 27,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ha kane ka sngi, la pywiaid  ia ka jingiang da u Bah Chamberlain Lyngdoh, u President jong ka Kur.",
+   "typo": "pywiaid",
+   "gold": "pynïaid",
+   "start": 20,
+   "end": 27,
+   "kind": "sub",
+   "corrected": "gold respelled 'pyniaid' -> 'pynïaid'. The golds were taken from corpus text, and the corpus contains no diacritics at all, so every ia- prefix arrived plain. The lexicon records only the ïa- form, which is the standard spelling, so the benchmark was scoring the checker wrong for proposing the correct word. The typo is left as typed — writers do drop the diaeresis, which is what makes this realistic."
+  },
+  {
+   "sentence": "Ka jing pynkordit ka la kut, kin plnkordit ma ki pat ia ka pyrthei namar u Blei u kren.",
+   "typo": "plnkordit",
+   "gold": "pynkordit",
+   "start": 33,
+   "end": 42,
+   "kind": "sub"
+  },
+  {
+   "sentence": "Ka Grand Council of Chief ruh ka lapynpaw ka jingsnggwsih halor ka ingkhlad kyndit u bah Hoping.",
+   "typo": "jingsnggwsih",
+   "gold": "jingsngewsih",
+   "start": 45,
+   "end": 57,
+   "kind": "sub"
+  },
+  {
+   "sentence": "25,36,91,500 na ka byta ban siew ia ka bai bnai ki Asha jong u snem 2018-19.",
+   "typo": "byta",
+   "gold": "bynta",
+   "start": 19,
+   "end": 23,
+   "kind": "del"
+  },
+  {
+   "sentence": "Hapdeng ka thma ne wat hapdeng ka nhlam shyrkhei.",
+   "typo": "nhlam",
+   "gold": "khlam",
+   "start": 34,
+   "end": 39,
+   "kind": "sub"
+  },
+  {
+   "sentence": "U shiat sngew tynnad ban ong ia nga  monarch of all .",
+   "typo": "shiat",
+   "gold": "shait",
+   "start": 2,
+   "end": 7,
+   "kind": "trans"
+  }
+ ]
+}

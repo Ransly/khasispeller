@@ -1,0 +1,269 @@
+{
+  "_comment": [
+    "Golden regression corpus — every maintainer linguistic ruling, encoded.",
+    "Each entry: word → expected analyser behaviour. The test fails if a",
+    "future lexicon pass or engine change regresses any ruling.",
+    "",
+    "Fields per word:",
+    "  verdict   — required. analyser verdict: valid | derived | unknown",
+    "  root      — optional. phase2.root must equal this",
+    "  ruling    — provenance note (not asserted)",
+    "",
+    "Rulings encoded:",
+    "  2026-06-04  ai- is NOT a prefix (ai = free verb root)",
+    "  2026-06-09  Prefix Productivity Rule: 5 productive / 11 fossilised",
+    "  2026-06-09  mareh family re-rooted (mareh, jingmareh, pynmareh)",
+    "  2026-06-09  mariang + kynthoh are roots",
+    "  2026-06-09  short-stem re-roots (iap/iar/iaw/iai/iam/iat + 5 more)",
+    "  2026-06-10  lemma.root synced to post-cleanup structures",
+    "  2026-08-26  word-initial ia -> ïa corrected across the lexicon;",
+    "              6 short-root rulings re-keyed to the new spelling and",
+    "              the plain spellings kept as separate rulings."
+  ],
+  "valid_roots": {
+    "mareh": {
+      "verdict": "valid",
+      "root": "mareh",
+      "ruling": "2026-06-09 mareh is a root (run/flee)"
+    },
+    "mariang": {
+      "verdict": "valid",
+      "root": "mariang",
+      "ruling": "2026-06-09 mariang is a root (earth/nature)"
+    },
+    "kynthoh": {
+      "verdict": "valid",
+      "root": "kynthoh",
+      "ruling": "2026-06-09 kynthoh is a root (criticise)"
+    },
+    "marbeit": {
+      "verdict": "valid",
+      "root": "marbeit",
+      "ruling": "rule-1 sweep: mar- fossilised"
+    },
+    "mardor": {
+      "verdict": "valid",
+      "root": "mardor",
+      "ruling": "rule-1 sweep: mar- fossilised"
+    },
+    "marjan": {
+      "verdict": "valid",
+      "root": "marjan",
+      "ruling": "rule-1 sweep: mar- fossilised"
+    },
+    "marwei": {
+      "verdict": "valid",
+      "root": "marwei",
+      "ruling": "rule-1 sweep: mar- fossilised"
+    },
+    "kynnoh": {
+      "verdict": "valid",
+      "root": "kynnoh",
+      "ruling": "rule-1 sweep: kyn- fossilised"
+    },
+    "kyntien": {
+      "verdict": "valid",
+      "root": "kyntien",
+      "ruling": "rule-1 sweep: kyn- fossilised"
+    },
+    "kynbat": {
+      "verdict": "valid",
+      "root": "kynbat",
+      "ruling": "rule-1 sweep: kyn- fossilised"
+    },
+    "kynshait": {
+      "verdict": "valid",
+      "root": "kynshait",
+      "ruling": "rule-1 sweep: kyn- fossilised (give injection)"
+    },
+    "kyrbeit": {
+      "verdict": "valid",
+      "root": "kyrbeit",
+      "ruling": "rule-1 sweep: kyr- fossilised"
+    },
+    "kyrkhu": {
+      "verdict": "valid",
+      "root": "kyrkhu",
+      "ruling": "rule-1 sweep: kyr- fossilised"
+    },
+    "mynta": {
+      "verdict": "valid",
+      "root": "mynta",
+      "ruling": "rule-1 sweep: myn- fossilised"
+    },
+    "mynbarim": {
+      "verdict": "valid",
+      "root": "mynbarim",
+      "ruling": "rule-1 sweep: myn- fossilised"
+    },
+    "pyrkhat": {
+      "verdict": "valid",
+      "root": "pyrkhat",
+      "ruling": "rule-1 sweep: pyr- fossilised"
+    },
+    "byrhai": {
+      "verdict": "valid",
+      "root": "byrhai",
+      "ruling": "rule-1 sweep: byr- fossilised"
+    },
+    "shibhar": {
+      "verdict": "valid",
+      "root": "shibhar",
+      "ruling": "rule-1 sweep: shi- is a classifier, not derivational"
+    },
+    "jingud": {
+      "verdict": "valid",
+      "root": "jingud",
+      "ruling": "short-stem reroot: jing+ud rejected (complaint)"
+    },
+    "pynam": {
+      "verdict": "valid",
+      "root": "pynam",
+      "ruling": "short-stem reroot: pyn+am rejected (V-shaped vice)"
+    },
+    "pyni": {
+      "verdict": "valid",
+      "root": "pyni",
+      "ruling": "short-stem reroot: pyn+i rejected (demonstrate)"
+    },
+    "ai": {
+      "verdict": "valid",
+      "root": "ai",
+      "ruling": "2026-06-04 ai is a free verb root, NOT a prefix"
+    },
+    "ïap": {
+      "verdict": "valid",
+      "root": "ïap",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+p. Spelling corrected 2026-08-26 to 'ïap'; both spellings resolve to root 'ïap' and neither decomposes."
+    },
+    "iap": {
+      "verdict": "valid",
+      "root": "ïap",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+p. Spelling corrected 2026-08-26 to 'ïap'; both spellings resolve to root 'ïap' and neither decomposes."
+    },
+    "ïar": {
+      "verdict": "valid",
+      "root": "ïar",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+r. Spelling corrected 2026-08-26 to 'ïar'; both spellings resolve to root 'ïar' and neither decomposes."
+    },
+    "iar": {
+      "verdict": "valid",
+      "root": "ïar",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+r. Spelling corrected 2026-08-26 to 'ïar'; both spellings resolve to root 'ïar' and neither decomposes."
+    },
+    "ïaw": {
+      "verdict": "valid",
+      "root": "ïaw",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+w. Spelling corrected 2026-08-26 to 'ïaw'; both spellings resolve to root 'ïaw' and neither decomposes."
+    },
+    "iaw": {
+      "verdict": "valid",
+      "root": "ïaw",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+w. Spelling corrected 2026-08-26 to 'ïaw'; both spellings resolve to root 'ïaw' and neither decomposes."
+    },
+    "ïai": {
+      "verdict": "valid",
+      "root": "ïai",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+i. Spelling corrected 2026-08-26 to 'ïai'; both spellings resolve to root 'ïai' and neither decomposes."
+    },
+    "iai": {
+      "verdict": "valid",
+      "root": "ïai",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+i. Spelling corrected 2026-08-26 to 'ïai'; both spellings resolve to root 'ïai' and neither decomposes."
+    },
+    "ïam": {
+      "verdict": "valid",
+      "root": "ïam",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+m. Spelling corrected 2026-08-26 to 'ïam'; both spellings resolve to root 'ïam' and neither decomposes."
+    },
+    "iam": {
+      "verdict": "valid",
+      "root": "ïam",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+m. Spelling corrected 2026-08-26 to 'ïam'; both spellings resolve to root 'ïam' and neither decomposes."
+    },
+    "ïat": {
+      "verdict": "valid",
+      "root": "ïat",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+t. Spelling corrected 2026-08-26 to 'ïat'; both spellings resolve to root 'ïat' and neither decomposes."
+    },
+    "iat": {
+      "verdict": "valid",
+      "root": "ïat",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+t. Spelling corrected 2026-08-26 to 'ïat'; both spellings resolve to root 'ïat' and neither decomposes."
+    },
+    "iad": {
+      "verdict": "valid",
+      "root": "ïad",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+d. Spelling corrected 2026-08-26 to 'ïad'; both spellings resolve to root 'ïad' and neither decomposes."
+    },
+    "ïad": {
+      "verdict": "valid",
+      "root": "ïad",
+      "ruling": "short-stem reroot: the word is a root, NOT ia+d. Spelling corrected 2026-08-26 to 'ïad'; both spellings resolve to root 'ïad' and neither decomposes."
+    }
+  },
+  "derived_forms": {
+    "jingmareh": {
+      "verdict": "derived",
+      "root": "mareh",
+      "ruling": "jing- productive over root mareh"
+    },
+    "pynmareh": {
+      "verdict": "derived",
+      "root": "mareh",
+      "ruling": "pyn- productive over root mareh"
+    },
+    "jingthoh": {
+      "verdict": "derived",
+      "root": "thoh",
+      "ruling": "productive control: jing- + thoh (write)"
+    },
+    "pynlehkai": {
+      "verdict": "derived",
+      "root": "lehkai",
+      "ruling": "productive control: pyn- + lehkai"
+    },
+    "nonghikai": {
+      "verdict": "derived",
+      "root": "hikai",
+      "ruling": "productive control: nong- + hikai (teacher)"
+    },
+    "sngewbha": {
+      "verdict": "derived",
+      "root": "bha",
+      "ruling": "productive control: sngew- + bha"
+    },
+    "jingai": {
+      "verdict": "derived",
+      "root": "ai",
+      "ruling": "jing- + ai is compositional (act of giving)"
+    },
+    "iathuh": {
+      "verdict": "derived",
+      "ruling": "productive control: ia- reciprocal (root not asserted — pre-existing data oddity)"
+    },
+    "jingkynshaitum": {
+      "verdict": "derived",
+      "root": "kynshaitum",
+      "ruling": "2026-07-06 item5 (War pp.74-75): -m is a clitic contraction, not a stem suffix; no -um strip on open-class kynshait. jing- over OOV remainder."
+    },
+    "iaroh": {
+      "verdict": "derived",
+      "ruling": "2026-07-06 item3: root-minimality gate — iaroh must not collapse to ia-+r"
+    }
+  },
+  "rejected_fakes": {
+    "marthoh": {
+      "verdict": "unknown",
+      "ruling": "gate check: mar- fossilised must not derive"
+    },
+    "martip": {
+      "verdict": "unknown",
+      "ruling": "gate check: mar- fossilised must not derive"
+    },
+    "pyrthoh": {
+      "verdict": "unknown",
+      "ruling": "gate check: pyr- fossilised must not derive"
+    }
+  }
+}

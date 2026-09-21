@@ -1,0 +1,1891 @@
+{
+ "meta": {
+  "created": "2026-08-26",
+  "seed": 20260826,
+  "lexicon_entries": 30256,
+  "note": "Frozen so results stay comparable. The earlier ad-hoc probe regenerated its sample from the lexicon each run, so lexicon edits silently changed the test set — two measurements a day apart shared only 2 of 76 items.",
+  "n": 308,
+  "quarantined": 14,
+  "quarantine_note": "Items with valid=false are kept, never deleted, so the set stays frozen and the contamination stays auditable. They are excluded from the headline score because they ask the checker to produce a word that cannot be Khasi. run_benchmark.py reports both figures.",
+  "ain_diaeresis_corrections": 1
+ },
+ "items": [
+  {
+   "typo": "ryngoh",
+   "gold": "ryngkoh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "johr",
+   "gold": "jhor",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "iewdaah",
+   "gold": "iewdah",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "prmh",
+   "gold": "proh",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jinwgbsa",
+   "gold": "jingbsa",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khnwtan",
+   "gold": "khawtan",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ylngkha",
+   "gold": "lyngkha",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "mayrnthing",
+   "gold": "marynthing",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "edmdiap",
+   "gold": "demdiap",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sthrak",
+   "gold": "shrak",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "samthtiah",
+   "gold": "samthiah",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kyniah",
+   "gold": "kynriah",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kjiag",
+   "gold": "kjing",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bryhmon",
+   "gold": "brahmon",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingthwew",
+   "gold": "jingthew",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bainbam",
+   "gold": "baibam",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingybm",
+   "gold": "jingbym",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dangue",
+   "gold": "dangle",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bnyhuiñ",
+   "gold": "byhuiñ",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ehuma",
+   "gold": "euma",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shafan",
+   "gold": "shafon",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "ardnua",
+   "gold": "arduna",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingphyla",
+   "gold": "jingphylla",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tuut",
+   "gold": "tbut",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "elngkha",
+   "gold": "lengkha",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tnbieng",
+   "gold": "tngieng",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shiewphiang",
+   "gold": "khiewphiang",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "snbon",
+   "gold": "sabon",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "niangsiht",
+   "gold": "niangshit",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "iñor",
+   "gold": "ñior",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pyngkreng",
+   "gold": "lyngkreng",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "longrm",
+   "gold": "longrem",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "timang",
+   "gold": "tmang",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shongsyenrop",
+   "gold": "shongsynrop",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jmynsleh",
+   "gold": "jamynsleh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kabri",
+   "gold": "kaibri",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thna",
+   "gold": "thma",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ltonin",
+   "gold": "ltoin",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "otden",
+   "gold": "tden",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jlngshisha",
+   "gold": "jingshisha",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "liengiapjm",
+   "gold": "liengiapom",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sealangmat",
+   "gold": "shalangmat",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hkro",
+   "gold": "khro",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pyknynrup",
+   "gold": "pynkynrup",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "latruh",
+   "gold": "lathuh",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jslnein",
+   "gold": "jslein",
+   "kind": "ins",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not valid Khasi — its onset was confirmed as not occurring in the language, so the entry was withdrawn from the lexicon and no correct answer exists"
+  },
+  {
+   "typo": "shutk",
+   "gold": "shutak",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shntom",
+   "gold": "shyntom",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingphku",
+   "gold": "jingphuk",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "noongpynkren",
+   "gold": "nongpynkren",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "erong",
+   "gold": "trong",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "saien",
+   "gold": "sdien",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingtysruh",
+   "gold": "jingtyrsuh",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sawtiej",
+   "gold": "sawtriej",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "amwsmai",
+   "gold": "mawsmai",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lasper",
+   "gold": "lasier",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shngañi",
+   "gold": "shngaiñ",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dobnor",
+   "gold": "donbor",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "infacny",
+   "gold": "infancy",
+   "kind": "trans",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "skhiah",
+   "gold": "shkiah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jatnwut",
+   "gold": "jatwut",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hdaien",
+   "gold": "hadien",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tyndnw",
+   "gold": "tyndaw",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kywi",
+   "gold": "kyrwi",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tuñï",
+   "gold": "tuïñ",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "phywla",
+   "gold": "phylla",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lymphnïñ",
+   "gold": "lymphuïñ",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "laosiim",
+   "gold": "lasiim",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "suhki",
+   "gold": "shuki",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kiseb",
+   "gold": "kseb",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tydrem",
+   "gold": "tyrdem",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khwiarg",
+   "gold": "khwiang",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "mrkhait",
+   "gold": "markhait",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kuib",
+   "gold": "kubi",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "agret",
+   "gold": "angret",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pgit",
+   "gold": "puit",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jaa",
+   "gold": "jawa",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "swngewkhlaiñ",
+   "gold": "sngewkhlaiñ",
+   "kind": "ins",
+   "source": "synthetic",
+   "corrected": "gold/typo respelled 'sngewkhlaïñ'->'sngewkhlaiñ': Khasi writes the sequence a+i+ñ with a plain i, and the lexicon's 84 'aïñ' surfaces were normalised to 'aiñ' (scripts/fix_ain_diaeresis.py). The item's gold encoded the spelling now determined to be wrong."
+  },
+  {
+   "typo": "nsukhi",
+   "gold": "sukhi",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ngyn",
+   "gold": "ngen",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khyllkem",
+   "gold": "khyllem",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "marsnep",
+   "gold": "arsnep",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nlongkhan",
+   "gold": "nongkhan",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "eiwli",
+   "gold": "iewli",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jynong",
+   "gold": "jynlong",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ïaatit",
+   "gold": "ïatait",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ancid",
+   "gold": "acid",
+   "kind": "ins",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "bkia",
+   "gold": "kbia",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "slia",
+   "gold": "salia",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khimat",
+   "gold": "shimat",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kajgng",
+   "gold": "kajong",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "knroi",
+   "gold": "kynroi",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "aihkhor",
+   "gold": "jaihkhor",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pykwan",
+   "gold": "pynwan",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingïakeih",
+   "gold": "jingïakieh",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "brwet",
+   "gold": "bret",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shylutïñ",
+   "gold": "shyltuïñ",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingpynerm",
+   "gold": "jingpynrem",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kpujar",
+   "gold": "pujar",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sasti",
+   "gold": "sati",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "puren",
+   "gold": "pyren",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khongdnog",
+   "gold": "khongdong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thjm",
+   "gold": "them",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "suomng",
+   "gold": "sumong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingrjng",
+   "gold": "jingrang",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "wnohmynsiem",
+   "gold": "nohmynsiem",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bashlek",
+   "gold": "bakhlek",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "uaper",
+   "gold": "laper",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ksh",
+   "gold": "kseh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sohwa",
+   "gold": "sohma",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dohdha",
+   "gold": "dohdah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "knpien",
+   "gold": "kynpien",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "namot",
+   "gold": "anamot",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bamynti",
+   "gold": "bakynti",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kohngh",
+   "gold": "kohnguh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "knwhi",
+   "gold": "kynwhi",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sthnd",
+   "gold": "stand",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — it reached the lexicon only through English gloss text leaking into surface_form fields, and was removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "mynonng",
+   "gold": "mynnong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "fuieral",
+   "gold": "funeral",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "horkyndat",
+   "gold": "borkyndat",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hlem",
+   "gold": "khlem",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bseh",
+   "gold": "bsieh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pingieh",
+   "gold": "jingieh",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kahlor",
+   "gold": "khalor",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jinaei",
+   "gold": "jindei",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "syrdp",
+   "gold": "syrdep",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lsaawia",
+   "gold": "lasawia",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jinglynggngoh",
+   "gold": "jinglyngngoh",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lastyrpad",
+   "gold": "latyrpad",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lkyrthiaw",
+   "gold": "kyrthiaw",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "wegn",
+   "gold": "weng",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "raanb",
+   "gold": "ranab",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingpynkmih",
+   "gold": "jingpynkhmih",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "iphyla",
+   "gold": "iphylla",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sakhup",
+   "gold": "sakthup",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "yktong",
+   "gold": "kytong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "senem",
+   "gold": "snem",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingphhlei",
+   "gold": "jingphlei",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khlsop",
+   "gold": "khlop",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dingprthat",
+   "gold": "dingpyrthat",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingïbait",
+   "gold": "jingïabit",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jigtim",
+   "gold": "jingtim",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "akhi",
+   "gold": "sakhi",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "upatan",
+   "gold": "patan",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lapuh",
+   "gold": "lapeh",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "umsiagn",
+   "gold": "umsiang",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "klkiap",
+   "gold": "kliap",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "juib",
+   "gold": "jurib",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sahndi",
+   "gold": "shandi",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynaïsyndait",
+   "gold": "pynïasyndait",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jijngksan",
+   "gold": "jingksan",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "arlka",
+   "gold": "arlak",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hynbniew",
+   "gold": "hynniew",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lrnen",
+   "gold": "linen",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dienlymbong",
+   "gold": "dienglymbong",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "langbyru",
+   "gold": "langbyrku",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sdibun",
+   "gold": "shibun",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ksha",
+   "gold": "ksah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kupt",
+   "gold": "kput",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynksieng",
+   "gold": "pynsieng",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "swidthma",
+   "gold": "saidthma",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingop",
+   "gold": "jingjop",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ptynap",
+   "gold": "pynap",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "didiwa",
+   "gold": "didiaw",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingïkda",
+   "gold": "jingïada",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bron",
+   "gold": "broin",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nnongpule",
+   "gold": "nongpule",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "arngta",
+   "gold": "arngat",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "isbbad",
+   "gold": "isbad",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "umdmu",
+   "gold": "umdum",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bonwgang",
+   "gold": "bongang",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nongkrhong",
+   "gold": "nongkhrong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "fiar",
+   "gold": "fear",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "jinujor",
+   "gold": "jingujor",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "shiaw",
+   "gold": "shaw",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "mdohnud",
+   "gold": "dohnud",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ntngbatai",
+   "gold": "nongbatai",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pypto",
+   "gold": "pyrto",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jyidup",
+   "gold": "jyndup",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "rsaitar",
+   "gold": "saitar",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "phhgian",
+   "gold": "phngian",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "srraw",
+   "gold": "saraw",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ïatynghuh",
+   "gold": "ïatyngkhuh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sngewerm",
+   "gold": "sngewrem",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "prriak",
+   "gold": "priak",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tohkhtalet",
+   "gold": "tohkhatlet",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tngt",
+   "gold": "tngit",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "defesat",
+   "gold": "defeat",
+   "kind": "ins",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "ngrap",
+   "gold": "ngap",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kynrdoh",
+   "gold": "kyndoh",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "smhongshan",
+   "gold": "shongshan",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ingïalymbup",
+   "gold": "jingïalymbup",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "latda",
+   "gold": "latla",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "durjan",
+   "gold": "durwan",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tdhu",
+   "gold": "tduh",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lwwait",
+   "gold": "lwait",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "aïpah",
+   "gold": "ïapah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ysnrap",
+   "gold": "synrap",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thsum",
+   "gold": "thum",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pwaring",
+   "gold": "paring",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sanduk",
+   "gold": "synduk",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ljng",
+   "gold": "ljeng",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "esohniamtra",
+   "gold": "sohniamtra",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jgngïap",
+   "gold": "jingïap",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nhangai",
+   "gold": "khangai",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pyïnasuk",
+   "gold": "pynïasuk",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sytai",
+   "gold": "syntai",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingkhubli",
+   "gold": "jingkhublei",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dakhriap",
+   "gold": "bakhriap",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "besi",
+   "gold": "besli",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ingpar",
+   "gold": "jingpar",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "klbuit",
+   "gold": "kulbuit",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lehstng",
+   "gold": "lehsting",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "duhkoi",
+   "gold": "dukhoi",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "phaikhmtt",
+   "gold": "phaikhmat",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynieod",
+   "gold": "pynieid",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bydawor",
+   "gold": "bydakor",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "etek",
+   "gold": "btek",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "umok",
+   "gold": "dumok",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sidr",
+   "gold": "shidr",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingjyngam",
+   "gold": "jingjyrngam",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynkhiid",
+   "gold": "pynkhiiid",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynïashbut",
+   "gold": "pynïashut",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lhnia",
+   "gold": "lania",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "syrmgiwew",
+   "gold": "syrmgiew",
+   "kind": "ins",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — an English/Indic borrowing or an OCR-damaged form (e.g. 'syrmgiew' for 'syrngiew'), removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "btor",
+   "gold": "bitor",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nnek",
+   "gold": "ngek",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynan",
+   "gold": "pynban",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "udphin",
+   "gold": "duphin",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "goee",
+   "gold": "ghee",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — an English/Indic borrowing or an OCR-damaged form (e.g. 'syrmgiew' for 'syrngiew'), removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "kibeit",
+   "gold": "kbeit",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bieng",
+   "gold": "brieng",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bahylla",
+   "gold": "baphylla",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dohmsi",
+   "gold": "dohmasi",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "phwiñ",
+   "gold": "phoiñ",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khylhiah",
+   "gold": "khylliah",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pangkhrwe",
+   "gold": "pangkhrew",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bnmut",
+   "gold": "bamut",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "patat",
+   "gold": "patta",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bhria",
+   "gold": "buria",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "daibi",
+   "gold": "daiii",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ualei",
+   "gold": "balei",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ysrwiah",
+   "gold": "syrwiah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pynlreh",
+   "gold": "pynleh",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "wanshognwir",
+   "gold": "wanshongwir",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "yndam",
+   "gold": "syndam",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thoughtelss",
+   "gold": "thoughtless",
+   "kind": "trans",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — an English/Indic borrowing or an OCR-damaged form (e.g. 'syrmgiew' for 'syrngiew'), removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "eota",
+   "gold": "kota",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "iseb",
+   "gold": "sieb",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kjaii",
+   "gold": "kbaii",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "dkhra",
+   "gold": "dkhar",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pklat",
+   "gold": "klat",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "plañi",
+   "gold": "plaiñ",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thnign",
+   "gold": "thning",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khyllugn",
+   "gold": "khyllung",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sngewtnnat",
+   "gold": "sngewtynnat",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ingpynmih",
+   "gold": "jingpynmih",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sngwekwah",
+   "gold": "sngewkwah",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ïadra",
+   "gold": "ïapra",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "poathar",
+   "gold": "pathar",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lwam",
+   "gold": "liam",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingltai",
+   "gold": "jinglati",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kynjusot",
+   "gold": "kynjuot",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "lkaum",
+   "gold": "lakum",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hban",
+   "gold": "bhan",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingisarang",
+   "gold": "jingsarang",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "yngkuh",
+   "gold": "ryngkuh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "krypang",
+   "gold": "kyrpang",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pnyslem",
+   "gold": "pynslem",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bsrbien",
+   "gold": "byrbien",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tmaitait",
+   "gold": "maitait",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "jingoïh",
+   "gold": "jingïoh",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "byrthw",
+   "gold": "byrthew",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tsok",
+   "gold": "took",
+   "kind": "sub",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — it reached the lexicon only through English gloss text leaking into surface_form fields, and was removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "eikid",
+   "gold": "eiid",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kugar",
+   "gold": "kupar",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "umdjh",
+   "gold": "umdih",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kjru",
+   "gold": "khru",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kylaliñ",
+   "gold": "kyllaiñ",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "rintgyrkhong",
+   "gold": "ringtyrkhong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "eupohny",
+   "gold": "euphony",
+   "kind": "trans",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold is not a Khasi lexicon entry — it reached the lexicon only through English gloss text leaking into surface_form fields, and was removed when those entries were quarantined; no correct Khasi answer exists"
+  },
+  {
+   "typo": "magtkylliang",
+   "gold": "matkylliang",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "sytamp",
+   "gold": "stamp",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ñirei",
+   "gold": "ñiurei",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "thkngkhip",
+   "gold": "thyngkhip",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ioli",
+   "gold": "iwli",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "bjingpeit",
+   "gold": "jingpeit",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "daaptari",
+   "gold": "daptari",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "hjingiohsngew",
+   "gold": "jingiohsngew",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "ringtsdot",
+   "gold": "ringsdot",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tdai",
+   "gold": "tkai",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "pysboh",
+   "gold": "pynsboh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kbnagkdong",
+   "gold": "kbangkdong",
+   "kind": "trans",
+   "source": "synthetic"
+  },
+  {
+   "typo": "komisn",
+   "gold": "komison",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "khambnriew",
+   "gold": "khambynriew",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "kuleit",
+   "gold": "kulwit",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "nongnkrem",
+   "gold": "nongkrem",
+   "kind": "ins",
+   "source": "synthetic"
+  },
+  {
+   "typo": "rmta",
+   "gold": "ryta",
+   "kind": "sub",
+   "source": "synthetic"
+  },
+  {
+   "typo": "syiemlih",
+   "gold": "syiemlieh",
+   "kind": "del",
+   "source": "synthetic"
+  },
+  {
+   "typo": "tinve",
+   "gold": "tive",
+   "kind": "ins",
+   "source": "synthetic",
+   "valid": false,
+   "invalid_reason": "gold contains a letter outside the Khasi alphabet (phonology.valid_chars excludes c, f, q, v, x, z); it is an English word that entered the lexicon through gloss text leaking into a surface_form field, so no correct Khasi answer exists"
+  },
+  {
+   "typo": "dand",
+   "gold": "dang",
+   "kind": "substitution",
+   "source": "reported 2026-08-26"
+  },
+  {
+   "typo": "shnng",
+   "gold": "shnong",
+   "kind": "deletion",
+   "source": "corpus-frequency fix"
+  },
+  {
+   "typo": "lyngdo",
+   "gold": "lyngdoh",
+   "kind": "deletion",
+   "source": "dropped final -h"
+  },
+  {
+   "typo": "kmei",
+   "gold": "kmie",
+   "kind": "transposition",
+   "source": "ie/ei nucleus"
+  },
+  {
+   "typo": "pyleng",
+   "gold": "pylleng",
+   "kind": "deletion",
+   "source": "assimilation gemination"
+  },
+  {
+   "typo": "umm",
+   "gold": "um",
+   "kind": "insertion",
+   "source": "doubled consonant"
+  },
+  {
+   "typo": "dign",
+   "gold": "ding",
+   "kind": "transposition",
+   "source": "gn -> ng"
+  },
+  {
+   "typo": "miay",
+   "gold": "miat",
+   "kind": "substitution",
+   "source": "inside man-miay"
+  }
+ ]
+}

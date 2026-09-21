@@ -1,0 +1,72 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# FastText model — 786 MB. The .npy alone is 763 MB, far above GitHub's
+# 100 MB per-file hard limit, so this cannot be committed directly.
+# Use Git LFS or distribute it out of band. See README.
+models/fasttext/*.model
+models/fasttext/*.npy
+*.egg-info/
+.env
+
+# Local DB backups (kept only on developer machine). Same rule as the parent
+# project: data/*.bak* is 59 files at 49-79 MB each, 3.7 GB in total, and
+# every one of them is a timestamped snapshot of data/khasi_db.json.
+# data/khasi_db.json ITSELF is committed — 64 MB, under GitHub's 100 MB hard
+# limit, exactly as the parent commits its own 79 MB copy.
+data/*.bak
+data/*.bak.*
+
+# Editor / UI backups
+khasi_spell/static/*.bak.*
+
+# Generated diagnostic output (scripts/sweep_silent_failures.py)
+silent_failures.csv
+
+# OS
+.DS_Store
+
+# Draft backups of the docs (pre-edit snapshots, not source)
+docs/.bak-*/
+
+# Pre-edit snapshots anywhere in the tree (*.py.bak.*, *.json.bak.*, *.css.bak).
+# Editing cruft, never source. The data/ rules above stay for documentation.
+*.bak
+*.bak.*
+
+# The lexicon itself is NOT pushed. Production runs on PostgreSQL
+# (DATABASE_URL set), where the engine never opens these files — verified:
+# pointed at a nonexistent path with DATABASE_URL set, the service loads all
+# 29,540 entries, 882 quarantine records and the full corpus pool from PG.
+#
+# They stay on the developer machine as the SEED SOURCE: scripts/
+# migrate_json_to_pg.py is run locally against the Render database, so the
+# file never needs to travel through GitHub. At 64 MB it is 71% of the repo.
+#
+# If DATABASE_URL is ever unset the service raises FileNotFoundError at
+# startup rather than serving an empty lexicon, which is the failure we want.
+data/khasi_db.json
+data/khasi_db_extras.json
+
+# Not needed by the running spellchecker. Production installs only what the
+# service imports or reads: the three packages, the five runtime data files,
+# and the deploy manifests.
+#
+# docs/ is 17 MB of PDFs and build scripts for them — the largest thing left
+# in the tree and never opened at runtime. The parent project tracks no docs
+# directory either. Kept locally; publish them somewhere that is not a
+# deployment artefact.
+docs/
+
+# Curation review exports. Produced by scripts/export_*.py for a human to
+# read; grep confirms no runtime module opens them.
+data/*_review.csv
+
+# Working notes
+IMPROVEMENT_PROMPT.md

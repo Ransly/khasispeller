@@ -1,0 +1,131 @@
+────────────────────────────────────────────────────────────────────────────
+                  KHASI NLP EXPLORER — DATA LICENSE
+              All Rights Reserved · Permission Required
+────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2026 Ransly Hoojon and contributors to Khasi NLP Explorer.
+All rights reserved.
+
+This license covers the curated linguistic content of the Khasi NLP
+Explorer project, namely:
+
+  •  data/khasi_db.json          — the editable Khasi lexicon database,
+                                   including all entries, glosses, parts
+                                   of speech, morphological flags, and
+                                   any related linguistic annotations.
+  •  audio/recordings/*.wav      — native-speaker pronunciation recordings
+                                   contributed via the Recordings tab.
+
+Together these are referred to as the "Protected Data".
+
+The Protected Data is the result of years of linguistic curation and
+contributions by named native speakers. It is NOT released under an open
+license. The MIT License that covers the source code DOES NOT extend to
+the Protected Data.
+
+────────────────────────────────────────────────────────────────────────────
+1. WHAT YOU MAY DO WITHOUT REQUESTING PERMISSION
+────────────────────────────────────────────────────────────────────────────
+
+  (a) Visit and use the official Khasi NLP Explorer website. Reading,
+      analysing, and listening to entries through the user interface is
+      permitted for any individual purpose, commercial or otherwise.
+
+  (b) Cite the project in academic publications, course material, and
+      personal study. Suggested citation:
+
+          Hoojon, R. et al. (2026). Khasi NLP Explorer.
+          https://github.com/<your-repo-here>
+
+  (c) Send queries to the public read endpoints of the running API
+      (e.g. `GET /v1/analyse`, `GET /v1/lexicon`) for personal
+      exploration, learning, or one-off research questions.
+
+────────────────────────────────────────────────────────────────────────────
+2. WHAT REQUIRES PRIOR WRITTEN PERMISSION
+────────────────────────────────────────────────────────────────────────────
+
+You MUST obtain written permission from the project lead before doing
+any of the following with the Protected Data:
+
+  (a) Redistributing the Protected Data, in whole or in part, in any
+      form (including published datasets, GitHub mirrors, NPM/PyPI
+      packages, or torrents).
+
+  (b) Using the Protected Data, or any substantial portion of it, to
+      train, fine-tune, or evaluate machine learning models — including
+      large language models, speech-recognition systems, text-to-speech
+      voices, or commercial NLP tools.
+
+  (c) Bulk extraction via automated means. This includes, but is not
+      limited to: scripted scraping of the public API, repeated
+      pagination through `/v1/lexicon`, automated downloads of every
+      recording, or running the project locally with the bundled data
+      in order to extract it for use elsewhere. Bulk extraction by
+      automated means is treated as redistribution under this license.
+
+  (d) Commercial use of the Protected Data outside of interaction with
+      the official website. Examples that need permission: building a
+      paid app or service that ships the data, including the data in a
+      commercial language-learning product, or selling derived datasets.
+
+  (e) Modification or annotation of the Protected Data for re-release.
+      Sharing improvements upstream via a pull request to the project
+      itself is welcomed and does NOT require pre-approval.
+
+────────────────────────────────────────────────────────────────────────────
+3. HOW TO REQUEST PERMISSION
+────────────────────────────────────────────────────────────────────────────
+
+Email:    ranslyh@gmail.com
+Subject:  "Khasi NLP Explorer — data use request"
+
+In your message, please include:
+
+  •  Your name, affiliation, and country.
+  •  A clear description of what you want to do with the Protected
+     Data (research, product, training corpus, etc.).
+  •  Whether the use is commercial or non-commercial.
+  •  Whether you intend to redistribute any derivative work, and if
+     so, under what terms.
+  •  An estimate of the volume of data you need (whole lexicon, a
+     subset, specific recordings, etc.).
+  •  Your contact email for follow-up correspondence.
+
+The project lead will reply within a reasonable timeframe — typically
+within two weeks — with one of: an approval (often with attribution
+requirements and licence terms specific to your use), a request for
+more information, or a decline. Most academic and non-profit requests
+are approved; commercial requests are reviewed individually.
+
+────────────────────────────────────────────────────────────────────────────
+4. CONTRIBUTORS' RIGHTS
+────────────────────────────────────────────────────────────────────────────
+
+Native speakers who contribute pronunciation recordings retain a
+moral right to attribution. The Contributors list shown in the
+Khasi NLP Explorer "Help → Contributors" tab serves as the canonical
+attribution record. Recordings will not be relicensed to third
+parties without notifying the contributing speaker(s) where
+identifiable.
+
+If you have contributed Protected Data and wish to revoke your
+contribution, email the address above and the project lead will
+remove it within a reasonable timeframe.
+
+────────────────────────────────────────────────────────────────────────────
+5. NO WARRANTY · NO LIABILITY
+────────────────────────────────────────────────────────────────────────────
+
+The Protected Data is provided "as is" for the limited purposes set out
+in section 1. The project lead and contributors make no warranty as to
+its accuracy, fitness for any particular purpose, or completeness.
+Linguistic data is provided in good faith but is the work of human
+contributors and may contain errors.
+
+────────────────────────────────────────────────────────────────────────────
+
+This license takes effect as of the date this file was published in the
+Khasi NLP Explorer repository, and applies to all versions of the
+Protected Data thereafter unless explicitly superseded by a new licence
+file shipped in the same repository.

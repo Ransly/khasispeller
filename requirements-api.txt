@@ -1,0 +1,14 @@
+# HTTP service (khasi_spell/api.py) — optional.
+-r requirements.txt
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
+# PostgreSQL — used by KhasiDB when DATABASE_URL is set (production on
+# Render). Without DATABASE_URL the engine reads data/khasi_db.json
+# directly, so local dev does not require a running Postgres.
+#
+# khasi_engine/database.py imports psycopg2 unconditionally on the PG path,
+# so without this the service raises ModuleNotFoundError the moment
+# DATABASE_URL is present. Matches the parent project's pin.
+psycopg2-binary>=2.9.9

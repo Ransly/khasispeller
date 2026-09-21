@@ -1,0 +1,602 @@
+{
+ "meta": {
+  "source": "gloss phrases: also spelt / same as / abbrev. of",
+  "entries": 193,
+  "unresolved": 77,
+  "note": "Only links whose target is itself a lexicon headword. Bidirectional: a writer who typed either spelling is offered the other."
+ },
+ "links": {
+  "'ba": [
+   "kba"
+  ],
+  "'ba-hab": [
+   "'ba-pynthor"
+  ],
+  "'ba-pynthor": [
+   "'ba-hab"
+  ],
+  "'dait": [
+   "kdait"
+  ],
+  "'dew": [
+   "khyndew"
+  ],
+  "'di": [
+   "bdi"
+  ],
+  "'diang": [
+   "pdiang"
+  ],
+  "'dong": [
+   "tyndong"
+  ],
+  "'hur": [
+   "jhur"
+  ],
+  "'ing": [
+   "sh'ing"
+  ],
+  "'jah": [
+   "pjah"
+  ],
+  "'jat": [
+   "kjat"
+  ],
+  "'kei": [
+   "skei"
+  ],
+  "'khang": [
+   "tyrkhang"
+  ],
+  "'khar": [
+   "dkhar"
+  ],
+  "'lap": [
+   "slap"
+  ],
+  "'leng": [
+   "pylleng"
+  ],
+  "'lur": [
+   "khlur"
+  ],
+  "'mat": [
+   "khmat"
+  ],
+  "'men": [
+   "tymmen"
+  ],
+  "'mi": [
+   "jyrmi"
+  ],
+  "'nam": [
+   "khnam"
+  ],
+  "'nem": [
+   "snem",
+   "tyrnem"
+  ],
+  "'ner": [
+   "sner"
+  ],
+  "'ngi": [
+   "sngi"
+  ],
+  "'ngiem": [
+   "dngiem"
+  ],
+  "'niang": [
+   "sniang",
+   "khniang"
+  ],
+  "'niat": [
+   "bniat"
+  ],
+  "'nieh": [
+   "snieh"
+  ],
+  "'nier": [
+   "snier"
+  ],
+  "'niuh": [
+   "shniuh"
+  ],
+  "'nong": [
+   "shnong",
+   "rnong"
+  ],
+  "'nud": [
+   "dohnud"
+  ],
+  "'peh": [
+   "speh"
+  ],
+  "'pen": [
+   "soh-pen"
+  ],
+  "'pet": [
+   "soh-pet"
+  ],
+  "'riew": [
+   "briew",
+   "shriew"
+  ],
+  "'tikhun": [
+   "ti-duh"
+  ],
+  "'ïad": [
+   "kiad"
+  ],
+  "ade": [
+   "ide"
+  ],
+  "bdi": [
+   "bydi",
+   "'di"
+  ],
+  "bed": [
+   "bet"
+  ],
+  "bet": [
+   "bed"
+  ],
+  "blar-blar": [
+   "byniej"
+  ],
+  "bniah": [
+   "byniah"
+  ],
+  "bniap": [
+   "byniap"
+  ],
+  "bniat": [
+   "'niat"
+  ],
+  "bniej": [
+   "byniej"
+  ],
+  "briew": [
+   "'riew"
+  ],
+  "bthat": [
+   "bythat"
+  ],
+  "bydi": [
+   "bdi"
+  ],
+  "byniah": [
+   "bniah"
+  ],
+  "byniap": [
+   "bniap"
+  ],
+  "byniej": [
+   "blar-blar",
+   "bniej"
+  ],
+  "bythat": [
+   "bthat"
+  ],
+  "dkhar": [
+   "'khar"
+  ],
+  "dngiem": [
+   "ngiem",
+   "'ngiem"
+  ],
+  "dohnud": [
+   "'nud"
+  ],
+  "e-ta": [
+   "ryta"
+  ],
+  "ide": [
+   "ade"
+  ],
+  "jhur": [
+   "'hur"
+  ],
+  "jiymun": [
+   "lymun"
+  ],
+  "jlaw": [
+   "jlew"
+  ],
+  "jlew": [
+   "jlaw"
+  ],
+  "jyrmi": [
+   "'mi"
+  ],
+  "k'ing": [
+   "kyieng"
+  ],
+  "k'oh": [
+   "kyoh"
+  ],
+  "kba": [
+   "'ba"
+  ],
+  "kdait": [
+   "'dait"
+  ],
+  "khalki": [
+   "khilki"
+  ],
+  "khilki": [
+   "khalki"
+  ],
+  "khlur": [
+   "'lur"
+  ],
+  "khmat": [
+   "'mat"
+  ],
+  "khnam": [
+   "'nam"
+  ],
+  "khniang": [
+   "'niang"
+  ],
+  "khyllieng": [
+   "thyllieng"
+  ],
+  "khyndew": [
+   "'dew"
+  ],
+  "kiad": [
+   "lakut",
+   "'ïad"
+  ],
+  "kjat": [
+   "'jat"
+  ],
+  "klet": [
+   "let"
+  ],
+  "kpieng": [
+   "pieng"
+  ],
+  "kpoh": [
+   "pongshai"
+  ],
+  "kren-satia": [
+   "kren-thlia"
+  ],
+  "kren-thlia": [
+   "kren-satia"
+  ],
+  "ksew": [
+   "set"
+  ],
+  "kuah": [
+   "kwah"
+  ],
+  "kuang": [
+   "kwang"
+  ],
+  "kudi": [
+   "kwai"
+  ],
+  "kwah": [
+   "kuah"
+  ],
+  "kwai": [
+   "kudi"
+  ],
+  "kwang": [
+   "kuang"
+  ],
+  "kyieng": [
+   "k'ing"
+  ],
+  "kynthei": [
+   "thei"
+  ],
+  "kyoh": [
+   "k'oh"
+  ],
+  "l'eit": [
+   "lyeit"
+  ],
+  "l'er": [
+   "lyer"
+  ],
+  "l'oh": [
+   "lyoh"
+  ],
+  "l'oin": [
+   "lyoin"
+  ],
+  "l'oiñ": [
+   "lyoin"
+  ],
+  "lakut": [
+   "kiad"
+  ],
+  "leng": [
+   "pylleng"
+  ],
+  "let": [
+   "klet"
+  ],
+  "liñ-kynti": [
+   "shriew"
+  ],
+  "lkhit": [
+   "lykhit"
+  ],
+  "lyeit": [
+   "l'eit"
+  ],
+  "lyer": [
+   "l'er"
+  ],
+  "lykhit": [
+   "lkhit"
+  ],
+  "lymun": [
+   "jiymun"
+  ],
+  "lyngen": [
+   "lynger"
+  ],
+  "lynger": [
+   "lyngen"
+  ],
+  "lyoh": [
+   "l'oh"
+  ],
+  "lyoin": [
+   "l'oiñ",
+   "l'oin"
+  ],
+  "nem": [
+   "snem"
+  ],
+  "ngiem": [
+   "dngiem"
+  ],
+  "p'ïar": [
+   "pyiar"
+  ],
+  "padri": [
+   "phajri"
+  ],
+  "paid": [
+   "pait"
+  ],
+  "pait": [
+   "paid"
+  ],
+  "pdiang": [
+   "'diang"
+  ],
+  "phajri": [
+   "padri"
+  ],
+  "phar": [
+   "phat"
+  ],
+  "pharshi": [
+   "phorshi"
+  ],
+  "phat": [
+   "phar"
+  ],
+  "phorshi": [
+   "pharshi"
+  ],
+  "pieng": [
+   "kpieng"
+  ],
+  "pjah": [
+   "'jah"
+  ],
+  "pongshai": [
+   "kpoh"
+  ],
+  "prang": [
+   "prong"
+  ],
+  "prong": [
+   "prang"
+  ],
+  "pyiar": [
+   "p'ïar"
+  ],
+  "pylleng": [
+   "leng",
+   "'leng"
+  ],
+  "r'e": [
+   "rye"
+  ],
+  "r'eng": [
+   "ryeng"
+  ],
+  "rang": [
+   "shynrang"
+  ],
+  "rben": [
+   "ryben"
+  ],
+  "rnong": [
+   "'nong"
+  ],
+  "rta": [
+   "ryta"
+  ],
+  "ryben": [
+   "rben"
+  ],
+  "rye": [
+   "r'e"
+  ],
+  "ryeng": [
+   "r'eng"
+  ],
+  "ryta": [
+   "rta",
+   "e-ta"
+  ],
+  "s'at": [
+   "syat"
+  ],
+  "s'iem": [
+   "syiem"
+  ],
+  "s'ir": [
+   "syier"
+  ],
+  "s'ïang": [
+   "syiang"
+  ],
+  "sanad": [
+   "sunod"
+  ],
+  "sboh": [
+   "syboh"
+  ],
+  "sdang": [
+   "sydang"
+  ],
+  "set": [
+   "ksew"
+  ],
+  "sh'ing": [
+   "'ing"
+  ],
+  "shniuh": [
+   "'niuh"
+  ],
+  "shnong": [
+   "'nong"
+  ],
+  "shriew": [
+   "'riew",
+   "liñ-kynti"
+  ],
+  "shtah": [
+   "stah"
+  ],
+  "shynrang": [
+   "rang"
+  ],
+  "skei": [
+   "'kei"
+  ],
+  "slap": [
+   "'lap"
+  ],
+  "snem": [
+   "'nem",
+   "nem"
+  ],
+  "sner": [
+   "'ner"
+  ],
+  "sngi": [
+   "'ngi"
+  ],
+  "sniang": [
+   "'niang"
+  ],
+  "snieh": [
+   "'nieh"
+  ],
+  "snier": [
+   "'nier"
+  ],
+  "soh-pen": [
+   "'pen"
+  ],
+  "soh-pet": [
+   "'pet"
+  ],
+  "sp'iem": [
+   "sriem"
+  ],
+  "speh": [
+   "'peh"
+  ],
+  "sriem": [
+   "sp'iem"
+  ],
+  "stah": [
+   "shtah"
+  ],
+  "sunod": [
+   "sanad"
+  ],
+  "syat": [
+   "s'at"
+  ],
+  "syboh": [
+   "sboh"
+  ],
+  "sydang": [
+   "sdang"
+  ],
+  "syiang": [
+   "s'ïang"
+  ],
+  "syiem": [
+   "s'iem"
+  ],
+  "syier": [
+   "s'ir"
+  ],
+  "tbian": [
+   "tybian"
+  ],
+  "tbit": [
+   "tybit"
+  ],
+  "thei": [
+   "kynthei"
+  ],
+  "thied": [
+   "thiet"
+  ],
+  "thiet": [
+   "thied"
+  ],
+  "thyllieng": [
+   "khyllieng"
+  ],
+  "ti-duh": [
+   "'tikhun"
+  ],
+  "tybian": [
+   "tbian"
+  ],
+  "tybit": [
+   "tbit"
+  ],
+  "tymmen": [
+   "'men"
+  ],
+  "tyndong": [
+   "'dong"
+  ],
+  "tyrkhang": [
+   "'khang"
+  ],
+  "tyrnem": [
+   "'nem"
+  ],
+  "wait-bnoh": [
+   "wait-khmut"
+  ],
+  "wait-khmut": [
+   "wait-bnoh"
+  ],
+  "wallam": [
+   "wanlam"
+  ],
+  "wanlam": [
+   "wallam"
+  ]
+ }
+}

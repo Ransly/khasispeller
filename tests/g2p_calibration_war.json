@@ -1,0 +1,326 @@
+{
+  "_comment": [
+    "G2P calibration gold set — Badaplin War (2001), Ki Sawa Bad Ki Dur Kyntien",
+    "Jong Ka Ktien Khasi, Lynnong VI 'Ki Dak Phonetic', pp. 55-56.",
+    "These are the author's own phonetic transcriptions (|...|). Use them as the",
+    "authoritative target for the DB's g2p_v1 output (phonology.ipa.surface).",
+    "Run scripts/check_g2p_calibration.py to measure agreement.",
+    "",
+    "Notation normalised to IPA: aspirates as superscript ʰ (War writes kh/th),",
+    "length as ː, vowels ɛ ɔ ɪ ə, palatal nasal ɲ, velar nasal ŋ, glottal ʔ,",
+    "affricate dz. Each entry tags the phenomena it exercises so the checker can",
+    "report accuracy per rule.",
+    "",
+    "Phenomena tags:",
+    "  final_glottal      — orthographic final -h realised as /ʔ/",
+    "  palatal_final      — orthographic final -it/-id realised as /ic/ (palatal stop)",
+    "  vowel_length       — phonemic long vowel not marked in spelling",
+    "  lax_i              — orthographic i in a closed syllable = /ɪ/ (not /i/)",
+    "  y_nucleus          — interconsonantal y = vowel /ɪ~ə/",
+    "  y_glottal          — prevocalic y = glottal stop /ʔ/",
+    "  affricate_j        — orthographic j = /dz/",
+    "  aspirate_onset     — onset aspirate /pʰ tʰ kʰ …/"
+  ],
+  "source": "War 2001, pp. 55-56",
+  "entries": [
+    {
+      "word": "ki",
+      "war_ipa": "/ki/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "dih",
+      "war_ipa": "/diʔ/",
+      "page": 55,
+      "phenomena": [
+        "final_glottal"
+      ]
+    },
+    {
+      "word": "im",
+      "war_ipa": "/ɪm/",
+      "page": 55,
+      "phenomena": [
+        "lax_i"
+      ]
+    },
+    {
+      "word": "lyngdoh",
+      "war_ipa": "/lɪŋdɔʔ/",
+      "page": 55,
+      "phenomena": [
+        "y_nucleus",
+        "final_glottal"
+      ]
+    },
+    {
+      "word": "sdie",
+      "war_ipa": "/sde/",
+      "page": 55,
+      "phenomena": [],
+      "_fixnote": "War p.52 vowel chart: ie nucleus = |e|"
+    },
+    {
+      "word": "snier",
+      "war_ipa": "/sner/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "de",
+      "war_ipa": "/dɛ/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "seng",
+      "war_ipa": "/sɛŋ/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "em",
+      "war_ipa": "/ɛːm/",
+      "page": 55,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "kper",
+      "war_ipa": "/kpeːr/",
+      "page": 55,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "khla",
+      "war_ipa": "/kʰla/",
+      "page": 55,
+      "phenomena": [
+        "aspirate_onset"
+      ]
+    },
+    {
+      "word": "bah",
+      "war_ipa": "/baʔ/",
+      "page": 55,
+      "phenomena": [
+        "final_glottal"
+      ]
+    },
+    {
+      "word": "nam",
+      "war_ipa": "/naːm/",
+      "page": 55,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "mrad",
+      "war_ipa": "/mraːd/",
+      "page": 55,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "lko",
+      "war_ipa": "/lkɔ/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "ong",
+      "war_ipa": "/ɔŋ/",
+      "page": 55,
+      "phenomena": []
+    },
+    {
+      "word": "akor",
+      "war_ipa": "/akɔːr/",
+      "page": 55,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "putharo",
+      "war_ipa": "/putʰaro/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset"
+      ]
+    },
+    {
+      "word": "thmu",
+      "war_ipa": "/tʰmu/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset"
+      ]
+    },
+    {
+      "word": "khia",
+      "war_ipa": "/kʰia/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset"
+      ]
+    },
+    {
+      "word": "shyiap",
+      "war_ipa": "/ʃʔiap/",
+      "page": 56,
+      "phenomena": [
+        "y_glottal"
+      ]
+    },
+    {
+      "word": "briew",
+      "war_ipa": "/breu/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "thliew",
+      "war_ipa": "/tʰleu/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset"
+      ]
+    },
+    {
+      "word": "ksew",
+      "war_ipa": "/ksɛu/",
+      "page": 56,
+      "phenomena": [],
+      "_fixnote": "War p.53: ew = |ɛu| (vs iew = |eu|)"
+    },
+    {
+      "word": "kyrjaw",
+      "war_ipa": "/kɪrdzau/",
+      "page": 56,
+      "phenomena": [
+        "y_nucleus",
+        "affricate_j"
+      ]
+    },
+    {
+      "word": "khaw",
+      "war_ipa": "/kʰaːu/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset",
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "skei",
+      "war_ipa": "/skɛi/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "leit",
+      "war_ipa": "/lɔic/",
+      "page": 56,
+      "phenomena": [
+        "palatal_final"
+      ]
+    },
+    {
+      "word": "kynjai",
+      "war_ipa": "/kɪndzai/",
+      "page": 56,
+      "phenomena": [
+        "y_nucleus",
+        "affricate_j"
+      ]
+    },
+    {
+      "word": "ksaiñ",
+      "war_ipa": "/ksaiɲ/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "khnai",
+      "war_ipa": "/kʰnaːi/",
+      "page": 56,
+      "phenomena": [
+        "aspirate_onset",
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "skaiñ",
+      "war_ipa": "/skaːiɲ/",
+      "page": 56,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "poi",
+      "war_ipa": "/pɔi/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "loit",
+      "war_ipa": "/lɔic/",
+      "page": 56,
+      "phenomena": [
+        "palatal_final"
+      ]
+    },
+    {
+      "word": "kloi",
+      "war_ipa": "/klɔːi/",
+      "page": 56,
+      "phenomena": [
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "jakoid",
+      "war_ipa": "/dzakɔːic/",
+      "page": 56,
+      "phenomena": [
+        "affricate_j",
+        "palatal_final",
+        "vowel_length"
+      ]
+    },
+    {
+      "word": "kuhiw",
+      "war_ipa": "/kuhiu/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "suiñ",
+      "war_ipa": "/suiɲ/",
+      "page": 56,
+      "phenomena": []
+    },
+    {
+      "word": "buit",
+      "war_ipa": "/buic/",
+      "page": 56,
+      "phenomena": [
+        "palatal_final"
+      ]
+    },
+    {
+      "word": "duriaw",
+      "war_ipa": "/duriau/",
+      "page": 56,
+      "phenomena": []
+    }
+  ]
+}

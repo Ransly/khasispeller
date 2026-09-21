@@ -1,0 +1,1855 @@
+<!-- Khasi Spellchecker — single-file interface.
+     No framework, no build step, no external request. Every value that
+     reaches the DOM passes through esc(). -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Khasi Spellchecker</title>
+<style>
+/* Dark theme.
+   Four surface levels, not one: --bg behind everything, --card for panels on
+   it, --card2 for insets inside a card, --field for the editor. The light
+   version got its separation from shadows on white; on dark, shadows barely
+   read, so the layers have to differ in lightness instead.
+
+   Status colours come in pairs that must invert TOGETHER: --*-s is the
+   ground, --on-* the text on it. Light theme had pastel grounds with dark
+   text; keeping the dark text over a dark ground is how these turn
+   unreadable, so each pair is defined side by side. */
+:root{
+  --bg:#0b1220; --card:#151d2e; --card2:#1a2333; --field:#0f1725;
+  --line:#2b3852; --line2:#212c3f; --line3:#3a4661;
+  --ink:#e6edf7; --ink2:#c3cede; --mut:#b3c0d1; --mut2:#8b9ab0;
+  --on-accent:#ffffff;
+  --blue:#4c8dff; --blue-d:#2a5fc9; --blue-s:#16233c; --blue-b:#2c4a7c;
+  --green:#31c56d; --green-s:#102a1d; --green-s2:#12301f; --green-b:#215f3c;
+  --on-green:#7ee2a8;
+  --red:#f2585b; --red-s:#331519; --red-b:#7a2a2f; --on-red:#ff9fa2;
+  --amber:#e3a008; --amber-s:#332612; --amber-b:#7a5a1a; --on-amber:#ffd27a;
+  --slate-s:#212c3f;
+  /* Brand mark. The PRIMARY lockup's deep teal ring measures 1.69:1 against
+     this header — invisible — so the dark UI takes the REVERSED ring, which
+     measures 14.67:1. The teal check is unchanged between the two, exactly as
+     in the concept sheet. On a light surface --lg-ring would be #0E4A4F. */
+  --lg-ring:#E8F1F2; --lg-check:#2CB99E;
+  --r:14px; --r2:10px;
+  --sh:0 1px 2px rgba(0,0,0,.30),0 1px 3px rgba(0,0,0,.36);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+h1,h2,h3{margin:0}
+.ic{width:1em;height:1em;flex:none;vertical-align:-.125em}
+
+/* ---------- top bar ---------- */
+.topbar{background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;
+  display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+/* The Khasi name. A thin divider rather than a bracket or dash, so the two
+   names read as equals on one line; it drops below 640px, where the header
+   has no room for both. */
+.brand h1 .kh{font-weight:600;font-size:15px;color:var(--mut);letter-spacing:0;
+  margin-left:9px;padding-left:11px;border-left:1px solid var(--line);
+  white-space:nowrap}
+@media (max-width:640px){.brand h1 .kh{display:none}}
+.brand p{margin:1px 0 0;font-size:12px;color:var(--mut)}
+.nav{display:flex;gap:6px;margin:0 auto}
+.nav button{display:flex;align-items:center;gap:7px;padding:9px 16px;border:0;
+  border-radius:9px;background:transparent;color:var(--ink2);font-weight:500}
+.nav button:hover{background:var(--slate-s)}
+.nav button[aria-selected="true"]{background:var(--blue);color:var(--on-accent);
+  box-shadow:0 1px 2px rgba(37,99,235,.35)}
+/* `margin-left:auto` keeps this hard against the right edge on its own. It
+   used to be pushed there as a side effect of `.nav{margin:0 auto}`; with the
+   nav removed nothing held it out, so it collapsed against the brand. */
+.meter{display:flex;align-items:center;gap:10px;text-align:right;margin-left:auto}
+/* Icon and count on one line, the pair pushed to the right so the count
+   still lines up with the label and tagline beneath it. */
+.meter .nrow{display:flex;align-items:center;justify-content:flex-end;gap:7px}
+.meter .n{font-size:19px;font-weight:700;line-height:1.1}
+.meter .l{font-size:12px;color:var(--mut)}
+.meter .t{display:block;font-size:11.5px;font-style:italic;color:var(--mut);margin-top:3px}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1500px;margin:0 auto;padding:20px;
+  display:grid;grid-template-columns:minmax(0,1fr) 470px;gap:20px;align-items:start}
+@media (max-width:1180px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.wrap.solo{grid-template-columns:minmax(0,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--sh);margin-bottom:20px}
+.card>.hd{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:14px;padding:16px 18px 0}
+.card h2{font-size:16px;font-weight:700}
+.card .sub{margin:3px 0 0;font-size:12.5px;color:var(--mut)}
+.card>.bd{padding:14px 18px 18px}
+/* The sidebar rebuilds its body into #detail-body, so its panes are
+   GRANDchildren of .card and the direct-child rule above never reached them:
+   the tab content sat flush against the card edge while the title, word and
+   tabs — which each carry their own padding — were indented 18px. */
+#detail-body .bd{padding:16px 18px 18px}
+#detail-body .bd>h3{font-size:14px;font-weight:700;margin-bottom:3px}
+
+/* ---------- controls ---------- */
+/* Trimmed from 10px/16px and body size. These are ordinary controls sitting
+   under the editor, not the focus of the screen; the icon is 1em so it comes
+   down with the text rather than needing its own rule. */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;
+  border:1px solid var(--line);border-radius:8px;background:var(--card);font-weight:600;
+  font-size:13px;color:var(--ink2)}
+.btn:hover{background:var(--slate-s)}
+.btn.pri{background:var(--blue-d);border-color:var(--blue-d);color:var(--on-accent)}
+.btn.pri:hover{background:var(--blue)}
+.btn.sm{padding:7px 12px;font-size:12.5px;font-weight:600}
+.btn:disabled{opacity:.55;cursor:default}
+/* Confirmation states for flashButton(). Colour AND an icon, so the feedback
+   does not rely on distinguishing green from red. */
+.btn.done{background:var(--green-s);border-color:var(--green-b);color:var(--on-green)}
+.btn.done:hover{background:var(--green-s)}
+.btn.fail{background:var(--red-s);border-color:var(--red-b);color:var(--on-red)}
+.btn.fail:hover{background:var(--red-s)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* The editing surface should read as the one place on the page you type. It
+   sat on white inside a white card with a hairline border, so its edges
+   disappeared. A tinted ground separates it from the card, the border
+   strengthens on hover, and focus draws a soft ring instead of an inset
+   outline — which was clipped by the border and looked like a doubled line. */
+textarea{width:100%;min-height:112px;padding:13px 14px;
+  border:1.5px solid var(--line3);border-radius:var(--r2);font:inherit;resize:vertical;
+  background:var(--field);color:var(--ink);
+  transition:border-color .12s ease,box-shadow .12s ease,background .12s ease}
+textarea:hover{border-color:var(--mut2)}
+textarea:focus{outline:none;background:var(--card);border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(37,99,235,.16)}
+textarea::placeholder{color:var(--mut2)}
+.count{font-size:12px;color:var(--mut);text-align:right;margin:7px 2px 12px}
+
+/* ---------- marks ---------- */
+mark{border-radius:5px;padding:1px 3px;background:transparent;color:inherit}
+mark.err{background:var(--red-s);color:var(--on-red);text-decoration:underline wavy var(--red) 1.5px;
+  text-underline-offset:3px}
+mark.warn{background:var(--amber-s);color:var(--on-amber)}
+/* An alternative spelling is NOT a problem: the word is already correct and
+   another accepted spelling exists. So it gets a dotted underline and a
+   marker rather than the solid fill the two error classes use — the eye
+   should not read it as something to fix. */
+mark.alt{background:var(--green-s2);color:var(--on-green);border-bottom:2px dotted var(--green);
+  border-radius:4px 4px 0 0;cursor:pointer;padding:1px 4px}
+mark.alt:hover{background:var(--green-s)}
+mark.alt::after{content:"\2194";font-size:9px;vertical-align:super;
+  margin-left:3px;opacity:.7;font-weight:700}
+mark.skip{background:var(--slate-s);color:var(--mut)}
+/* `sel` marks the word the Word Details panel is currently describing. It
+   carries no outline on purpose: the mark already has its own fill, and a
+   ring drawn around a flagged word reads as a second, competing signal about
+   the word rather than as "this is the one on screen". The panel names the
+   word in its heading, which is where that belongs. The class stays hooked up
+   so the JS that sets it needs no change if a cue is wanted later. */
+mark.sel{}
+mark.flash{animation:fl 1.1s ease-out}
+@keyframes fl{0%{background:var(--blue-b)}100%{background:var(--green-s)}}
+.altrow.flash{animation:fr 1.1s ease-out;border-radius:8px}
+@keyframes fr{0%{background:var(--blue-s)}100%{background:transparent}}
+/* Plain words are inspectable but must not compete with the marks: no colour,
+   just a dotted underline on hover. */
+.tok{cursor:pointer;border-radius:3px;padding:0 1px}
+.tok:hover{background:var(--blue-s);box-shadow:inset 0 -2px 0 var(--blue-b)}
+.analysis{padding:13px 14px;border:1px solid var(--line);border-radius:var(--r2);
+  background:var(--card2);line-height:2.05;word-break:break-word}
+
+/* ---------- stats ---------- */
+/* The four counts are context, not the headline — the reader's attention
+   belongs on the text below. Trimmed to roughly half the height they had:
+   smaller icon tile, smaller number, tighter padding. */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+@media (max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card2)}
+.stat .b{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
+.stat .b .ic{width:14px;height:14px}
+.stat .n{font-size:16px;font-weight:700;line-height:1.1}
+.stat .l{font-size:11.5px;color:var(--mut);line-height:1.25}
+.b.blue{background:var(--blue-s);color:var(--blue)}
+.b.green{background:var(--green-s);color:var(--green)}
+.b.red{background:var(--red-s);color:var(--red)}
+.b.amber{background:var(--amber-s);color:var(--amber)}
+.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:var(--mut2);
+  margin-bottom:16px}
+.legend span{display:flex;align-items:center;gap:7px;color:var(--ink2)}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---------- inner panels ---------- */
+.panel{border:1px solid var(--line);border-radius:12px;background:var(--card2);
+  padding:14px;margin-top:14px}
+.panel h3{font-size:13.5px;font-weight:700;margin-bottom:4px;display:flex;
+  align-items:center;gap:7px}
+/* A quiet note on a panel title. The h3 is already a flex row, so `auto`
+   left margin parks it at the right edge on the same line, where it reads
+   as guidance about the panel rather than as part of its name. */
+.h3note{margin-left:auto;font-size:11.5px;font-weight:500;color:var(--mut2)}
+.panel .sub{font-size:12px;color:var(--mut);margin:0 0 11px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;font-weight:600;color:var(--mut);
+  padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.tw{display:flex;align-items:center;gap:8px}
+
+.tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;
+  font-size:11px;font-weight:600;white-space:nowrap}
+.tag.err{background:var(--red-s);color:var(--on-red)}
+.tag.warn{background:var(--amber-s);color:var(--on-amber)}
+.tag.ok{background:var(--green-s);color:var(--on-green)}
+.tag.mut{background:var(--slate-s);color:var(--mut)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:999px;
+  border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:500}
+.chip:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-s)}
+/* An alternative spelling, wherever it appears. Same green language as
+   mark.alt in the analysed text, so the two read as one idea rather than
+   two unrelated widgets that happen to sit in the same page. */
+.chip.alt{background:var(--green-s2);border-color:var(--green-b);color:var(--on-green);font-weight:600}
+.chip.alt:hover{background:var(--green-s);border-color:var(--green);color:var(--on-green)}
+/* A correction to apply, as against an alternative spelling to consider. */
+.chip.fix{background:var(--blue-s);border-color:var(--blue-b);color:var(--blue-d);
+  font-weight:700}
+.chip.fix:hover{background:var(--blue);border-color:var(--blue);color:var(--on-accent)}
+/* The whole row selects a word, so it has to look selectable. */
+tr.pick{cursor:pointer}
+tr.pick:hover td{background:var(--slate-s)}
+/* Which row the Word Details panel is currently showing. */
+tr.active td{background:var(--blue-s)}
+tr.active:hover td{background:var(--blue-s)}
+tr.active td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Alternative-spelling popover.
+   Replaces the native `title` tooltip on a highlighted word. A tooltip can
+   only tell; this has to offer — the spelling it names is the thing the
+   reader wants to apply, and a tooltip cannot be clicked. */
+.pop{position:absolute;z-index:60;min-width:250px;max-width:330px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  /* Deeper than the light theme used: a soft shadow is nearly invisible on a
+     dark ground, and this menu must clearly float above the text. */
+  box-shadow:0 14px 32px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
+  overflow:hidden;animation:popin .12s ease-out}
+@keyframes popin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.pop .ph{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding:9px 12px;background:var(--slate-s);border-bottom:1px solid var(--line)}
+.pop .ph b{font-size:13.5px;color:var(--ink)}
+.pop .ph i{font-style:normal;font-size:11px;letter-spacing:.5px;color:var(--mut);
+  text-transform:uppercase}
+.pop .opt{display:block;width:100%;text-align:left;border:0;background:none;
+  font:inherit;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line2)}
+.pop .opt:hover,.pop .opt:focus-visible{background:var(--green-s);outline:none}
+.pop .opt .v{font-weight:650;font-size:13.5px;color:var(--green)}
+.pop .opt .tag{margin-left:6px;vertical-align:1px}
+.pop .opt .g{display:block;color:var(--mut);font-size:12px;margin-top:3px;line-height:1.4}
+/* Fix menu. Same shape, different colour: green offers an equally valid
+   spelling of a correct word, blue proposes a replacement for a wrong one —
+   the distinction the whole UI is built on, so the menus must not look alike. */
+.pop.fix .opt:hover,.pop.fix .opt:focus-visible{background:var(--blue-s)}
+/* The bright accent, not --blue-d: that is now the primary BUTTON's
+   surface colour, deep enough for white text and therefore too dark
+   to read as text itself on this panel. */
+.pop.fix .opt .v{color:var(--blue)}
+.pop .opt .m{float:right;font-weight:700;font-size:12px}
+.pop .opt .rk{display:inline-block;min-width:15px;color:var(--mut2);font-size:11.5px;
+  font-weight:600;margin-right:5px}
+.pop .pf{display:flex;gap:8px;padding:8px 12px;background:var(--slate-s)}
+.pop .pf .btn{padding:5px 10px;font-size:12px}
+/* The caret sits on the popover edge, so its two visible sides are borrowed
+   from whichever face it points away from. */
+.pop .arw{position:absolute;width:10px;height:10px;transform:rotate(45deg);
+  background:var(--slate-s);border-left:1px solid var(--line);border-top:1px solid var(--line)}
+.pop.below .arw{top:-6px}
+.pop.above .arw{bottom:-6px;background:var(--card);border:0;
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+mark[aria-expanded="true"]{box-shadow:0 0 0 2px var(--green-b)}
+
+.altrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 0;
+  border-bottom:1px solid var(--line2)}
+.altrow:last-child{border-bottom:0}
+.altrow .w{font-weight:600;min-width:96px}
+
+/* ---------- sidebar ---------- */
+.side{position:sticky;top:20px}
+.pager{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.pager button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);display:grid;place-items:center}
+.pager button:disabled{opacity:.4;cursor:default}
+.wordhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:14px 18px 0}
+.wordhead .w{font-size:27px;font-weight:700;letter-spacing:-.02em}
+.speak{width:38px;height:38px;border-radius:10px;border:0;background:var(--blue-s);
+  color:var(--blue);display:grid;place-items:center;margin-left:auto}
+.speak:hover{background:var(--blue-b)}
+.tabs{display:flex;gap:2px;padding:12px 18px 0;border-bottom:1px solid var(--line)}
+.tabs button{padding:10px 15px;border:0;background:transparent;font-weight:600;
+  font-size:13px;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue);
+  background:var(--blue-s);border-radius:9px 9px 0 0}
+.sug{display:flex;align-items:center;gap:12px;padding:12px 13px;border:1px solid var(--line);
+  border-radius:11px;margin-bottom:9px;background:var(--card);width:100%;text-align:left}
+.sug:hover{border-color:var(--blue);background:var(--blue-s)}
+.sug .rk{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:700;background:var(--slate-s);color:var(--mut);flex:none}
+.sug.top .rk{background:var(--green);color:var(--on-accent)}
+.sug .w{font-weight:700;font-size:15px}
+.sug .body{flex:1;min-width:0}
+/* The gloss is the field a reader actually decides on — `dang` and `danda`
+   are equally plausible strings, and only the meaning separates them. It was
+   set in --mut (#64748b) at 11.5px, which read as incidental metadata next to
+   the bold headword. Darker and a size up, so it carries its own weight. */
+.sug .gl{display:block;font-size:12.5px;color:var(--ink2);margin-top:3px;
+  line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Absence stays quiet: it is a statement about the lexicon, not a definition. */
+.sug .gl.none{color:var(--mut2);font-style:italic;font-size:11.5px}
+.altrow .acts{margin-left:auto;display:flex;gap:6px;flex:none}
+.sug .m{margin-left:auto;text-align:right;line-height:1.2;flex:none;padding-left:8px}
+.sug .m b{font-size:14px}
+.sug .m i{display:block;font-style:normal;font-size:11.5px;color:var(--mut)}
+.bar{display:inline-block;width:54px;height:6px;border-radius:3px;
+     background:rgba(255,255,255,.14);overflow:hidden;vertical-align:middle}
+.bar i{display:block;height:100%;border-radius:3px;background:currentColor}
+.sug .m .bar{width:64px;height:7px}
+.nobar{color:var(--mut2)}
+.note{background:var(--blue-s);border:1px solid var(--blue-b);border-radius:11px;
+  padding:13px;font-size:12.5px;color:var(--ink2);line-height:1.6}
+.note .nh{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:13px;font-weight:700}
+.empty{padding:34px 18px;text-align:center;color:var(--mut);font-size:13px}
+.hint{cursor:help;color:var(--mut2)}
+
+/* "Why these corrections" — one block per candidate. */
+.ipa{margin:2px 0 8px;font-size:15px;color:var(--blue-d);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.why{border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  margin-bottom:8px;background:var(--card)}
+.why .w{font-weight:700;font-size:14px}
+.why .d{float:right;font-size:11.5px;color:var(--mut)}
+.why .ops{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+/* The edit operations now sit inside the suggestion row, under its gloss. */
+.sug .ops{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.why .gl{margin-top:5px;font-size:12px;color:var(--ink2)}
+.op{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  background:var(--slate-s);color:var(--ink2);padding:2px 7px;border-radius:6px}
+.opk{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  background:var(--green-s);color:var(--on-green);padding:2px 7px;border-radius:6px;
+  font-weight:700}
+dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:13px}
+dl.kv dt{color:var(--mut)}
+dl.kv dd{margin:0;font-weight:600}
+
+/* Word-detail panel.
+   Everything used to be one flat stack of <p>s at the same weight, so the
+   headings did not read as headings and there was nothing to tell the reader
+   where phonology stopped and morphology began. Sections now carry a rule and
+   a small caps label, and the lead block (meaning, IPA, verdict) is set apart
+   from them. */
+.wp-lead{margin:0 0 4px}
+/* Senses of the headword. Each is its own item with a thin separator, so a
+   three-sense entry reads as three meanings rather than one long sentence. */
+.senses{display:flex;flex-wrap:wrap;align-items:baseline;gap:0;
+  font-size:13.5px;line-height:1.5;color:var(--ink)}
+.senses .sn{display:inline-flex;align-items:baseline;gap:5px}
+.senses .sn + .sn::before{content:"·";color:var(--mut2);margin:0 8px;font-weight:700}
+/* A part-of-speech lifted out of the sense text ("Adverb: in good condition"). */
+.senses .sn i{font-style:normal;font-size:10.5px;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--mut2);transform:translateY(-1px)}
+/* Grammar line: word class, noun-class article, gender. The class was set as
+   muted body text, which read as an afterthought rather than a label. */
+.wp-gram{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px}
+.wp-gram .tag.pos{background:var(--blue-s);color:var(--blue);
+  border:1px solid var(--blue-b);font-weight:700;letter-spacing:.2px}
+.wp-gram .ga{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  background:var(--slate-s);border:1px solid var(--line);border-radius:5px;
+  padding:1px 7px;color:var(--ink2);font-weight:600}
+.wp-gram .gg{font-size:11.5px;color:var(--mut)}
+.wp-sec{border-top:1px solid var(--line2);margin-top:18px;padding-top:13px}
+.wp-sec h4{margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--mut2)}
+/* Collapsible sections. <details>/<summary> rather than a JS toggle: it is
+   keyboard-operable and screen-reader-announced without any work, and the
+   open state is a real DOM property we can read back. The default marker is
+   hidden in favour of a chevron that rotates. */
+.wp-sec > summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+  gap:8px;border-radius:6px}
+.wp-sec > summary::-webkit-details-marker{display:none}
+.wp-sec > summary h4{margin:0}
+.wp-sec > summary:hover h4,.wp-sec > summary:focus-visible h4{color:var(--mut)}
+.wp-sec > summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.wp-sec > summary::after{content:"";margin-left:auto;width:6px;height:6px;
+  border-right:1.6px solid var(--mut2);border-bottom:1.6px solid var(--mut2);
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s ease}
+.wp-sec[open] > summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.wp-sec > summary + *{margin-top:9px}
+.wp-sec > p{margin:0 0 8px;font-size:13px;color:var(--ink2);line-height:1.55}
+.wp-sec > p:last-child{margin-bottom:0}
+/* A verdict line: the state chip and its explanation on one row, aligned to
+   the chip rather than wrapping under it. */
+.wp-state{display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;
+  font-size:13px;color:var(--ink2);line-height:1.5}
+.wp-state .tag{flex:none;margin-top:1px}
+.wp-morph{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+/* Derivational chain: the word assembled one affix at a time. */
+.wp-chain{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.wp-chain .arrow{color:var(--mut2);font-size:12px}
+.wp-chain .step-root{border-color:var(--green-b);color:var(--on-green)}
+/* One row per affix: the form, what it does, and what it attaches to. */
+.wp-affix{display:grid;gap:5px;margin:0 0 11px}
+.wp-affix .af{display:flex;align-items:baseline;gap:9px}
+.wp-affix .af .tag{flex:none;min-width:62px;text-align:center}
+.wp-affix .afl{font-size:12.5px;color:var(--ink2);font-weight:600}
+.wp-affix .afa{font-size:11.5px;color:var(--mut)}
+code{background:var(--slate-s);padding:1px 6px;border-radius:5px;font-size:12px}
+
+.spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:var(--on-accent);
+  border-radius:50%;display:inline-block;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.prose{font-size:13.5px;line-height:1.75;color:var(--ink2);max-width:74ch}
+.prose h3{font-size:14.5px;margin:18px 0 6px;color:var(--ink)}
+.prose ul{margin:6px 0;padding-left:20px}
+.prose p{margin:8px 0}
+footer{max-width:1500px;margin:0 auto;padding:16px 22px 30px;display:flex;gap:16px;
+  flex-wrap:wrap;justify-content:space-between;font-size:12px;color:var(--mut)}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <!-- "Broken Seal": a K held in a ring that opens exactly where the
+         ascending arm leaves it. The ring's gap is placed where the check
+         actually crosses r=23 (computed, ~40 degrees), so the seal is broken
+         BY the stroke rather than merely near it. Stem and ring take
+         --lg-ring, the ascending arm --lg-check; on a dark surface --lg-ring
+         becomes the near-white of the REVERSED lockup, which is why that
+         variant exists. -->
+    <svg width="38" height="38" viewBox="0 0 64 64" aria-hidden="true" fill="none"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M53.3 23.4 A23 23 0 1 1 44.2 12.5" stroke="var(--lg-ring)" stroke-width="5.5"/>
+      <path d="M23 15.5 L23 48.5" stroke="var(--lg-ring)" stroke-width="6.5"/>
+      <path d="M23 34 L30.5 43 L54 11.5" stroke="var(--lg-check)" stroke-width="6.5"/>
+    </svg>
+    <div>
+      <!-- The Khasi name sits beside the English one, on the same line and in
+           the same heading, so it reads as the product's other name rather
+           than as a tagline. Lighter weight and colour keep the English form
+           dominant without demoting the Khasi to small print. -->
+      <h1>Khasi Spellchecker <span class="kh">Ka Thoh ka Tar Tynrai</span></h1>
+      <p>Morphology-Gated &middot; Powered by Khasi Language Resources</p>
+    </div>
+  </div>
+  <!-- Section nav removed on request. The Learn and About views are still in
+       the page and still reachable by their routes (#!learn, #!about); only
+       the buttons are gone, so restoring them is putting this block back. -->
+  <div class="meter">
+    <div>
+      <!-- The icon belongs on the number's line. Left as a sibling of the
+           whole block it centred against all three lines and came to rest
+           beside the label instead. It stays OUTSIDE #vocab, whose
+           textContent is overwritten when the count arrives. -->
+      <div class="nrow">
+        <svg class="ic" style="width:18px;height:18px;color:var(--blue)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+        <div class="n" id="vocab">&mdash;</div>
+      </div>
+      <div class="l">Khasi word forms</div>
+      <span class="t">Preserving Khasi, Empowering Meghalaya</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<div>
+  <!-- ============ CHECK TEXT ============ -->
+  <section id="view-check">
+    <div class="card">
+      <!-- No "Example Text" button here: "Try Example" sits with the other
+           actions below and does the same thing. Two buttons for one action,
+           in one card, is just a second thing to read. -->
+      <!-- Heading removed on request. The sub-line stays and now carries the
+           card on its own; `.hd` keeps its padding so the text does not sit
+           flush against the card edge. -->
+      <div class="hd">
+        <div>
+          <p class="sub" style="margin-top:0">Type or paste your Khasi text below to check spelling, get suggestions, and see linguistic analysis.</p>
+        </div>
+      </div>
+      <div class="bd">
+        <textarea id="text" spellcheck="false" oninput="updateCount()"
+          placeholder="katba u bynriew u dang iaid hok&hellip;"></textarea>
+        <div class="count" id="count">0 characters &middot; 0 words</div>
+        <div class="row">
+          <button class="btn pri" id="btn-check" onclick="checkText()">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12 5 5L20 6"/></svg>
+            Check Text</button>
+          <button class="btn" onclick="clearAll()">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+            Clear</button>
+          <button class="btn" onclick="loadExample()">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            Try Example</button>
+        </div>
+      </div>
+    </div>
+    <div id="results"></div>
+  </section>
+
+  <!-- ============ LEARN ============ -->
+  <section id="view-learn" hidden>
+    <div class="card"><div class="hd"><div>
+      <h2>Khasi Orthography &amp; Word Formation</h2>
+      <p class="sub">The inventories this checker actually enforces, read from its own lexicon.</p>
+    </div></div><div class="bd prose" id="learn"></div></div>
+  </section>
+
+  <!-- ============ ABOUT ============ -->
+  <section id="view-about" hidden>
+    <div class="card"><div class="hd"><div>
+      <h2>About this checker</h2>
+      <p class="sub">What it does, how it decides, and what it cannot yet tell you.</p>
+    </div></div><div class="bd prose" id="about"></div></div>
+  </section>
+</div>
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="side">
+  <div class="card" id="details">
+    <div class="hd">
+      <h2>Word Details</h2>
+      <div class="pager">
+        <button onclick="pageWord(-1)" id="pg-prev" aria-label="Previous word">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 5-7 7 7 7"/></svg></button>
+        <span id="pg-label">0 of 0</span>
+        <button onclick="pageWord(1)" id="pg-next" aria-label="Next word">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 5 7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div id="detail-body"><div class="empty">Check some text to see word-by-word detail here.</div></div>
+  </div>
+</aside>
+</main>
+
+<!-- The version/tagline line was removed on request. `justify-content` in the
+     footer becomes `center` because `space-between` puts a lone child hard
+     against the left edge, which reads as a stray fragment rather than a
+     footer. -->
+<footer style="justify-content:center">
+  <div>Khasi (Austroasiatic language) &nbsp;|&nbsp; Sohra standard orthography &nbsp;|&nbsp; Open for education and research</div>
+</footer>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let lastResult = null, flagged = [], cursor = 0, detailTab = "sug", _seq = 0;
+// Words whose alternative spelling the reader has dismissed. Keyed on the
+// word so a dismissal survives the re-check that every edit triggers.
+const ignoredVariants = new Set();
+// The word the sidebar is currently explaining, when it is not showing one of
+// the flagged words. null = normal flagged-word mode.
+let inspected = null;
+// The panel is closed until the reader asks for it. It used to sit open on
+// every check, explaining whichever word happened to be first — a standing
+// answer to a question nobody had asked, taking sidebar space away from the
+// text. Opened by clicking any word, closed by its own button.
+let detailsOpen = false;
+// Which word-detail sections the reader has OPENED, by heading. Absent =
+// closed, so every section starts collapsed and one opened stays open as the
+// reader moves between words. Kept outside the panel because renderDetail()
+// rebuilds its markup from scratch each time.
+const secOpen = {};
+
+/* How many candidates to show. The engine ranks and returns five, and all
+   five are shown: top-5 accuracy is 90.8% against 72.8% at top-1, so the
+   rows past the third are where a sizeable share of the right answers
+   actually live. Display-only — the API returns what it ranked either way. */
+const MAX_SUGGESTIONS = 5;
+const topSuggestions = a => (a || []).slice(0, MAX_SUGGESTIONS);
+
+/* ------------------------------------------------------------------ *
+ * Displayed "match" percentage.
+ *
+ * The API returns, per suggestion, the blended phoneme/Damerau distance
+ * the engine actually ranked on. That is a distance, not a probability,
+ * and candidates frequently tie: every suggestion for `dand` sits at
+ * distance 1.0, and their order comes from the corpus-frequency and
+ * morphology tie-breakers rather than from distance.
+ *
+ * So the bar below is a function of BOTH the distance and the position
+ * the engine put the candidate in. It is a presentation of the ranking,
+ * not a calibrated confidence, and the UI says so wherever it appears.
+ * ------------------------------------------------------------------ */
+function matchPct(dist, i){
+  // No distance means the candidate did not come from the ranked search — the
+  // hyphenated-compound path builds a replacement string directly. Returning a
+  // number there would invent one, so return null and let the caller show "--".
+  if (typeof dist !== "number" || dist < 0) return null;
+  return Math.max(15, Math.round(100 * Math.exp(-0.13 * dist) * (1 - 0.12 * i)));
+}
+const pctText = p => p === null ? "&mdash;" : p + "%";
+/* A plain bar instead of a number. The value was never a probability — it is
+   a function of distance AND list position — and printing it as "88%" invited
+   readers to take it for confidence. The bar carries the same value as length,
+   so the ordering still reads at a glance, with nothing to misquote. */
+const pctBar = p => p === null
+  ? '<span class="nobar" title="no ranked distance">&mdash;</span>'
+  : '<span class="bar" role="img" aria-label="match strength"'
+    + ' title="match strength: a view of the ranking, not a probability">'
+    + '<i style="width:' + p + '%"></i></span>';
+const pctClass = p => p === null ? "var(--mut2)"
+  : p >= 75 ? "var(--green)" : p >= 55 ? "var(--amber)" : "var(--mut)";
+
+/* ---------------- navigation ---------------- */
+let currentView = "check";
+
+/* The sidebar shows only on the check view AND only once the reader has asked
+   for a word. Collapse the grid to one column rather than just hiding the
+   aside, or the 470px track stays reserved and the text renders half-width. */
+function syncSidebar(){
+  const show = (currentView === "check") && detailsOpen;
+  const side = document.querySelector(".side");
+  const wasHidden = side.hidden;
+  side.hidden = !show;
+  document.querySelector(".wrap").classList.toggle("solo", !show);
+  // Under 1180px the grid is a single column and the panel stacks BELOW the
+  // text, so opening it can land entirely off-screen and read as "nothing
+  // happened". Bring it into view the first time it opens; on a wide screen
+  // it is already beside the text and this is a no-op.
+  if (show && wasHidden && side.scrollIntoView)
+    side.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+function showView(which, push){
+  for (const v of ["check","learn","about"]){
+    $("view-"+v).hidden = (v !== which);
+    // The nav buttons were removed; the routes remain, so tolerate their
+    // absence rather than throwing on every view change.
+    const tab = $("nav-"+v);
+    if (tab) tab.setAttribute("aria-selected", String(v === which));
+  }
+  currentView = which;
+  syncSidebar();
+  if (which === "learn" && !$("learn").dataset.done) renderLearn();
+  if (which === "about" && !$("about").dataset.done) renderAbout();
+  // Routes carry a "!" prefix so they cannot collide with an element id. Plain
+  // "#learn" made the browser scroll to the <div id="learn">, which pushed the
+  // header off the top of the page.
+  if (push !== false && location.hash !== "#!" + which)
+    history.replaceState(null, "", "#!" + which);
+}
+function routeFromHash(){
+  const h = decodeURIComponent((location.hash || "").replace(/^#!?/, ""));
+  // #!word=jingiathuh still works: it opens the checker and explains that
+  // word in the sidebar, which is where the confidence vote now lives.
+  const m = h.match(/^word=(.+)$/);
+  if (m){ showView("check", false); inspectWord(m[1]); return; }
+  if (["learn","about"].includes(h)) showView(h, false);
+  else if (h === "example"){ showView("check", false); loadExample(); }
+  else showView("check", false);
+}
+addEventListener("hashchange", routeFromHash);
+
+/* ---------------- api ---------------- */
+async function api(path, body){
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
+                              body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || (r.status + " " + r.statusText));
+  return data;
+}
+function busy(btn, on, label){
+  btn.disabled = on;
+  btn.innerHTML = on ? '<span class="spin"></span> checking' : label;
+}
+
+/* ---------------- text checking ---------------- */
+function updateCount(){
+  const t = $("text").value;
+  const w = (t.match(/[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g) || []).length;
+  $("count").textContent = t.length + " characters · " + w + " words";
+}
+function loadExample(){
+  $("text").value = "katba u bynriew u dand iaid hok, im hok katkum ka ain u Blei, "
+    + "u suk-u-sain, u roi-u-par bad u man-bha man-miay";
+  updateCount(); checkText();
+}
+function clearAll(){
+  ignoredVariants.clear();
+  inspected = null; detailsOpen = false;
+  $("text").value = ""; $("results").innerHTML = "";
+  lastResult = null; flagged = []; cursor = 0; updateCount(); renderDetail();
+}
+
+async function checkText(){
+  const text = $("text").value.trim();
+  if (!text) return;
+  const seq = ++_seq, btn = $("btn-check");
+  const label = btn.innerHTML;
+  busy(btn, true, label);
+  const t0 = performance.now();
+  try {
+    const res = await api("/check", {text, context:true, skip_foreign:true});
+    if (seq !== _seq) return;                       // a newer request won
+    res._ms = performance.now() - t0;
+    lastResult = res;
+    flagged = res.corrections.slice();
+    cursor = 0;
+    inspected = null;
+    // A fresh check does not reopen the panel. The reader asked for the
+    // text to be checked, not for a word to be explained.
+    detailsOpen = false;
+    renderResults(res); renderDetail();
+  } catch (e) {
+    if (seq !== _seq) return;
+    $("results").innerHTML = '<div class="card"><div class="bd">'
+      + '<span class="tag err">Error</span> ' + esc(e.message) + '</div></div>';
+  } finally {
+    if (seq === _seq) busy(btn, false, label);
+  }
+}
+
+function classOf(kind){ return kind === "err" ? "err" : kind === "warn" ? "warn"
+                             : kind === "alt" ? "alt" : "skip"; }
+
+/* Build one ordered list of marked spans from corrections, variants and skips. */
+function spansOf(res){
+  const out = [];
+  res.corrections.forEach((c,i) => out.push({start:c.start, end:c.end,
+    kind: c.gate === 1 ? "err" : "warn", idx:i}));
+  // Variants carry their own index so the mark can be clicked. They used to
+  // be idx:-1, which made the one thing a reader most wants to interact with
+  // the one thing that was inert.
+  (res.variants || []).forEach((v,i) => {
+    if (ignoredVariants.has(v.word.toLowerCase())) return;   // dismissed
+    out.push({start:v.start, end:v.end, kind:"alt", vidx:i, idx:-1});
+  });
+  (res.skipped || []).forEach(s => {
+    if (typeof s.start === "number") out.push({start:s.start, end:s.end, kind:"skip", idx:-1});
+  });
+  return out.sort((a,b) => a.start - b.start);
+}
+
+/* Wrap every word in an UNMARKED stretch so it can be inspected.
+   Accepted words never appear in `corrections`, so before this the only way
+   to ask "why was this accepted?" was the separate Single Word view — and
+   that is the more interesting question for a morphology-gated checker,
+   since acceptance is what the morphology actually decides. */
+function inspectable(chunk){
+  let out = "", last = 0;
+  const re = /[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g;
+  let m;
+  while ((m = re.exec(chunk)) !== null){
+    out += esc(chunk.slice(last, m.index));
+    out += '<span class="tok" title="Show why this word was accepted"'
+         + ' onclick="inspectWord(\'' + esc(m[0]) + '\')">' + esc(m[0]) + '</span>';
+    last = m.index + m[0].length;
+  }
+  return out + esc(chunk.slice(last));
+}
+
+function markup(res, selectable){
+  const spans = spansOf(res);
+  let html = "", cur = 0;
+  for (const s of spans){
+    if (s.start < cur) continue;
+    html += inspectable(res.text.slice(cur, s.start));
+    const sel = (selectable && s.idx === cursor) ? " sel" : "";
+    let attr = "";
+    if (s.idx >= 0) {
+      // A flagged word opens its suggestions on the spot, the same way a
+      // word with an alternative spelling opens its alternatives.
+      const c = res.corrections[s.idx] || {};
+      attr = ' id="fix' + s.idx + '" tabindex="0" role="button"'
+           + ' aria-haspopup="menu" aria-expanded="false" style="cursor:pointer"'
+           + ' onclick="event.stopPropagation();openFixMenu(' + s.idx + ', this)"'
+           + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
+           + 'event.preventDefault();openFixMenu(' + s.idx + ', this)}"'
+           + ' title="' + (c.gate === 1 ? "Possible spelling error" : "Not recognised")
+           + (c.suggestion ? ' — suggested: ' + esc(c.suggestion) : "")
+           + ' — click to choose"';
+    } else if (s.vidx !== undefined) {
+      const alts = (res.variants[s.vidx].variants || [])
+                     .map(x => x.variant);
+      // The native tooltip is replaced by a real menu — see openVariantMenu.
+      // aria-haspopup/aria-expanded say so to a screen reader; the title is
+      // kept short since the menu itself now carries the detail.
+      attr = ' id="alt' + s.vidx + '" tabindex="0" role="button"'
+           + ' aria-haspopup="menu" aria-expanded="false"'
+           + ' onclick="event.stopPropagation();openVariantMenu(' + s.vidx + ', this)"'
+           + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
+           + 'event.preventDefault();openVariantMenu(' + s.vidx + ', this)}"'
+           + ' title="Also written: ' + esc(alts.join(", ")) + ' — click to choose"';
+    }
+    html += '<mark class="' + classOf(s.kind) + sel + '"' + attr + '>'
+          + esc(res.text.slice(s.start, s.end)) + '</mark>';
+    cur = s.end;
+  }
+  return html + inspectable(res.text.slice(cur));
+}
+
+function renderResults(res){
+  const total = (res.text.match(/[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g) || []).length;
+  const errs  = res.corrections.filter(c => c.gate === 1).length;
+  const unk   = res.corrections.filter(c => c.gate !== 1).length;
+  const valid = Math.max(0, total - errs - unk);
+
+  const stat = (n, l, cls, svg) => '<div class="stat"><div class="b ' + cls + '">' + svg
+    + '</div><div><div class="n">' + n + '</div><div class="l">' + l + '</div></div></div>';
+  const S = {
+    doc:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    ok:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+    bang:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16h.01"/></svg>',
+    q:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.7-.7 1.3M12 16h.01"/></svg>'
+  };
+
+  const rows = res.corrections.map((c,i) => {
+    const p = matchPct(c.distances && c.distances[0], 0);
+    const gl = (c.glosses && c.glosses[0]) || "";
+    // The suggestion chip is the action — clicking it rewrites the word — so
+    // it is styled as one. Blue for "apply this correction", to sit apart
+    // from the green chips that offer an alternative spelling of a word that
+    // is already right. A plain bordered chip signalled neither.
+    // The row itself selects the word in the Word Details panel — a separate
+    // button for that was one more thing to explain. The suggestion chip
+    // stops propagation so clicking it still applies the fix rather than
+    // merely selecting the row.
+    return '<tr class="pick' + (i === cursor ? ' active' : '') + '"'
+      + ' title="Show all suggestions for ' + esc(c.original)
+      + ', with meanings and why it was flagged"'
+      + ' onclick="gotoWord(' + i + ')"><td>' + (i+1) + '</td>'
+      + '<td><span class="tw"><b>' + esc(c.original) + '</b></span></td>'
+      + '<td><span class="tag ' + (c.gate === 1 ? "err" : "warn") + '">'
+      + (c.gate === 1 ? "Possible spelling error" : "Not recognised") + '</span></td>'
+      + '<td><button class="chip fix" title="Replace ' + esc(c.original) + ' with '
+      + esc(c.suggestion) + (gl ? " — " + esc(gl) : "") + '"'
+      + ' onclick="event.stopPropagation();applyFix(' + i + ',\'' + esc(c.suggestion) + '\')">'
+      + esc(c.suggestion) + '</button></td>'
+      + '<td style="color:' + pctClass(p) + ';font-weight:700" title="'
+      + (p === null ? "no ranked distance: built by the hyphenated-compound path"
+                    : "from the blended phoneme/Damerau distance and rank")
+      + '">' + pctBar(p) + '</td></tr>';
+  }).join("");
+
+  const alts = (res.variants || []).map((v,i) =>
+    ignoredVariants.has(v.word.toLowerCase()) ? "" :
+      // The word itself opens its detail panel, so a reader never has to go
+      // hunting in the marked-up text to ask about the word already in front
+      // of them. Same for the rows in the corrections table above.
+      '<div class="altrow" id="altrow-v' + i + '"><span class="w tok"'
+    + ' title="Show the meaning and why ' + esc(v.word) + ' was accepted"'
+    + ' onclick="inspectWord(\'' + esc(v.word) + '\')">' + esc(v.word) + '</span>'
+    + '<span class="sub" style="margin:0">also written</span>'
+    + '<span class="chips">' + v.variants.map(x =>
+        '<button class="chip alt" title="Replace ' + esc(v.word) + ' with ' + esc(x.variant)
+        + (x.gloss ? " — " + esc(x.gloss) : "")
+        + '" onclick="applyAt(' + v.start + ',' + v.end + ',\''
+        + esc(x.variant) + '\')">' + esc(x.variant)
+        + '</button>').join("")
+    + '</span>'
+    + '<span class="acts">'
+    + '<button class="btn sm" title="Use ' + esc(preferredVariant(v))
+    + '" onclick="acceptVariant(' + i + ')">&#10003; Accept</button>'
+    + '<button class="btn sm" title="Keep ' + esc(v.word)
+    + ' and stop offering this" onclick="ignoreVariant(' + i + ')">'
+    + '&#10005; Ignore</button></span>'
+    + '</div>').join("");
+
+  // Misspellings are NOT listed here. They already appear in the table above
+  // with their suggestions, and repeating them under a heading that says
+  // "Alternative Spellings" muddles the one distinction this panel exists to
+  // draw: an alternative is a second correct spelling, not a correction.
+  const skipped = (res.skipped || []).length
+    ? '<div class="panel"><h3>Withheld from checking</h3>'
+      + '<p class="sub">Proper nouns and acronyms are never corrected. '
+      + 'About one running-text token in seven is withheld this way.</p><div class="chips">'
+      + res.skipped.map(s => '<span class="chip">' + esc(s.word || s.token || "")
+        + ' <span class="tag mut">' + esc(s.reason || "name") + '</span></span>').join("")
+      + '</div></div>'
+    : "";
+
+  $("results").innerHTML =
+    '<div class="card"><div class="hd"><h2>Results Summary</h2>'
+  + '<span style="font-size:12px;color:var(--mut)">Analysis completed in '
+  + (res._ms/1000).toFixed(2) + ' seconds</span></div><div class="bd">'
+  + '<div class="stats">'
+  + stat(total,"Total Words","blue",S.doc) + stat(valid,"Valid Words","green",S.ok)
+  + stat(errs,"Possible Errors","red",S.bang) + stat(unk,"Not Recognised","amber",S.q)
+  + '</div>'
+  + '<div class="legend">'
+  + '<span><i class="sw" style="background:var(--red-b)"></i>Possible spelling error</span>'
+  + '<span><i class="sw" style="background:var(--amber-b)"></i>Not recognised</span>'
+  + '<span><i class="sw" style="border-bottom:2px dotted var(--green);'
+  + 'background:var(--green-s2)"></i>Correct &mdash; another spelling exists</span>'
+  + '<span><i class="sw" style="background:var(--slate-s)"></i>Withheld (name)</span>'
+  + '</div>'
+  // The corrections table is gone. Every column it carried — status, the
+  // suggested word, the match percentage — is now in the popover on the
+  // flagged word itself, together with the ranked alternatives and their
+  // meanings, which the table never had room for. It had no bulk action, so
+  // nothing was lost with it. The Alternative Spellings panel below stays:
+  // Accept all / Ignore all have no equivalent on a single word.
+  + '<div class="panel"><h3>Text with Analysis'
+  // Every token is clickable, not only the highlighted ones: a plain
+  // word carries onclick=inspectWord and opens the same Word Details
+  // panel. Nothing said so, so on a clean text — where the line below
+  // reads "No spelling problems found." — there was no sign the words
+  // did anything at all.
+  + '<span class="h3note">Click a word for more detail</span></h3>'
+  + '<div class="analysis" id="analysis">' + markup(res, true) + '</div>'
+  + (rows ? '<p class="sub" style="margin-top:12px">Click a highlighted word '
+      + 'for its suggestions.</p>'
+      : '<p class="sub" style="margin-top:12px">No spelling problems found.</p>')
+  + '</div>'
+  // The Alternative Spellings panel is gone, and so are its bulk buttons.
+  // Each row's word, its offered spelling and its Accept/Ignore all live in
+  // the green popover on the word itself, which additionally carries the
+  // meaning the row never showed.
+  //
+  // "Accept all" is not merely redundant, it was unsafe: the variant engine
+  // also offers the PLAIN spelling of a word that already carries its
+  // diacritics (route 2, `aiñ` -> `ain`), so accepting every offer at once
+  // rewrote correct words into forms this project has since ruled wrong —
+  // `ïaid` back to `iaid`, `suk-u-saiñ` back to `suk-u-sain`. Choosing a
+  // spelling is a per-word decision and the popover makes it one.
+  + skipped
+  + '<div class="row" style="margin-top:14px">'
+  // "Apply all suggestions" is gone. It sat directly under "Accept all" in
+  // the panel above and read as the same action at a glance, while doing
+  // something different and riskier: bulk-applying every correction,
+  // including low-confidence ones like man-miay -> man-miat at 64%, without
+  // review. Applying a correction is a per-word decision and the chips
+  // already make it one.
+  + '<button class="btn" onclick="copyCorrected(this)">Copy corrected text</button></div>'
+  + '</div></div>';
+}
+
+/* ---------------- alternative-spelling popover ---------------- */
+/* A `title` tooltip could only say "Also written: aiñ". The reader's next move
+   is always to accept or reject that spelling, so the thing under the cursor
+   has to be actionable. This is a menu: each alternative is a button that
+   rewrites the word, with its meaning underneath so the choice is informed. */
+let popAnchor = null;
+
+function closePop(){
+  const p = $("altpop");
+  if (p) p.remove();
+  if (popAnchor){ popAnchor.setAttribute("aria-expanded", "false"); popAnchor = null; }
+  document.removeEventListener("keydown", popKey, true);
+}
+
+function popKey(e){
+  if (e.key === "Escape"){ e.stopPropagation(); const a = popAnchor; closePop(); if (a) a.focus(); return; }
+  const items = [...document.querySelectorAll("#altpop .opt, #altpop .btn")];
+  if (!items.length) return;
+  const at = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const n = e.key === "ArrowDown" ? at + 1 : at - 1;
+    items[(n + items.length) % items.length].focus();
+  }
+}
+
+/* Build, place and wire a popover anchored to `anchor`. Both menus share it:
+   they differ only in what goes inside and which accent colour they carry. */
+function showPop(anchor, cls, inner){
+  const pop = document.createElement("div");
+  pop.className = "pop" + (cls ? " " + cls : "");
+  pop.id = "altpop";
+  pop.setAttribute("role", "menu");
+  pop.innerHTML = '<span class="arw"></span>' + inner;
+  document.body.appendChild(pop);
+  placePop(pop, anchor);
+  popAnchor = anchor;
+  anchor.setAttribute("aria-expanded", "true");
+  document.addEventListener("keydown", popKey, true);
+  const first = pop.querySelector(".opt");
+  if (first) first.focus();
+  return pop;
+}
+
+function openVariantMenu(i, anchor){
+  // Clicking the open word closes it, so the same click both opens and
+  // dismisses — the behaviour every menu in every toolbar already has.
+  const same = popAnchor === anchor;
+  closePop();
+  if (same) return;
+  const v = lastResult && lastResult.variants && lastResult.variants[i];
+  if (!v) return;
+
+  const opts = (v.variants || []).map((x, k) =>
+      '<button class="opt" role="menuitem" data-k="' + k + '"'
+    + ' onclick="applyVariantPick(' + i + ',\'' + esc(x.variant) + '\');closePop()">'
+    + '<span class="v">' + esc(x.variant) + '</span>'
+    + (x.canonical ? '<span class="tag ok">recorded</span>' : '')
+    + (x.gloss ? '<span class="g">' + esc(x.gloss) + '</span>'
+               : '<span class="g">no dictionary entry &mdash; derived form</span>')
+    + '</button>').join("");
+
+  showPop(anchor, "", '<div class="ph"><b>' + esc(v.word) + '</b><i>also written</i></div>'
+    + opts
+    + '<div class="pf">'
+    + '<button class="btn sm" onclick="closePop();inspectWord(\'' + esc(v.word) + '\')">Details</button>'
+    + '<button class="btn sm" onclick="closePop();ignoreVariant(' + i + ')">Keep as is</button>'
+    + '</div>');
+}
+
+/* The same menu for a word that is WRONG rather than merely spelled another
+   way. Reaching the suggestions used to mean clicking the word, reading the
+   sidebar, then clicking a chip there; the candidates are now on the word
+   itself, ranked, with the meaning that actually decides between them. */
+function openFixMenu(i, anchor){
+  const same = popAnchor === anchor;
+  closePop();
+  if (same) return;
+  const c = lastResult && lastResult.corrections && lastResult.corrections[i];
+  if (!c) return;
+
+  const opts = topSuggestions(c.suggestions).map((s, k) => {
+    const p = matchPct(c.distances && c.distances[k], k);
+    const gl = (c.glosses && c.glosses[k]) || "";
+    return '<button class="opt" role="menuitem"'
+      + ' onclick="applyFix(' + i + ',\'' + esc(s) + '\');closePop()">'
+      + '<span class="m" style="color:' + pctClass(p) + '">' + pctBar(p) + '</span>'
+      + '<span class="rk">' + (k + 1) + '</span>'
+      + '<span class="v">' + esc(s) + '</span>'
+      + (k === 0 ? '<span class="tag ok">best</span>' : '')
+      + (gl ? '<span class="g">' + esc(gl) + '</span>'
+            : '<span class="g">no dictionary entry &mdash; derived or compound form</span>')
+      + '</button>';
+  }).join("");
+
+  showPop(anchor, "fix",
+      '<div class="ph"><b>' + esc(c.original) + '</b><i>'
+    + (c.gate === 1 ? "spelling error" : "not recognised") + '</i></div>'
+    // With no candidate to offer, say WHY the word was flagged rather than
+    // why the search came back empty. The engine carries the phonology
+    // module's own wording — "Illegal characters: f — not in Khasi
+    // orthography" — which is the thing a reader of `sbngaifi` needs. The
+    // old text described our admissibility filter, which is our problem
+    // rather than theirs.
+    + (opts || '<div class="opt" style="cursor:default"><span class="g">'
+        + esc(c.reason || 'No close spelling was found.') + '</span></div>')
+    + '<div class="pf">'
+    + '<button class="btn sm" onclick="closePop();gotoWord(' + i + ')">Details</button>'
+    + '</div>');
+}
+
+function placePop(pop, anchor){
+
+  // Anchor it to the word, in document coordinates, and flip above when there
+  // is not room below. Clamped to the viewport so a word near the right edge
+  // does not push the menu off-screen.
+  const r = anchor.getBoundingClientRect();
+  const sx = window.scrollX, sy = window.scrollY;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  const below = r.bottom + h + 10 < window.innerHeight || r.top < h + 10;
+  let left = r.left + sx + r.width / 2 - w / 2;
+  left = Math.max(sx + 8, Math.min(left, sx + document.documentElement.clientWidth - w - 8));
+  pop.style.top = (below ? r.bottom + sy + 8 : r.top + sy - h - 8) + "px";
+  pop.style.left = left + "px";
+  pop.classList.add(below ? "below" : "above");
+  const arw = pop.querySelector(".arw");
+  arw.style.left = Math.max(10, Math.min(r.left + sx + r.width / 2 - left - 5, w - 20)) + "px";
+}
+
+// Any click that is not inside the menu dismisses it. Capture phase so it
+// still fires when the click lands on something that stops propagation.
+document.addEventListener("click", e => {
+  const p = $("altpop");
+  if (p && !p.contains(e.target) && e.target !== popAnchor) closePop();
+}, true);
+window.addEventListener("resize", closePop);
+
+/* ---------------- sidebar detail ---------------- */
+function gotoAlt(i){
+  // Clicking a marked word should show what the alternative IS, not silently
+  // apply it: the word is already correct, so replacing it is a choice the
+  // reader makes, not one the click makes for them.
+  const row = $("altrow-v" + i);
+  if (row) {
+    row.scrollIntoView({behavior: "smooth", block: "center"});
+    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+  }
+  const mk = $("alt" + i);
+  if (mk) { mk.classList.remove("flash"); void mk.offsetWidth; mk.classList.add("flash"); }
+  // A word carrying an alternative spelling is still a word, and clicking it
+  // must open its detail panel like any other. This route used to only scroll
+  // to the Alternative Spellings row, so once the panel became click-to-open
+  // these words — the highlighted ones, the ones a reader is most likely to
+  // click — opened nothing at all.
+  const v = lastResult && lastResult.variants && lastResult.variants[i];
+  if (v && v.word) inspectWord(v.word);
+}
+
+/* Selecting a word has to update the table too, not just the sidebar and the
+   marked-up text — otherwise the row highlight and the Details/Showing label
+   go stale and nothing connects the table to the panel beside it. */
+function gotoWord(i){
+  cursor = i;
+  detailsOpen = true;              // clicking a flagged word opens the panel
+  if (lastResult) renderResults(lastResult);
+  // A flagged word now opens the SAME panel as any other word, rather than a
+  // separate tabbed view — one shape for every word.
+  const c = flagged[i];
+  if (c) inspectWord(c.original); else renderDetail();
+}
+function pageWord(d){ if (!flagged.length) return;
+  cursor = (cursor + d + flagged.length) % flagged.length; gotoWord(cursor); }
+
+/* Inspect any word from the analysed text. Uses /word rather than widening
+   the /check response: the lexicon is already loaded, so one extra call is
+   cheap, whereas carrying a vote for every token would make the payload grow
+   with document length instead of with error count. */
+async function inspectWord(w){
+  inspected = {word: w, loading: true};
+  detailsOpen = true;
+  renderDetail();
+  // Both halves of the panel are wanted every time now, so fetch them
+  // together rather than lazily on a tab switch. loadAnalysis caches and
+  // re-renders on its own, so the panel fills in whichever order they land.
+  loadAnalysis(w);
+  try {
+    inspected = {word: w, data: await api("/word", {word: w, n: MAX_SUGGESTIONS})};
+  } catch (e) {
+    inspected = {word: w, error: e.message};
+  }
+  renderDetail();
+}
+function closeInspect(){ inspected = null; detailsOpen = false; renderDetail(); }
+
+/* Apply a suggested correction from the panel. Keyed on the WORD rather than
+   a cursor index: the panel can be showing a word that is not in `flagged`
+   at all, and applyFix() indexes into that list. */
+function applyPick(word, replacement){
+  const i = flagged.findIndex(c => c.original.toLowerCase() === word.toLowerCase());
+  if (i >= 0) applyFix(i, replacement);
+}
+
+/* ---------------- linguistic analysis ---------------- */
+const analysisCache = {};   // word -> payload, or null when it failed
+
+async function loadAnalysis(word){
+  const key = word.toLowerCase();
+  if (key in analysisCache) return;
+  analysisCache[key] = null;                    // claim it, so we fetch once
+  try { analysisCache[key] = await api("/analyse", {word}); }
+  catch (e) { analysisCache[key] = null; }
+  renderDetail();
+}
+
+/* The linguistic body of the panel. The word, its verdict badge and its gloss
+   are drawn by wordPanel() above this, so nothing here repeats them: this
+   function used to open with its own <h3>word</h3>, which is why the merged
+   panel showed the headword twice. */
+function analysisHtml(a){
+  const ph = a.phonology || {}, m = a.morphology || {},
+        as = a.assimilation || {}, cf = a.compound_fusion || {};
+  const d = ph.details || {};
+  let h = '';
+
+  // Collapsible. The open/closed choice is remembered in `secOpen` because the
+  // panel rebuilds its innerHTML on every render — after a correction, a
+  // re-check, or moving to the next word — and a section the reader had
+  // collapsed would spring back open each time.
+  const sec = (label, inner) => {
+    // Closed by default: the meaning, pronunciation and any corrections are
+    // above, and that is the whole of what most readings need. The analysis
+    // is there when it is asked for.
+    const open = secOpen[label] === true;
+    return '<details class="wp-sec"' + (open ? ' open' : '')
+      + ' ontoggle="secOpen[' + JSON.stringify(label).replace(/"/g, "&quot;")
+      + ']=this.open">'
+      + '<summary><h4>' + label + '</h4></summary>' + inner + '</details>';
+  };
+
+  // --- phonology ---
+  // The chip alone when the word is well formed: "Obeys the phonotactic rules
+  // the lexicon records" was a sentence restating the chip beside it. The
+  // FAILING case keeps its text, because there the explanation is the content
+  // — which rule broke, and where.
+  let pIn = ph.ok
+    ? '<p class="wp-state"><span class="tag ok">well formed</span></p>'
+    : '<p class="wp-state"><span class="tag err">invalid</span><span>'
+      + esc((ph.errors || [])[0] || "") + '</span></p>';
+  const bits = [];
+  if (d.initial_cluster) bits.push(['Initial cluster',
+      esc(d.initial_cluster) + (d.cluster_valid ? " — permitted" : " — not permitted")]);
+  // The API's `segments` is a COUNT of the hyphen-separated parts — see
+  // phonology.py, `segments = word.lower().split("-")`. It is not the
+  // phonological sense of "segment", and a bare number says nothing a reader
+  // cannot see. Show the parts themselves, and only when there is more than
+  // one: for an unhyphenated word the single part just repeats the headword.
+  // The lexicon's own analysis first — this is the phonology a reader means
+  // by the word. It exists only for a headword; the counts below are all the
+  // validator can say about a form the lexicon does not carry.
+  if ((ph.syllables || []).length)
+    bits.push(['<span title="The lexicon\'s syllabification, curated per entry '
+               + 'against War (2001).">Syllables</span>',
+               ph.syllables.map(s => '<span class="op">' + esc(s) + '</span>').join(
+                 '<span class="sub" style="margin:0 3px">·</span>')]);
+  if (ph.pattern)
+    bits.push(['<span title="Syllable structure. C = consonant, V = vowel; a '
+               + 'digraph such as ng or kh counts as one C, and a diphthong '
+               + 'nucleus as VV. Dots separate syllables.">Pattern</span>',
+               '<code>' + esc(ph.pattern) + '</code>']);
+  if ((ph.diphthong || []).length)
+    bits.push(['Diphthong', ph.diphthong.map(x => '<span class="op">' + esc(x)
+               + '</span>').join(" ")]);
+  if ((ph.traits || []).length)
+    bits.push(['Features', ph.traits.map(t => '<span class="tag mut">' + esc(t)
+               + '</span>').join(" ")]);
+
+  const parts = (a.word || "").split("-").filter(Boolean);
+  if (parts.length > 1)
+    bits.push(['<span title="Hyphen-separated parts. The phonotactic rules are '
+               + 'applied to each part on its own, so a hyphenated word passes '
+               + 'only if every part does.">Parts</span>',
+               parts.map(p => '<span class="op">' + esc(p) + '</span>').join(" ")]);
+  if (d.length) bits.push(['<span title="Letters excluding hyphens.">Letters</span>',
+                           d.length]);
+  (ph.warnings || []).forEach(w => bits.push(['Note', esc(w)]));
+  if (bits.length) pIn += '<dl class="kv">'
+      + bits.map(b => '<dt>' + b[0] + '</dt><dd>' + b[1] + '</dd>').join("") + '</dl>';
+  h += sec('Phonology', pIn);
+
+  // --- morphology ---
+  let mIn;
+  if (!m.root){
+    mIn = '<p>' + esc(m.status_label
+        || "No parse — the analyser could not decompose this form.") + '</p>';
+  } else {
+    mIn = "";
+    // The word built one step at a time. A stacked derivation is an ordered
+    // process, and the chain says so far better than a row of chips: you can
+    // see ïa- go on before jing- does.
+    if ((m.chain || []).length > 1)
+      mIn += '<p class="wp-chain">' + m.chain.map((s,i) =>
+          '<span class="' + (i === 0 ? "op step-root" : "op") + '">' + esc(s) + '</span>')
+          .join('<span class="arrow">&rarr;</span>') + '</p>';
+
+    // Each affix with what it DOES. "jing- + ïa- + lehkai" names the pieces;
+    // "nominalizer" and "reciprocal" say why they are there.
+    if ((m.affixes || []).length){
+      mIn += '<div class="wp-affix">' + m.affixes.map(x =>
+          '<div class="af"><span class="tag mut">' + esc(x.form) + '</span>'
+        + '<span class="afl">' + esc(x.label || x.role) + '</span>'
+        + ((x.applies_to || []).length
+            ? '<span class="afa">on ' + x.applies_to.map(esc).join(", ") + '</span>' : '')
+        + '</div>').join("")
+        + '<div class="af"><span class="tag ok">' + esc(m.root) + '</span>'
+        + '<span class="afl">root</span>'
+        + (m.pos ? '<span class="afa">' + esc(m.pos) + '</span>' : '') + '</div>'
+        + '</div>';
+    }
+
+    const rows = [];
+    if (!(m.affixes || []).length)
+      rows.push(['Root', esc(m.root)
+                 + (m.pos ? ' <span class="sub">(' + esc(m.pos) + ')</span>' : '')]);
+    // No "Word class" row: the grammar line under the headword now carries
+    // the derived class and says which class the root had.
+    if (m.is_compound && (m.compound_roots || []).length)
+      rows.push(['Compound of', m.compound_roots.map(esc).join(" + ")]);
+    if (m.root_in_lexicon === false)
+      rows.push(['Root', '<span class="sub">not a lexicon headword</span>']);
+    if (rows.length)
+      mIn += '<dl class="kv">'
+          + rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join("") + '</dl>';
+
+    // The engine's own enum was printed here as `direct_match`. Say it in
+    // words; keep the raw value in the tooltip for anyone who wants it.
+    // Skipped for a plain lexicon hit: "Found in the lexicon as written" is
+    // the ACCEPTED badge again, and the Root row already shows what matched.
+    if (m.status !== "direct_match" && (m.status_label || m.status))
+      mIn += '<p class="sub" style="margin:10px 0 0"'
+          + (m.status ? ' title="engine status: ' + esc(m.status) + '"' : '') + '>'
+          + esc(m.status_label || m.status) + '</p>';
+
+    // What else the parser weighed and set aside.
+    if ((m.alternatives || []).length)
+      mIn += '<p class="sub" style="margin:6px 0 0">Also considered: '
+          + m.alternatives.map(x => '<code>' + esc(x.structure) + '</code>').join(", ")
+          + '</p>';
+  }
+  h += sec('Morphology', mIn);
+
+  if (as.rule)
+    h += sec('Assimilation', '<div class="note">' + esc(as.description || as.rule)
+       + (as.prefix ? '<br>Underlying: <b>' + esc(as.prefix) + '</b> + <b>'
+            + esc(as.root) + '</b>' : '') + '</div>');
+
+  if (cf.detected)
+    h += sec('Compound fusion',
+        '<div class="note">' + esc(cf.description || cf.type || "") + '</div>');
+
+  // The per-candidate edit operations are NOT rendered here any more. They
+  // used to form a "Why these corrections" block at the foot of the panel,
+  // which repeated each candidate's word and gloss already listed under
+  // Suggested corrections — and sat two sections away from it. wordPanel()
+  // now folds the operations into the suggestion row itself; see candidateOps.
+
+  return h;
+}
+
+/* ONE panel for every word.
+   There used to be two, showing overlapping things in different shapes: a
+   tabbed view for flagged words (Suggestions / Linguistic Analysis / Examples)
+   and a vote card for any other word. Both named the word, both said whether
+   it was accepted, and the reader had to know which one they were looking at.
+   Now a single panel answers the two questions a reader actually has —
+   what does this word mean, and what is it made of — and adds a third,
+   corrections, only when the word is wrong.
+
+   Dropped as redundant: the confidence-vote weight table and the
+   gate/method/`confidence_gate` line (engine diagnostics, not linguistics);
+   the tab strip; and the Examples tab, which only ever said examples were
+   unavailable from this endpoint. */
+function wordPanel(w, r, a){
+  const gate = r ? r.gate : null;
+  const ok = r ? r.is_correct : true;
+  const badge = ok ? '<span class="tag ok">ACCEPTED</span>'
+      : gate === 1 ? '<span class="tag err">NOT A LEGAL KHASI FORM</span>'
+                   : '<span class="tag warn">NOT RECOGNISED</span>';
+  const ipa = ((a && a.phonology && a.phonology.ipa) || {}).surface || "";
+
+  /* The word's OWN gloss, when the lexicon has an entry for it.
+   *
+   * When it does not, the analyser still returns the ROOT's entry, and
+   * printing that unlabelled states a different word's meaning as this
+   * one's: `slpa` displayed "Leaf; Page; Surface", which belongs to `sla`.
+   * The borrowed meaning is still worth showing — it is what the derivation
+   * is built on — but it is labelled as the root's, never as the word's.
+   * The part-of-speech line below already had this fix; the gloss did not. */
+  const ownGloss  = (r && r.gloss) || "";
+  const rootGloss = (a && a.morphology && a.morphology.gloss) || "";
+  const gloss     = ownGloss || rootGloss;
+  const borrowed  = !ownGloss && !!rootGloss;
+
+  let h = '<div class="wordhead"><span class="w">' + esc(w) + '</span>' + badge
+    + (window.speechSynthesis ? '<button class="speak" title="Read aloud with the browser '
+      + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(\''
+      + esc(w) + '\')">'
+      + '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>' : "")
+    + '</div><div class="bd">';
+
+  // Meaning first: it is what the reader came for, and it is the one line
+  // that is useful whether the word is right or wrong.
+  //
+  // The lexicon stores senses as one semicolon-run — "Human being; Adverb: in
+  // good condition; Sound" — which reads as a single garbled definition rather
+  // than three separate ones. Split them, and lift a leading part-of-speech
+  // out of the sense text into its own mark, since "Adverb:" is a label on the
+  // sense and not part of what the word means.
+  // `senses` comes from the API already separated from the source
+  // dictionary's notation — the noun-class article and any pronunciation
+  // aside are lifted into their own fields there. Fall back to splitting the
+  // raw gloss for a word the analyser answered without an entry.
+  const mo = (a && a.morphology) || {};
+  const senseList = (mo.senses && mo.senses.length)
+      ? mo.senses : (gloss ? gloss.split(";").map(s => s.trim()).filter(Boolean) : []);
+  if (senseList.length){
+    if (borrowed)
+      h += '<p class="sub" style="margin:0 0 3px">No dictionary entry for <b>'
+         + esc(w) + '</b>. The meaning below belongs to its root'
+         + (mo.root ? ', <b>' + esc(mo.root) + '</b>' : '') + '.</p>';
+    h += '<p class="senses wp-lead">' + senseList.map(s => {
+      const m = String(s).match(/^([A-Za-z]{1,12})\.?\s*:\s*(.+)$/);
+      return m ? '<span class="sn"><i>' + esc(m[1].toLowerCase()) + '</i>'
+                 + esc(m[2]) + '</span>'
+               : '<span class="sn">' + esc(s) + '</span>';
+    }).join("") + '</p>';
+    // Grammar of the word, as a labelled line rather than muted prose.
+    //
+    // The class shown is the one the DERIVATION arrives at, not the root's.
+    // `jingïamareh` was labelled "verb" because that is what `mareh` is — but
+    // jing- builds abstract nouns, so the word itself is a noun. The engine
+    // has always known this (the parse tree carries a pos at each step); the
+    // panel was reading the root's entry instead.
+    const dpos = mo.derived_pos || mo.pos || "";
+    const shifted = mo.derived_pos && mo.pos && mo.derived_pos !== mo.pos;
+    if (dpos || mo.article || mo.gender)
+      h += '<p class="wp-gram">'
+         + (dpos ? '<span class="tag pos"'
+             + (shifted ? ' title="' + esc(mo.derived_pos) + ' — derived from a '
+                          + esc(mo.pos) + ' root"' : '')
+             + '>' + esc(dpos) + '</span>' : '')
+         + (mo.article ? '<span class="ga" title="Noun-class proclitic'
+             + (mo.article_gloss ? ' — ' + esc(mo.article_gloss) : '')
+             + '. Khasi marks the class of a noun with a preceding particle.">'
+             + esc(mo.article) + '</span>' : '')
+         + (mo.gender ? '<span class="gg">' + esc(mo.gender) + '</span>' : '')
+         + (shifted ? '<span class="gg">from ' + esc(mo.pos) + ' root</span>' : '')
+         + '</p>';
+    if ((mo.notes || []).length)
+      h += '<p class="sub" style="margin:0 0 6px;font-style:italic">'
+         + mo.notes.map(esc).join("; ") + '</p>';
+  } else {
+    h += '<p class="gl none wp-lead">no dictionary entry '
+       + '&mdash; derived or compound form</p>';
+  }
+  if (ipa)
+    h += '<p class="ipa" style="margin:2px 0 10px">' + esc(ipa)
+       + (((a.phonology || {}).ipa || {}).length_uncertain
+           ? ' <span class="tag mut" title="Khasi vowel length is contrastive but '
+             + 'unmarked in spelling (War 2001, pp.49-54), so it cannot be recovered '
+             + 'from the written form.">vowel length uncertain</span>' : '')
+       + '</p>';
+  // The summary is built as "classification — root: X — gloss", and both of
+  // those tails are already on screen: the gloss on the line above, the root
+  // in the Morphology block below. Keep the classification, drop the repeats.
+  // Skip the summary entirely when the Morphology section will lay the same
+  // structure out properly. "Stacked prefixes (2) — jing- + ïa- + lehkai" is
+  // the derivation chain, the affix rows and the Root row compressed into one
+  // line, and the section below shows all three with what each affix does.
+  // Kept when there is no structure to show — "Not in current lexicon —
+  // phonotactically valid but no parse found" has no other home.
+  const hasStructure = (mo.affixes || []).length
+      || (mo.chain || []).length > 1
+      || (mo.compound_roots || []).length;
+  if (a && a.summary && !hasStructure){
+    // The summary is a digest of things the panel shows in full further down.
+    // Strip every part that is repeated below, and keep only what is left:
+    //   "root: X"           -> the Morphology block has a Root row
+    //   the gloss           -> shown on its own line above (prefix match, since
+    //                          the API truncates the displayed gloss at 72
+    //                          chars while the summary carries it in full)
+    //   the phonology error -> shown verbatim in the Phonology block
+    //   "Did you mean: …"   -> that IS the Suggested corrections list
+    const gtrim = gloss.replace(/[…\s]+$/, "");
+    const phErr = ((a.phonology || {}).errors || [])[0] || "";
+    // "Direct lexicon match" only restates the ACCEPTED badge two lines above.
+    // The other summaries earn their place — "Stacked prefixes (2)",
+    // "Infixed form — yn in root briew", "Compound form — jaiñ + sem" — so
+    // this drops the empty one rather than the line.
+    const SAYS_NOTHING =
+      /^(direct lexicon match|found in the lexicon as written|phonologically invalid)$/i;
+    const keep = a.summary.split(" — ")
+      .map(seg => seg.replace(/\s*Did you mean:.*$/i, "").trim())
+      .filter(s => {
+        if (!s || /^root:/i.test(s) || SAYS_NOTHING.test(s)) return false;
+        if (gtrim && (s.startsWith(gtrim) || gtrim.startsWith(s))) return false;
+        // Trailing punctuation differs between the two renderings of the same
+        // sentence, so compare without it.
+        const bare = s.replace(/[.\s]+$/, "");
+        if (phErr && bare && phErr.indexOf(bare) !== -1) return false;
+        return true;
+      }).join(" — ");
+    if (keep) h += '<p class="sub" style="margin:0 0 2px;line-height:1.5">'
+                 + esc(keep) + '</p>';
+  }
+
+  // Corrections, only for a word that is actually wrong AND only when there
+  // are any. A "Suggested corrections" heading followed by "No candidate
+  // passed the admissibility filter" is a section that exists to say it has
+  // nothing in it.
+  if (!ok && r && (r.suggestions || []).length){
+    // What actually separates the candidates. All five for `dand` sit at
+    // distance 1; `dang` differs by a nasal Khasi genuinely confuses while the
+    // others differ by an unrelated letter, and only the operations say so.
+    const byWord = {};
+    ((a && a.candidates) || []).forEach(c => { byWord[(c.word || "").toLowerCase()] = c; });
+
+    const list = topSuggestions(r.suggestions).map((s,i) => {
+      const p = matchPct(r.distances && r.distances[i], i);
+      const gl = (r.glosses && r.glosses[i]) || "";
+      const c = byWord[s.toLowerCase()] || {};
+      const ops = (c.ops || []).map(o =>
+          o.op === "substitute"
+            ? '<span class="' + (o.known ? "opk" : "op") + '">' + esc(o.from)
+              + ' &rarr; ' + esc(o.to) + '</span>'
+            : '<span class="op">' + (o.op === "drop" ? "drop " + esc(o.from)
+                                                     : "add " + esc(o.to)) + '</span>'
+        ).join(" ");
+      return '<button class="sug' + (i===0 ? " top" : "") + '"'
+        + ' onclick="applyPick(\'' + esc(w) + '\',\'' + esc(s) + '\')">'
+        + '<span class="rk">' + (i+1) + '</span>'
+        + '<span class="body"><span class="w">' + esc(s) + '</span>'
+        + (i===0 ? ' <span class="tag ok">Best match</span>' : '')
+        + (c.known_confusion ? ' <span class="tag ok">known confusion</span>' : '')
+        + (gl ? '<span class="gl">' + esc(gl) + '</span>'
+              : '<span class="gl none">no dictionary entry &mdash; derived or '
+                + 'compound form</span>')
+        + (ops ? '<span class="ops">' + ops + '</span>' : '')
+        + '</span><span class="m"><b style="color:' + pctClass(p) + '">' + pctBar(p)
+        + '</b><i>match</i></span></button>';
+    }).join("");
+    h += '<div class="wp-sec"><h4>Suggested corrections</h4>' + list
+       + '<p class="sub" style="margin:8px 0 0">Distances count <b>phonemes</b>, not '
+       + 'letters &mdash; <code>ng</code> and <code>sh</code> are one sound each. '
+       + 'A <i>known confusion</i> costs less than a full edit.</p></div>';
+  }
+
+  h += (a ? analysisHtml(a)
+          : '<p class="sub"><span class="spin" style="border-color:rgba(76,141,255,.3);'
+            + 'border-top-color:var(--blue)"></span> analysing…</p>');
+
+  h += '<div class="row" style="margin-top:16px">'
+     + (flagged.length > 1
+         ? '<button class="btn sm" onclick="pageWord(-1)">&#8592; Previous</button>'
+           + '<button class="btn sm" onclick="pageWord(1)">Next &#8594;</button>' : "")
+     + '<button class="btn sm" onclick="closeInspect()">Close</button></div></div>';
+  return h;
+}
+
+function renderDetail(){
+  const body = $("detail-body");
+
+  // Closed is the resting state: the sidebar collapses and the text takes
+  // the full width, instead of a placeholder card explaining a word nobody
+  // asked about.
+  syncSidebar();
+  if (!detailsOpen) return;
+
+  if (!inspected){
+    $("pg-label").textContent = flagged.length ? "0 of " + flagged.length : "0 of 0";
+    $("pg-prev").disabled = $("pg-next").disabled = true;
+    body.innerHTML = '<div class="empty">Click any word to see what it means and '
+      + 'how it is built.</div>';
+    return;
+  }
+
+  // The pager counts flagged words, so it only means anything while the panel
+  // is showing one of them.
+  const at = flagged.findIndex(c => c.original.toLowerCase() === inspected.word.toLowerCase());
+  $("pg-label").textContent = at >= 0 ? (at+1) + " of " + flagged.length : "inspecting";
+  $("pg-prev").disabled = $("pg-next").disabled = flagged.length < 2;
+
+  body.innerHTML = inspected.loading
+      ? '<div class="bd"><p class="sub"><span class="spin" style="border-color:'
+        + 'rgba(76,141,255,.3);border-top-color:var(--blue)"></span> checking '
+        + esc(inspected.word) + '…</p></div>'
+    : inspected.error
+      ? '<div class="bd"><span class="tag err">Error</span> ' + esc(inspected.error)
+        + '</div>'
+      : wordPanel(inspected.word, inspected.data,
+                  analysisCache[inspected.word.toLowerCase()]);
+}
+
+function say(w){
+  try { window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(w)); } catch (e) {}
+}
+
+/* ---------------- applying ---------------- */
+/* ---------------- alternative spellings: accept / ignore ---------------- */
+
+/* Which spelling "Accept" takes: the one the lexicon marks canonical, else
+   the first offered. Most words have exactly one alternative; the chips stay
+   for the rare case where there is a choice to make. */
+function preferredVariant(v){
+  const pick = (v.variants || []).find(x => x.canonical) || (v.variants || [])[0];
+  return pick ? pick.variant : "";
+}
+
+/* Accepting settles the word, so it must silence the row exactly as ignoring
+   does — and it has to silence BOTH spellings.
+
+   The alternative relation is symmetric: `iaid` offers `ïaid`, and `ïaid`
+   offers `iaid` right back. Accept only, and the re-check that follows finds
+   the newly written `ïaid`, offers the reverse swap, and the panel invites
+   you to undo what you just did — indefinitely. Recording both sides ends it. */
+function settleVariant(v){
+  if (!v) return;
+  ignoredVariants.add(v.word.toLowerCase());
+  for (const x of (v.variants || [])) ignoredVariants.add(x.variant.toLowerCase());
+}
+
+function acceptVariant(i){
+  const v = lastResult.variants[i];
+  const pick = preferredVariant(v);
+  if (!pick) return;
+  settleVariant(v);
+  applyAt(v.start, v.end, pick);
+}
+
+/* Picking a spelling from the popover. Must settle the group BEFORE applying,
+   exactly as acceptVariant does: the re-check that follows would otherwise
+   look at the word just written and offer the spelling it came from — route 2
+   hands back the plain form of a diacritic word — so the word stayed green
+   after the reader had already decided. settleVariant() records the original
+   AND every spelling offered for it, so neither side of the pair is offered
+   again. */
+function applyVariantPick(i, variant){
+  const v = lastResult && lastResult.variants && lastResult.variants[i];
+  if (!v) return;
+  settleVariant(v);
+  applyAt(v.start, v.end, variant);
+}
+
+/* Ignoring is keyed on the WORD, not the offset. Every apply re-runs the
+   check and every offset moves, so an offset-keyed dismissal would reappear
+   the moment anything else in the text changed. */
+function ignoreVariant(i){
+  const v = lastResult.variants[i];
+  if (v) ignoredVariants.add(v.word.toLowerCase());
+  renderResults(lastResult);
+}
+
+function acceptAllVariants(btn){
+  const vs = (lastResult.variants || [])
+    .filter(v => !ignoredVariants.has(v.word.toLowerCase()) && preferredVariant(v))
+    .sort((a,b) => b.start - a.start);          // back to front
+  if (!vs.length) return;
+  // Splice from the end so each replacement cannot invalidate the offsets of
+  // the ones still to come, then re-check once rather than once per word.
+  let t = lastResult.text;
+  for (const v of vs) {
+    t = t.slice(0, v.start) + preferredVariant(v) + t.slice(v.end);
+    settleVariant(v);         // or the re-check offers every swap in reverse
+  }
+  $("text").value = t;
+  updateCount();
+  checkText();          // the text visibly changes; that is the feedback
+}
+
+function ignoreAllVariants(btn){
+  for (const v of (lastResult.variants || [])) settleVariant(v);
+  renderResults(lastResult);   // the panel disappears; that is the feedback
+}
+
+function applyAt(start, end, replacement){
+  const t = lastResult.text;
+  $("text").value = t.slice(0, start) + replacement + t.slice(end);
+  updateCount(); checkText();
+}
+function applyFix(i, replacement){
+  const c = lastResult.corrections[i];
+  applyAt(c.start, c.end, replacement);
+}
+async function copyCorrected(btn){
+  const text = lastResult ? lastResult.corrected : "";
+  if (!text) return;
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { ok = false; }
+  if (!ok) {
+    // navigator.clipboard exists only in a secure context. http://localhost
+    // counts as one, but serving this page from a LAN address does not, and
+    // the old code failed silently there — the button did nothing and said
+    // nothing. Fall back to a hidden textarea, then report either way.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) { ok = false; }
+  }
+  flashButton(btn, ok);
+}
+
+/* Confirm an action on the button that triggered it, then restore it.
+   Uses the element passed in rather than the deprecated global `event`. */
+function flashButton(btn, ok){
+  if (!btn || btn.dataset.flashing) return;
+  const tick = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+             + ' stroke-width="3"><path d="m4 12 5 5L20 6"/></svg> ';
+  const cross = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+              + ' stroke-width="2.6"><path d="M6 6l12 12M18 6 6 18"/></svg> ';
+  btn.dataset.flashing = "1";
+  btn.dataset.restore = btn.innerHTML;
+  btn.classList.add(ok ? "done" : "fail");
+  btn.innerHTML = ok ? tick + "Copied" : cross + "Copy failed";
+  setTimeout(() => {
+    btn.innerHTML = btn.dataset.restore;
+    btn.classList.remove("done", "fail");
+    delete btn.dataset.flashing;
+    delete btn.dataset.restore;
+  }, 1600);
+}
+
+/* ---------------- single word ---------------- */
+/* The verdict card for one word, shared by the Single Word view and the
+   sidebar's word inspector. One renderer so the two cannot drift apart —
+   `onPick` says what clicking a suggestion should do, which is the only
+   thing that differs between the two callers. */
+function voteCard(r, onPick){
+  const ok = r.is_correct;
+  const sig = (r.confidence && r.confidence.signals) || {};
+  const score = (r.confidence && r.confidence.score) || 0;
+  const thr = (r.confidence && r.confidence.threshold) || 3;
+  const sigRows = Object.keys(sig).length
+    ? Object.entries(sig).map(([k,v]) =>
+        '<tr><td>' + esc(k.replace(/_/g," ")) + '</td><td style="text-align:right"><b>+'
+        + v + '</b></td></tr>').join("")
+    : '<tr><td colspan="2" class="sub">no positive signal</td></tr>';
+  return '<h3>' + esc(r.word) + ' '
+    + (ok ? '<span class="tag ok">ACCEPTED</span>'
+          : '<span class="tag ' + (r.gate===1?"err":"warn") + '">'
+            + (r.gate===1 ? "NOT A LEGAL KHASI FORM" : "NOT RECOGNISED") + '</span>')
+    + '</h3>'
+    // What the word MEANS, before any of the machinery. A reader opening
+    // this panel wants that first; the gate and the vote explain how the
+    // checker reached its verdict, which is a second question.
+    + (r.gloss
+        ? '<p class="gl" style="margin:2px 0 8px">' + esc(r.gloss) + '</p>'
+        : '<p class="gl none" style="margin:2px 0 8px">no dictionary entry '
+          + '&mdash; derived or compound form</p>')
+    + '<p class="sub">gate <code>' + r.gate + '</code> &middot; <code>'
+    + esc(r.gate_name) + '</code> &middot; <code>' + esc(r.method) + '</code></p>'
+    + '<table><thead><tr><th>Confidence vote</th><th style="text-align:right">weight</th>'
+    + '</tr></thead><tbody>' + sigRows
+    + '<tr><td><b>total</b></td><td style="text-align:right"><b>' + score
+    + ' / ' + thr + '</b></td></tr></tbody></table>'
+    + (ok && !sig.in_lexicon
+        ? '<p class="sub" style="margin-top:10px">Accepted without a dictionary '
+          + 'entry &mdash; the grammar derives it.</p>' : "")
+    + (r.suggestions.length
+        ? '<p class="sub" style="margin-top:12px">Suggestions</p><div class="chips">'
+          + topSuggestions(r.suggestions).map((s,i) => '<button class="chip"'
+            + ((r.glosses && r.glosses[i]) ? ' title="' + esc(r.glosses[i]) + '"' : '')
+            + ' onclick="' + onPick(s) + '">' + esc(s) + ' <span class="tag mut">'
+            + pctBar(matchPct(r.distances && r.distances[i], i)) + '</span></button>').join("")
+          + '</div>'
+          // The gloss of the top candidate, shown rather than hidden in a
+          // tooltip: on a touch screen there is no hover, and the meaning is
+          // the thing that decides between two similar-looking spellings.
+          + ((r.glosses && r.glosses[0])
+              ? '<div class="gl">' + esc(r.glosses[0]) + '</div>'
+              : '<div class="gl none">no dictionary entry &mdash; '
+                + 'derived or compound form</div>') : "")
+    + ((r.variants && r.variants.length)
+        ? '<div class="altrow" style="margin-top:12px;border:0">'
+          + '<span class="sub" style="margin:0">also written</span>'
+          + '<span class="chips">' + r.variants.map(v =>
+            '<button class="chip alt" title="Check ' + esc(v.variant) + ' instead'
+            + (v.gloss ? " — " + esc(v.gloss) : "") + '"'
+            + ' onclick="' + onPick(v.variant) + '">' + esc(v.variant)
+            + '</button>').join("") + '</span>'
+          + (r.variants[0].gloss
+              ? '<span class="gl">' + esc(r.variants[0].gloss) + '</span>' : "")
+          + '</div>' : "");
+}
+
+/* The Single Word view is gone: clicking any word in the analysed text now
+   opens the sidebar panel instead, so a second surface for the same question
+   was one surface too many.
+
+   voteCard() above is NO LONGER CALLED. wordPanel() replaced it when the two
+   detail views were merged, and it deliberately omits the confidence-vote
+   weight table this draws — engine diagnostics rather than anything about the
+   word. Kept rather than deleted, on request; delete it if the vote breakdown
+   is not wanted back. */
+
+/* ---------------- learn / about ---------------- */
+function renderLearn(){
+  $("learn").dataset.done = "1";
+  $("learn").innerHTML = `
+<h3>The alphabet</h3>
+<p>Khasi is written in a Roman-based orthography with two extra letters,
+<b>ï</b> and <b>ñ</b>, and an apostrophe for the glottal stop, which is a
+consonant. The lexicon records <b>27 consonants</b> and <b>30 valid
+characters</b>.</p>
+<ul>
+<li><b>c f q v x z are not Khasi letters.</b> The checker rejects any suggestion
+containing one, and does not let lexicon attestation override that &mdash; English
+gloss text leaked into some surface fields during scanning.</li>
+<li><b>g appears only in ng.</b> A stray g is a rejection.</li>
+<li><b>y is a vowel</b>, not a glide.</li>
+</ul>
+
+<h3>Digraphs</h3>
+<p>Ten spellings count as a single sound: <code>ng sh ph th kh bh dh jh lh rh</code>.
+This matters for correction, because <code>dieg</code> for <code>dieng</code> is one
+sound wrong, not one letter wrong.</p>
+
+<h3>Word formation</h3>
+<p>Khasi builds words productively, which is why a dictionary alone cannot
+decide what is a word. Six prefixes are marked productive in the lexicon:</p>
+<ul>
+<li><code>jing-</code> makes an abstract noun from a verb or adjective</li>
+<li><code>pyn-</code> makes a causative verb</li>
+<li><code>nong-</code> makes an agent noun, "one who does X"</li>
+<li><code>ïa-</code> marks a reciprocal or plural subject</li>
+<li><code>sngew-</code> derives a feeling or experiential state</li>
+<li><code>shi-</code> is a unit counter</li>
+</ul>
+<p>So <b>jingpynïaid</b> is built from <b>ïaid</b> "walk" and is a perfectly good
+word even though no dictionary lists it. This checker accepts it on those
+grounds.</p>
+
+<h3>Assimilation</h3>
+<p>A prefix can reshape the word so its own boundary disappears:
+<b>pyn-</b> + <b>lait</b> surfaces as <b>pyllait</b>, the n assimilating and the
+l geminating. Splitting the written form on "pyn" finds nothing, so the checker
+reconstructs the underlying root instead.</p>
+
+<h3>Diacritics</h3>
+<p>Writers routinely drop <b>ï</b> and <b>ñ</b>. The corpus behind this project
+&mdash; 6.67 million words &mdash; contains <b>zero</b> of either. Both spellings
+are therefore treated as valid, and the alternative is offered rather than
+imposed: <code>ia-</code> beside <code>ïa-</code>, <code>-ain</code> beside
+<code>-aiñ</code>.</p>`;
+}
+
+function renderAbout(){
+  $("about").dataset.done = "1";
+  $("about").innerHTML = `
+<h3>What this is</h3>
+<p>A spelling checker for Khasi whose test of whether something is a word is
+<b>morphological derivability</b>, not membership of a list. A token is accepted
+when a weighted vote over four kinds of evidence reaches a threshold of 3:</p>
+<ul>
+<li>in the lexicon &mdash; <b>3</b></li>
+<li>a morphological parse using a real affix, on a known root &mdash; <b>2</b></li>
+<li>frequent in the corpus &mdash; <b>2</b></li>
+<li>phonotactically possible &mdash; <b>1</b></li>
+</ul>
+<p>So a lexicon hit alone is sufficient, and so is a productive derivation on a
+known root. A bare-root parse earns nothing, because almost any syllable
+sequence satisfies one.</p>
+
+<h3>How corrections are ranked</h3>
+<p>Candidates come from a symmetric-delete index over the lexicon, plus an
+on-demand morphological generator that builds forms from real roots. They are
+ordered by a blended distance &mdash; a phoneme-aware weighted edit distance in
+which confusable Khasi sounds cost less than a full edit, combined with a
+character-level Damerau distance &mdash; and ties are broken by corpus frequency
+and morphological plausibility. Where a sentence gives context, a trigram model
+re-ranks the top candidates.</p>
+
+<h3>About the "match" percentage</h3>
+<p>It is a presentation of the ranking, <b>not a calibrated probability</b>. It
+is computed from the blended distance the engine ranked on together with the
+position it assigned, because candidates frequently tie on distance alone.
+Hover any suggestion to see its actual distance in edits.</p>
+
+<h3>What it cannot tell you</h3>
+<ul>
+<li><b>It has never been measured on real Khasi spelling mistakes.</b> No
+annotated corpus of authentic Khasi errors exists. Every published figure for
+this system describes performance on artificially introduced errors.</li>
+<li><b>The lexicon is incomplete.</b> It derives from a scanned printed
+dictionary, still carries scanning damage, and misses words in ordinary use.</li>
+<li><b>Proper nouns are withheld, not checked.</b> A misspelled name is never
+corrected.</li>
+<li><b>English inside Khasi text is usually flagged.</b> There is no language
+identifier.</li>
+</ul>
+<p>Corrections are offered. Nothing is ever applied on your behalf.</p>`;
+}
+
+/* ---------------- boot ---------------- */
+updateCount();
+routeFromHash();          // #word, #learn, #about are linkable; #example runs the sample
+fetch("/health").then(r => r.json()).then(d => {
+  // word_forms, not vocabulary_size: the latter is the frequency table and
+  // more than half its keys are multi-word phrases, so it overstated the
+  // vocabulary by about 2.5x under a label that said "Khasi word forms".
+  const n = d && (d.word_forms || d.vocabulary_size);
+  if (n) $("vocab").textContent = n.toLocaleString();
+}).catch(() => { $("vocab").textContent = "—"; });
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter"){ e.preventDefault(); checkText(); }
+});
+</script>
