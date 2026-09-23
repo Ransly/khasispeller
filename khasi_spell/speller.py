@@ -215,8 +215,13 @@ class KhasiSpeller:
         score. This changes which unknown ones are reachable at all:
         `pyntreikam` occurs 1,940 times, is not a headword, and without this
         no typo of it is correctable, because it is not in the list to be
-        ranked. It does NOT make such words acceptable — ``is_known()`` is
-        untouched and the confidence vote is unchanged.
+        ranked.
+    corpus_pool_accept :
+        Also let the admitted corpus words pass the confidence vote, by
+        crediting them with corpus frequency. On by default. Without it the
+        checker offered words it then rejected — `jyla` was answered with
+        `jylla`, which was flagged once accepted. ``is_known()`` is untouched
+        either way. Ignored when ``use_corpus_pool`` is off.
     corpus_pool_floor :
         Occurrences a corpus type needs before it may be offered. Lower
         admits more vocabulary and more noise.
@@ -231,6 +236,7 @@ class KhasiSpeller:
         use_corpus_freq: bool = True,
         use_corpus_pool: bool = True,
         corpus_pool_floor: Optional[int] = None,
+        corpus_pool_accept: bool = True,
         eager: bool = False,
     ) -> None:
         from khasi_spell import corpus_pool as _cp
@@ -238,6 +244,7 @@ class KhasiSpeller:
         self._use_embeddings = use_embeddings
         self._use_corpus_freq = use_corpus_freq
         self._use_corpus_pool = use_corpus_pool
+        self._corpus_pool_accept = corpus_pool_accept
         self._corpus_pool_floor = (_cp.DEFAULT_FLOOR if corpus_pool_floor is None
                                    else corpus_pool_floor)
         self._corpus_pool_summary: Optional[dict] = None
@@ -281,6 +288,7 @@ class KhasiSpeller:
                 try:
                     self._corpus_pool_summary = corpus_pool.apply(
                         self._analyser.spell, floor=self._corpus_pool_floor,
+                        accept=self._corpus_pool_accept,
                     )
                 except FileNotFoundError:
                     self._corpus_pool_summary = None

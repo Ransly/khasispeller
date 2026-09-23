@@ -14,14 +14,24 @@ This is the same asymmetry `generate.py` addresses from the morphological
 side, arriving from the corpus side instead: the checker's own measurement
 put 64% of a 23,254-word target vocabulary outside the candidate pool.
 
-What this does NOT do
----------------------
-It does not make these words *acceptable*. `is_known()` is untouched, so a
-corpus type still fails the confidence vote when typed correctly. That
-split is deliberate and load-bearing: `is_known()` answers "is this a Khasi
-word" and `is_attested()` answers "was this written down", and screening
-the candidate pool by the former previously cost about 4 points of top-1.
-Supply and acceptance are separate repairs; this is only the first.
+Acceptance
+----------
+Supply alone left a contradiction: the pool offered words the checker then
+rejected. `jyla` was answered with `jylla`, and `jylla` (24,252 corpus
+occurrences, not a headword) was flagged the moment the writer accepted it.
+The vote's frequency signal reads the lexicon's frequency table, so no
+corpus word could ever earn it.
+
+`apply(accept=True)`, the default, closes that: every admitted word, and
+the reduced spelling the corpus writes it in, is registered with
+`db.register_corpus_acceptance()` and earns the frequency signal in the
+vote. `is_known()` is still untouched — it answers "is this in the
+lexicon", and screening the candidate pool by it previously cost about 4
+points of top-1. Measured on 200 clean corpus sentences, see the README.
+
+Run-together spellings are refused outright. `jongki` is `jong ki` written
+solid; `khasi_spell.splits` corrects it to the spaced form, so admitting it
+would both offer it as a correction and accept it, undoing the split.
 
 `corpus_freq.py` deliberately does not extend the vocabulary, for good
 reason — the corpus holds English, proper nouns and misspellings, and
@@ -46,6 +56,8 @@ A corpus type is admitted only if it clears all of:
     The corpus contains misspellings. A type seen 4 times one edit from a
     type seen 20,000 times is an error in the wild, not a word, and
     admitting it would have the checker suggest typos.
+  * it is not a run-together spelling that ``khasi_spell.splits`` corrects
+    to two words (`jongki` -> `jong ki`).
 """
 from __future__ import annotations
 
@@ -137,6 +149,21 @@ def canonicalise(word: str) -> str:
     return w
 
 
+def _ain_confirmed(word: str, db: Any) -> bool:
+    """Does the lexicon back `word` -> `word[:-3] + 'aiñ'`?
+
+    True when the word, or its final element, is a headword the lexicon
+    records with the tilde (`thawain` -> `thawaiñ`, `saitjain` ->
+    `saitjaiñ`). False for names and loans (`hussain`, `risain`).
+    """
+    try:
+        from khasi_spell import variants as _v
+        return bool(_v._ain_form(word, db) or _v._ain_compound(word, db)
+                    or _v._ain_elements(word, db))
+    except Exception:
+        return False
+
+
 def _load_counts(path: Optional[Path] = None) -> dict:
     p = Path(path) if path else DEFAULT_PATH
     if not p.exists():
@@ -223,11 +250,22 @@ def select(
     counts: Optional[dict] = None,
     floor: int = DEFAULT_FLOOR,
     ratio: int = DOMINANCE_RATIO,
+    runtogether: Optional[set] = None,
 ) -> tuple[set, dict]:
-    """Return (admitted forms, rejection tally). Pure; changes nothing."""
+    """Return (admitted forms, rejection tally). Pure; changes nothing.
+
+    *runtogether* is the set of solid spellings the split table corrects to
+    two words; None loads it from ``khasi_spell.splits``.
+    """
     from khasi_engine.spell_checker import _phonotactically_ok
 
     counts = counts if counts is not None else _load_counts()
+    if runtogether is None:
+        try:
+            from khasi_spell import splits
+            runtogether = set(splits.load())
+        except Exception:
+            runtogether = set()
     known = set(db.all_surface_forms())
     folded_lex = {_fold(w) for w in known}
     quarantine = _quarantined(db)
@@ -235,7 +273,8 @@ def select(
     admitted: set = set()
     tally = {"quarantine_entries": len(quarantine), "below_floor": 0, "in_lexicon": 0, "non_khasi_char": 0,
              "banned_letter": 0, "quarantined": 0, "folds_onto_headword": 0,
-             "phonotactic": 0, "dominated": 0,
+             "phonotactic": 0, "dominated": 0, "runtogether": 0,
+             "ain_kept_plain": 0,
              "diacritic_restored": 0, "restored_onto_headword": 0,
              "admitted": 0}
 
@@ -268,6 +307,12 @@ def select(
         if not _phonotactically_ok(w):
             tally["phonotactic"] += 1
             continue
+        # A solid spelling of two words. The split table offers `jong ki`
+        # for `jongki`; admitting `jongki` would offer the error itself as
+        # a correction and, with acceptance on, stop flagging it at all.
+        if w in runtogether:
+            tally["runtogether"] += 1
+            continue
         if _dominant_neighbour(w, counts, ratio) is not None:
             tally["dominated"] += 1
             continue
@@ -276,6 +321,15 @@ def select(
         # what the counts are keyed on and what the neighbours are written
         # in; only the admitted string changes.
         canon = canonicalise(w)
+        # `-ain` -> `-aiñ` holds for Khasi words, not for everything that
+        # happens to end in -ain. Unguarded, the pool admitted the name
+        # `hussaiñ` and the loans `risaiñ` (resign) and `pilaiñ` (plane) —
+        # spellings no one writes. Restore the tilde only where the
+        # lexicon's own -aiñ rule, the one variants.py uses, agrees.
+        if canon.endswith("aiñ") and not w.endswith("aiñ") \
+                and not _ain_confirmed(w, db):
+            canon = canon[:-1] + "n"
+            tally["ain_kept_plain"] += 1
         if canon != w:
             # The restored form may be a headword even where the reduced one
             # was not: `iatrei` is not in the surface list, `ïatrei` is.
@@ -294,6 +348,7 @@ def apply(
     path: Optional[Path] = None,
     floor: int = DEFAULT_FLOOR,
     ratio: int = DOMINANCE_RATIO,
+    accept: bool = True,
 ) -> dict:
     """Admit qualifying corpus types to *checker*'s candidate pool.
 
@@ -301,6 +356,11 @@ def apply(
     them into the already-built delete index — the index is constructed
     during KhasiSpellChecker.__init__, well before this runs, so it is
     extended in place rather than rebuilt.
+
+    With *accept* (the default) they are also made acceptable: the vote
+    credits them with corpus frequency, both in the lexicon's orthography
+    (`ïatreilang`, the form offered) and in the reduced one the corpus
+    writes (`iatreilang`, accepted but never offered).
     """
     db = checker._db
     counts = _load_counts(path)
@@ -316,10 +376,19 @@ def apply(
         if checker.teach_word(w):
             indexed += 1
 
+    # The accepted set is data and may be shared (KhasiDB is memoised per
+    # data source); whether THIS checker consults it is a per-checker flag.
+    accepted = 0
+    accept_fn = getattr(db, "register_corpus_acceptance", None)
+    checker._corpus_accept_on = bool(accept and accept_fn is not None)
+    if checker._corpus_accept_on:
+        accepted = accept_fn(admitted | {_fold(w) for w in admitted})
+
     return {
         "floor": floor,
         "dominance_ratio": ratio,
         "corpus_types": len(counts),
         "indexed": indexed,
+        "accepted": accepted,
         **tally,
     }

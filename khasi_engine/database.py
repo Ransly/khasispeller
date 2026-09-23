@@ -1053,10 +1053,17 @@ class KhasiDB:
         self._freq_dict:     dict[str, int]        = {}
         self._compound_tokens: dict[str, int]      = {}  # tokens from multi-word entries
         self._compound_known: set                  = set()  # ...that could be words
-        # Frequent corpus types admitted as CANDIDATES only — offerable as
-        # corrections, never accepted as words. Empty unless
-        # khasi_spell.corpus_pool registers into it. See is_attested().
+        # Frequent corpus types admitted as CANDIDATES — offerable as
+        # corrections. Empty unless khasi_spell.corpus_pool registers into
+        # it. See is_attested().
         self._corpus_forms: set                    = set()
+        # The same admitted words, plus the reduced spelling the corpus
+        # writes them in, as ACCEPTABLE: the confidence vote credits them
+        # with corpus frequency. Kept apart from _corpus_forms because the
+        # two sets differ — `iatreilang` is acceptable (it is how the word
+        # is typed) but is never offered; `ïatreilang` is offered. See
+        # is_corpus_accepted().
+        self._corpus_accept: set                   = set()
         # Maps each compound token → list of multi-word surface_forms it appears in.
         # Lets us answer "which phrase entries contain this token?" without
         # scanning the lexicon every time. Used by the verdict explainer to
@@ -1347,6 +1354,27 @@ class KhasiDB:
             w.lower() for w in forms if w and " " not in w
         )
         return len(self._corpus_forms) - before
+
+    def register_corpus_acceptance(self, forms) -> int:
+        """Let *forms* earn the frequency signal in the confidence vote.
+
+        For corpus words `corpus_pool` has already admitted as candidates.
+        Without it the pool offered words the checker then rejected: `jyla`
+        was answered with `jylla`, and `jylla` — 24,252 corpus occurrences —
+        was flagged the moment the writer accepted it. `is_known()` is still
+        untouched; the vote reads this set, nothing else does.
+
+        Returns the number newly registered.
+        """
+        before = len(self._corpus_accept)
+        self._corpus_accept.update(
+            w.lower() for w in forms if w and " " not in w
+        )
+        return len(self._corpus_accept) - before
+
+    def is_corpus_accepted(self, word: str) -> bool:
+        """True when the corpus attests *word* often enough to accept it."""
+        return word.lower() in self._corpus_accept
 
     def is_corpus_form(self, word: str) -> bool:
         """True when *word* is offerable only because the corpus attests it.

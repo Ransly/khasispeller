@@ -766,6 +766,19 @@ let lastResult = null, flagged = [], cursor = 0, detailTab = "sug", _seq = 0;
 // Words whose alternative spelling the reader has dismissed. Keyed on the
 // word so a dismissal survives the re-check that every edit triggers.
 const ignoredVariants = new Set();
+// Offers the reader has already answered, keyed "from→to". Accepting ia→ïa in
+// one place records "ïa→ia" — the reverse offer the re-check would otherwise
+// make at that spot — and NOT "ia". Settling the whole word used to silence
+// every other ia in the text too, so the reader could fix the first one and
+// then no longer see, or correct, the rest.
+const settledOffers = new Set();
+const offerKey = (from, to) => from.toLowerCase() + "\u2192" + to.toLowerCase();
+function liveOptions(v){
+  return (v.variants || []).filter(x => !settledOffers.has(offerKey(v.word, x.variant)));
+}
+function isLive(v){
+  return !ignoredVariants.has(v.word.toLowerCase()) && liveOptions(v).length > 0;
+}
 // The word the sidebar is currently explaining, when it is not showing one of
 // the flagged words. null = normal flagged-word mode.
 let inspected = null;
@@ -895,7 +908,7 @@ function loadExample(){
   updateCount(); checkText();
 }
 function clearAll(){
-  ignoredVariants.clear();
+  ignoredVariants.clear(); settledOffers.clear();
   inspected = null; detailsOpen = false;
   $("text").value = ""; $("results").innerHTML = "";
   lastResult = null; flagged = []; cursor = 0; updateCount(); renderDetail();
@@ -920,7 +933,7 @@ async function checkText(){
     // text to be checked, not for a word to be explained.
     detailsOpen = false;
     renderResults(res); renderDetail();
-    const n = res.corrections.length, v = (res.variants || []).length;
+    const n = res.corrections.length, v = (res.variants || []).filter(isLive).length;
     announce(
       (n === 0 ? "Check complete. No spelling problems found."
                : "Check complete. " + n + (n === 1 ? " word" : " words") + " flagged.")
@@ -959,7 +972,7 @@ function spansOf(res){
   // be idx:-1, which made the one thing a reader most wants to interact with
   // the one thing that was inert.
   (res.variants || []).forEach((v,i) => {
-    if (ignoredVariants.has(v.word.toLowerCase())) return;   // dismissed
+    if (!isLive(v)) return;          // dismissed, or every offer answered
     out.push({start:v.start, end:v.end, kind:"alt", vidx:i, idx:-1});
   });
   (res.skipped || []).forEach(s => {
@@ -986,6 +999,22 @@ function inspectable(chunk){
   return out + esc(chunk.slice(last));
 }
 
+/* One chip per word in "Withheld from checking". The engine reports every
+   occurrence — its offsets drive the grey marks in the text — so a name used
+   twice was listed twice. Grouped case-insensitively, keeping the first
+   spelling and reason seen, with a count when a word recurs. */
+function uniqueSkipped(list){
+  const seen = new Map();
+  for (const s of (list || [])) {
+    const w = s.word || s.token || "";
+    if (!w) continue;
+    const k = w.toLowerCase();
+    if (seen.has(k)) seen.get(k).n++;
+    else seen.set(k, {word: w, reason: s.reason || "name", n: 1});
+  }
+  return [...seen.values()];
+}
+
 function markup(res, selectable){
   const spans = spansOf(res);
   let html = "", cur = 0;
@@ -1007,8 +1036,7 @@ function markup(res, selectable){
            + (c.suggestion ? ' — suggested: ' + esc(c.suggestion) : "")
            + ' — click to choose"';
     } else if (s.vidx !== undefined) {
-      const alts = (res.variants[s.vidx].variants || [])
-                     .map(x => x.variant);
+      const alts = liveOptions(res.variants[s.vidx]).map(x => x.variant);
       // The native tooltip is replaced by a real menu — see openVariantMenu.
       // aria-haspopup/aria-expanded say so to a screen reader; the title is
       // kept short since the menu itself now carries the detail.
@@ -1070,7 +1098,7 @@ function renderResults(res){
   }).join("");
 
   const alts = (res.variants || []).map((v,i) =>
-    ignoredVariants.has(v.word.toLowerCase()) ? "" :
+    !isLive(v) ? "" :
       // The word itself opens its detail panel, so a reader never has to go
       // hunting in the marked-up text to ask about the word already in front
       // of them. Same for the rows in the corrections table above.
@@ -1078,10 +1106,10 @@ function renderResults(res){
     + ' title="Show the meaning and why ' + esc(v.word) + ' was accepted"'
     + ' onclick="inspectWord(\'' + esc(v.word) + '\')">' + esc(v.word) + '</span>'
     + '<span class="sub" style="margin:0">also written</span>'
-    + '<span class="chips">' + v.variants.map(x =>
+    + '<span class="chips">' + liveOptions(v).map(x =>
         '<button class="chip alt" title="Replace ' + esc(v.word) + ' with ' + esc(x.variant)
         + (x.gloss ? " — " + esc(x.gloss) : "")
-        + '" onclick="applyAt(' + v.start + ',' + v.end + ',\''
+        + '" onclick="applyVariantPick(' + i + ',\''
         + esc(x.variant) + '\')">' + esc(x.variant)
         + '</button>').join("")
     + '</span>'
@@ -1101,8 +1129,11 @@ function renderResults(res){
     ? '<div class="panel"><h3>Withheld from checking</h3>'
       + '<p class="sub">Proper nouns and acronyms are never corrected. '
       + 'About one running-text token in seven is withheld this way.</p><div class="chips">'
-      + res.skipped.map(s => '<span class="chip">' + esc(s.word || s.token || "")
-        + ' <span class="tag mut">' + esc(s.reason || "name") + '</span></span>').join("")
+      + uniqueSkipped(res.skipped).map(s => '<span class="chip">' + esc(s.word)
+        + ' <span class="tag mut">' + esc(s.reason) + '</span>'
+        + (s.n > 1 ? ' <span class="tag mut" title="withheld ' + s.n
+                     + ' times in this text">&times;' + s.n + '</span>' : '')
+        + '</span>').join("")
       + '</div></div>'
     : "";
 
@@ -1215,13 +1246,16 @@ function openVariantMenu(i, anchor){
   const v = lastResult && lastResult.variants && lastResult.variants[i];
   if (!v) return;
 
-  const opts = (v.variants || []).map((x, k) =>
+  const opts = liveOptions(v).map((x, k) =>
       '<button class="opt" role="menuitem" data-k="' + k + '"'
     + ' onclick="applyVariantPick(' + i + ',\'' + esc(x.variant) + '\');closePop()">'
     + '<span class="v">' + esc(x.variant) + '</span>'
     + (x.canonical ? '<span class="tag ok">recorded</span>' : '')
     + (x.gloss ? '<span class="g">' + esc(x.gloss) + '</span>'
-               : '<span class="g">no dictionary entry &mdash; derived form</span>')
+               : '<span class="g">no dictionary entry'
+                 + (x.source === "root" ? ' &mdash; derived form'
+                    : x.source === "corpus" ? ' &mdash; in common use in the corpus' : '')
+                 + '</span>')
     + '</button>').join("");
 
   showPop(anchor, "", '<div class="ph"><b>' + esc(v.word) + '</b><i>also written</i></div>'
@@ -1253,7 +1287,10 @@ function openFixMenu(i, anchor){
       + '<span class="v">' + esc(s) + '</span>'
       + (k === 0 ? '<span class="tag ok">best</span>' : '')
       + (gl ? '<span class="g">' + esc(gl) + '</span>'
-            : '<span class="g">no dictionary entry &mdash; derived or compound form</span>')
+            // Provenance is not known here: a gloss-less suggestion may be
+            // a derived form or a frequent corpus word, so say only what is
+            // true of both.
+            : '<span class="g">no dictionary entry</span>')
       + '</button>';
   }).join("");
 
@@ -1623,8 +1660,11 @@ function wordPanel(w, r, a){
       h += '<p class="sub" style="margin:0 0 6px;font-style:italic">'
          + mo.notes.map(esc).join("; ") + '</p>';
   } else {
-    h += '<p class="gl none wp-lead">no dictionary entry '
-       + '&mdash; derived or compound form</p>';
+    const sg = (r && r.confidence && r.confidence.signals) || {};
+    h += '<p class="gl none wp-lead">no dictionary entry'
+       + (sg.morphology ? ' &mdash; derived or compound form'
+          : sg.frequent ? ' &mdash; in common use in the corpus' : '')
+       + '</p>';
   }
   if (ipa)
     h += '<p class="ipa" style="margin:2px 0 10px">' + esc(ipa)
@@ -1706,8 +1746,9 @@ function wordPanel(w, r, a){
         + (i===0 ? ' <span class="tag ok">Best match</span>' : '')
         + (c.known_confusion ? ' <span class="tag ok">known confusion</span>' : '')
         + (gl ? '<span class="gl">' + esc(gl) + '</span>'
-              : '<span class="gl none">no dictionary entry &mdash; derived or '
-                + 'compound form</span>')
+              // A gloss-less candidate may be generated or a corpus word;
+              // the candidate record does not say which.
+              : '<span class="gl none">no dictionary entry</span>')
         + (ops ? '<span class="ops">' + ops + '</span>' : '')
         + '</span><span class="m"><b style="color:' + pctClass(p) + '">' + pctBar(p)
         + '</b><i>match</i></span></button>';
@@ -1776,7 +1817,8 @@ function say(w){
    the first offered. Most words have exactly one alternative; the chips stay
    for the rare case where there is a choice to make. */
 function preferredVariant(v){
-  const pick = (v.variants || []).find(x => x.canonical) || (v.variants || [])[0];
+  const opts = liveOptions(v);
+  const pick = opts.find(x => x.canonical) || opts[0];
   return pick ? pick.variant : "";
 }
 
@@ -1787,17 +1829,22 @@ function preferredVariant(v){
    offers `iaid` right back. Accept only, and the re-check that follows finds
    the newly written `ïaid`, offers the reverse swap, and the panel invites
    you to undo what you just did — indefinitely. Recording both sides ends it. */
-function settleVariant(v){
-  if (!v) return;
-  ignoredVariants.add(v.word.toLowerCase());
-  for (const x of (v.variants || [])) ignoredVariants.add(x.variant.toLowerCase());
+function settleVariant(v, chosen){
+  if (!v || !chosen) return;
+  // Record only the offers that would lead AWAY from the spelling just
+  // chosen — back to the original, or across to another spelling offered
+  // with it. The original word is left alone, so its other occurrences stay
+  // marked and can each be decided.
+  for (const s of [v.word, ...(v.variants || []).map(x => x.variant)])
+    if (s.toLowerCase() !== chosen.toLowerCase())
+      settledOffers.add(offerKey(chosen, s));
 }
 
 function acceptVariant(i){
   const v = lastResult.variants[i];
   const pick = preferredVariant(v);
   if (!pick) return;
-  settleVariant(v);
+  settleVariant(v, pick);
   applyAt(v.start, v.end, pick);
 }
 
@@ -1811,7 +1858,7 @@ function acceptVariant(i){
 function applyVariantPick(i, variant){
   const v = lastResult && lastResult.variants && lastResult.variants[i];
   if (!v) return;
-  settleVariant(v);
+  settleVariant(v, variant);
   applyAt(v.start, v.end, variant);
 }
 
@@ -1826,37 +1873,80 @@ function ignoreVariant(i){
 
 function acceptAllVariants(btn){
   const vs = (lastResult.variants || [])
-    .filter(v => !ignoredVariants.has(v.word.toLowerCase()) && preferredVariant(v))
+    .filter(v => isLive(v) && preferredVariant(v))
     .sort((a,b) => b.start - a.start);          // back to front
   if (!vs.length) return;
-  // Splice from the end so each replacement cannot invalidate the offsets of
-  // the ones still to come, then re-check once rather than once per word.
-  let t = lastResult.text;
+  // Splice from the end so each replacement cannot move the ones still to
+  // come, in the checked copy only, then redraw once.
   for (const v of vs) {
-    t = t.slice(0, v.start) + preferredVariant(v) + t.slice(v.end);
-    settleVariant(v);         // or the re-check offers every swap in reverse
+    const pick = preferredVariant(v);   // read before settling changes it
+    settleVariant(v, pick);
+    spliceResult(lastResult, v.start, v.end, pick);
   }
-  $("text").value = t;
-  updateCount();
-  checkText();          // the text visibly changes; that is the feedback
+  flagged = lastResult.corrections.slice();
+  closePop();
+  renderResults(lastResult); renderDetail();   // the text visibly changes
 }
 
 function ignoreAllVariants(btn){
-  for (const v of (lastResult.variants || [])) settleVariant(v);
+  for (const v of (lastResult.variants || [])) ignoredVariants.add(v.word.toLowerCase());
   renderResults(lastResult);   // the panel disappears; that is the feedback
 }
 
+/* A replacement takes the capitalisation of the word it replaces. The engine
+   offers spellings in lower case, so a sentence-initial "Ia" used to be
+   rewritten as "ïa". toUpperCase() maps ï to Ï and ñ to Ñ, so the diacritic
+   letters keep their capital forms. */
+function matchCase(orig, rep){
+  if (!orig || !rep) return rep;
+  if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase())
+    return rep.toUpperCase();
+  if (orig[0] !== orig[0].toLowerCase())
+    return rep[0].toUpperCase() + rep.slice(1);
+  return rep;
+}
+/* Corrections are made in the checked copy — the "Text with Analysis" —
+   and never in the input box, which keeps exactly what was typed. Nothing
+   goes to the server: the word is spliced into lastResult.text, any mark on
+   it is dropped, and every mark after it moves by the change in length.
+   A correction used to rewrite the input and re-run the whole check, a full
+   round trip for one word. Press Check again to start over from the input. */
+function spliceResult(r, start, end, replacement){
+  const rep = matchCase(r.text.slice(start, end), replacement);
+  const delta = rep.length - (end - start);
+  r.text = r.text.slice(0, start) + rep + r.text.slice(end);
+  const offScan = x => typeof x.start !== "number";
+  const keep  = x => offScan(x) || x.end <= start || x.start >= end;
+  const shift = x => {
+    if (!offScan(x) && x.start >= end) { x.start += delta; x.end += delta; }
+    return x;
+  };
+  r.corrections = r.corrections.filter(keep).map(shift);
+  r.variants = (r.variants || []).filter(keep).map(shift);
+  r.skipped = (r.skipped || []).filter(keep).map(shift);
+  return rep;
+}
 function applyAt(start, end, replacement){
-  const t = lastResult.text;
-  $("text").value = t.slice(0, start) + replacement + t.slice(end);
-  updateCount(); checkText();
+  const r = lastResult;
+  if (!r) return;
+  const was = r.text.slice(start, end);
+  const rep = spliceResult(r, start, end, replacement);
+  flagged = r.corrections.slice();
+  if (cursor >= flagged.length) cursor = Math.max(0, flagged.length - 1);
+  closePop();
+  renderResults(r); renderDetail();
+  announce("Replaced " + was + " with " + rep + ".");
 }
 function applyFix(i, replacement){
   const c = lastResult.corrections[i];
   applyAt(c.start, c.end, replacement);
 }
+/* Copies the checked copy as it now stands — the corrections the reader has
+   chosen, and nothing else. It used to copy the server's `corrected` string,
+   which put the first suggestion into EVERY flagged word whether or not the
+   reader had accepted it. */
 async function copyCorrected(btn){
-  const text = lastResult ? lastResult.corrected : "";
+  const text = lastResult ? lastResult.text : "";
   if (!text) return;
   let ok = false;
   try {
@@ -1929,17 +2019,23 @@ function voteCard(r, onPick){
     // checker reached its verdict, which is a second question.
     + (r.gloss
         ? '<p class="gl" style="margin:2px 0 8px">' + esc(r.gloss) + '</p>'
-        : '<p class="gl none" style="margin:2px 0 8px">no dictionary entry '
-          + '&mdash; derived or compound form</p>')
+        : '<p class="gl none" style="margin:2px 0 8px">no dictionary entry'
+          + (sig.morphology ? ' &mdash; derived or compound form'
+             : sig.frequent ? ' &mdash; in common use in the corpus' : '')
+          + '</p>')
     + '<p class="sub">gate <code>' + r.gate + '</code> &middot; <code>'
     + esc(r.gate_name) + '</code> &middot; <code>' + esc(r.method) + '</code></p>'
     + '<table><thead><tr><th>Confidence vote</th><th style="text-align:right">weight</th>'
     + '</tr></thead><tbody>' + sigRows
     + '<tr><td><b>total</b></td><td style="text-align:right"><b>' + score
     + ' / ' + thr + '</b></td></tr></tbody></table>'
+    // Say WHY a word without an entry passed. Frequent corpus words now
+    // pass too (jylla, 24,252 uses), and "the grammar derives it" was false
+    // for them.
     + (ok && !sig.in_lexicon
         ? '<p class="sub" style="margin-top:10px">Accepted without a dictionary '
-          + 'entry &mdash; the grammar derives it.</p>' : "")
+          + 'entry &mdash; ' + (sig.morphology ? 'the grammar derives it.'
+                                 : 'the corpus uses it often.') + '</p>' : "")
     + (r.suggestions.length
         ? '<p class="sub" style="margin-top:12px">Suggestions</p><div class="chips">'
           + topSuggestions(r.suggestions).map((s,i) => '<button class="chip"'
@@ -1952,8 +2048,7 @@ function voteCard(r, onPick){
           // the thing that decides between two similar-looking spellings.
           + ((r.glosses && r.glosses[0])
               ? '<div class="gl">' + esc(r.glosses[0]) + '</div>'
-              : '<div class="gl none">no dictionary entry &mdash; '
-                + 'derived or compound form</div>') : "")
+              : '<div class="gl none">no dictionary entry</div>') : "")
     + ((r.variants && r.variants.length)
         ? '<div class="altrow" style="margin-top:12px;border:0">'
           + '<span class="sub" style="margin:0">also written</span>'

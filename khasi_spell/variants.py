@@ -190,6 +190,7 @@ class SpellingVariant:
     variant: str
     source: str          # "lexicon" (whole word) | "root" (derived form)
                          # | "folded" (the diacritic-free spelling)
+                         # | "corpus" (a corpus word in lexicon orthography)
     canonical: bool = False   # is this the spelling the lexicon records?
     root: Optional[str] = None
     # English gloss of the variant, "" when the lexicon records none. The
@@ -551,6 +552,28 @@ def _short_i_form(word: str, db: Any) -> Optional[str]:
 _SPELLING_LINKS: Optional[dict] = None
 
 
+def _corpus_fold_map(db: Any) -> dict:
+    """{reduced spelling: admitted corpus form}, for corpus words the pool
+    admitted with diacritics restored (`iatreilang` -> `ïatreilang`).
+
+    Rebuilt only when the set changes size, which it does once, at start-up.
+    """
+    forms = getattr(db, "_corpus_forms", None) or ()
+    cache = getattr(db, "_corpus_fold_cache", None)
+    if cache is None or cache[0] != len(forms):
+        m = {}
+        for f in forms:
+            plain = f.translate(_TO_PLAIN)
+            if plain != f:
+                m.setdefault(plain, []).append(f)
+        cache = (len(forms), m)
+        try:
+            db._corpus_fold_cache = cache
+        except Exception:
+            pass
+    return cache[1]
+
+
 def _spelling_links() -> dict:
     """
     Alternative spellings the dictionary records in its own glosses.
@@ -778,6 +801,16 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
                 continue
             found[cand] = SpellingVariant(cand, "gloss")
 
+    # --- route 8: a corpus word the pool admitted with its diacritics --
+    # `iatreilang` is how the corpus writes it (422 times); the pool admits
+    # it as `ïatreilang`, the only spelling the lexicon uses for ïa- words.
+    # The reduced spelling is accepted, so — exactly as for a lexicon word
+    # typed without its ï — the diacritic spelling is offered alongside
+    # rather than as a correction.
+    for cand in _corpus_fold_map(db).get(w, ()):
+        if cand != w and cand not in found:
+            found[cand] = SpellingVariant(cand, "corpus")
+
     # A variant is canonical when the lexicon records that exact surface.
     for v in found.values():
         v.canonical = v.variant in db._surface_index
@@ -788,6 +821,6 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
                 break
 
     # Canonical spellings first, then whole-word evidence over reconstruction.
-    order = {"lexicon": 0, "gloss": 1, "root": 2, "folded": 3}
+    order = {"lexicon": 0, "gloss": 1, "root": 2, "folded": 3, "corpus": 4}
     return sorted(found.values(),
                   key=lambda v: (not v.canonical, order.get(v.source, 9), v.variant))

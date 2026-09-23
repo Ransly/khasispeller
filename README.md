@@ -459,6 +459,61 @@ Disable with `KhasiSpeller(use_corpus_freq=False)`. Only 18% of lexicon forms
 are attested in the corpus, and **59,359 corpus types are absent from the
 lexicon** — vocabulary expansion is now measurable.
 
+### Corpus words as candidates and as words — on by default
+
+The lexicon derives from a 1973 dictionary; the corpus is modern news. Common
+words the dictionary never recorded — `jylla` 'state' (24,252 occurrences),
+`wanrah` 'bring' (4,604), `pyntreikam` (1,940), loans such as `elekshon` —
+were both **unreachable** as corrections and **rejected** when typed.
+`khasi_spell/corpus_pool.py` addresses both.
+
+**Supply.** A corpus type seen at least 20 times enters the candidate pool if
+it uses only Khasi letters, passes the phonotactic screen, is not quarantined,
+does not fold onto a lexicon headword, is not one edit from a type 5× commoner
+(the corpus's own misspellings), and is not a run-together spelling that
+`splits.py` corrects (`jongki` → `jong ki`). It is admitted in the lexicon's
+orthography: `iatreilang` enters as `ïatreilang`, and `-ain` becomes `-aiñ`
+only where the lexicon's own `-aiñ` rule agrees — the name `hussain` and the
+loans `risain`, `pilain` stay plain. 2,192 forms are admitted.
+
+**Acceptance.** The vote's frequency signal reads a table built from the
+lexicon, so no corpus word could earn it: `jylla` scored 1 of the 3 needed.
+Admitted words — and the reduced spelling the corpus writes them in
+(`iatreilang`) — now earn it. The reduced spelling is accepted with the
+diacritic form offered as an alternative, exactly as for a lexicon word typed
+without its `ï`. `is_known()` is unchanged.
+
+Before this, the pool offered words the checker then rejected: `jyla` was
+answered with `jylla`, and `jylla` was flagged once accepted.
+
+Measured 23 Sept 2026, acceptance off against on, all else equal:
+
+| | acceptance off | **on** |
+|---|---|---|
+| flagged on 200 clean corpus sentences | 143 (4.34%) | **105 (3.19%)** |
+| sentences carrying a flag | 95 / 200 | **72 / 200** |
+| rejected with no suggestion (invisible) | 41 (1.24%) | **10 (0.30%)** |
+| proxy set: top suggestion the checker itself rejects | 27 of 517 | **1 of 517** |
+| word benchmark (detect / top-1 / top-5) | 98.0 / 73.5 / 91.5 | 98.0 / 73.5 / 91.5 |
+| sentence benchmark (located / top-1 with context) | 249 / 92.0% | 248 / 91.6% |
+
+The word benchmark cannot move by construction — its targets are lexicon
+words. The one sentence-benchmark item lost is `mynshwa` for `mynshuwa`:
+the "error" is the majority spelling in real text (1,413 corpus
+occurrences against 864), so the checker now accepts it. The item is left
+valid and counted as a miss.
+
+The proxy set is 600 unverified pairs mined from the corpus (a type seen once
+or twice, one edit from a type seen 1,000+ times); see
+`docs/IMPROVEMENT_ANALYSIS.md`.
+
+Switches: `KhasiSpeller(corpus_pool_accept=False)` keeps supply without
+acceptance; `use_corpus_pool=False` turns both off. **Caveat:** `KhasiDB` is
+memoised per data source, so every speller in one process shares the pool —
+a `use_corpus_pool=False` speller created after a pooled one still offers pool
+words (pinned by a `WEAK` test). Compare pool on and off in separate
+processes. The acceptance switch is per-checker and does not leak.
+
 ### Alternative spellings (ï and ñ)
 
 Khasi writes **ï** and **ñ**, and both are awkward to type, so writers drop
@@ -748,6 +803,19 @@ development (`dand`→`dang`, `shnng`→`shnong`, `pyleng`→`pylleng` …).
 It is still synthetic and drawn from the lexicon, so it measures recovery of
 known words, not performance on running text. A benchmark built from
 authentic Khasi misspellings remains the real goal.
+
+**Current figures** (23 Sept 2026, `scripts/evaluate.py` and the two
+benchmark runners):
+
+| | |
+|---|---|
+| detection | **98.0%** (288 of 294), precision 1.000 — none of 294 correct control words flagged |
+| top-1 / top-5 / MRR | **73.5%** (216) / **91.5%** (269) / 0.808 |
+| sentence benchmark, top-1 isolated → with context | 87.1% → **91.6%** (21 fixed, 10 broken, sign test p = 0.071) |
+| flagged on 200 untouched corpus sentences | **3.19%** (105 of 3,294 tokens) |
+| rejected with no suggestion | 0.30% (10 tokens) |
+| targets of `khasi_test_pairs_v2.csv` reachable as candidates | 41.5% of 23,254 (35.7% from lexicon forms alone) |
+| latency | 47–51 ms per word |
 
 ### Sentence benchmark
 
@@ -1273,6 +1341,10 @@ lexicon does not record are still inspected.
 > underline a word it cannot fix, but it would roughly double visible noise
 > and undo much of the suppression work above. That is a product decision,
 > not a defect to be quietly patched.
+>
+> *Update, 23 Sept 2026:* 10 tokens (0.30%). Phonotactically impossible words
+> are now flagged rather than dropped, and frequent corpus words are accepted
+> — see *Corpus words as candidates and as words*.
 
 #### `-ain` is written `-aiñ`
 
@@ -1653,7 +1725,8 @@ Structural causes, in rough order of impact:
 - **No context.** Tokens are checked independently, so real-word errors — a
   correctly spelled word in the wrong place — are undetectable by design.
 - **No index.** Candidate generation scans all 34,224 forms in Python.
-- **Proper nouns are weak.** `shilong` ranks `shilot` above `shillong`.
+- ~~**Proper nouns are weak.** `shilong` ranks `shilot` above `shillong`.~~
+  **No longer reproduces** (23 Sept 2026): `shillong` is first.
 - ~~**No word-final coda validation.**~~ **Fixed 2026-08-26.**
   `ALLOWED_FINAL_CONSONANTS`, `_DIGRAPHS` and `_SPECIAL` were loaded from the
   data and never consulted, so no coda check ran and `bamsh` validated. Now

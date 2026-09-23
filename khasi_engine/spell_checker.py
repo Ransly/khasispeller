@@ -1348,6 +1348,21 @@ class KhasiSpellChecker:
         freq_data = getattr(self._speller, "nlp_data", {}) if self._speller else {}
         if freq_data.get(w, 0) >= self._FREQ_HIGH_BAR:
             signals["frequent"] = self._W_FREQUENT
+        elif getattr(self, "_corpus_accept_on", False) \
+                and getattr(self._db, "is_corpus_accepted", None) \
+                and self._db.is_corpus_accepted(w):
+            # A corpus word the lexicon does not record. nlp_data is built
+            # from the lexicon, so this signal never reached such a word:
+            # `jylla`, seen 24,252 times, scored 1 of the 3 needed. Words
+            # land here only after corpus_pool has admitted them — seen at
+            # least its floor of times (above _FREQ_HIGH_BAR), Khasi letters
+            # only, phonotactically possible, not dominated by a far
+            # commoner neighbour, not a run-together spelling.
+            #
+            # The switch lives on the checker, not the database: KhasiDB is
+            # memoised per data source, so every speller in a process shares
+            # one, and a flag stored there would leak between instances.
+            signals["frequent"] = self._W_FREQUENT
 
         return {
             "score":     sum(signals.values()),

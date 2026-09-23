@@ -7,9 +7,11 @@ index is built from lexicon surface forms, so a string the lexicon never
 recorded is not in the list to be ranked. No cost model retrieves a
 candidate that was never a candidate.
 
-This is candidate SUPPLY only. Acceptance is a separate question with a
-separate predicate, and these tests assert that the two stayed separate:
-admitting a corpus type makes it offerable, never makes it a known word.
+Supply alone left a contradiction — the pool offered words the checker then
+rejected (`jyla` -> `jylla`, and `jylla` flagged once accepted). Admitted
+words now also pass the confidence vote, credited with corpus frequency.
+`is_known()` still refuses them: acceptance comes through the vote, not by
+turning corpus types into lexicon words.
 
 No lexicon content appears here. `pyntreikam` and `nongthohkhubor` are
 corpus types, absent from `data/khasi_db.json` by construction — that
@@ -74,16 +76,23 @@ def test_corpus_types_are_attested_but_not_known(sp, word, _count):
     assert not db.is_known(word), "corpus type must not become a known word"
 
 
-@pytest.mark.parametrize("word,_count", CORPUS_ONLY)
-def test_corpus_supply_does_not_change_acceptance(sp, word, _count):
-    """WEAK — pins the current split, not a desirable end state.
+@pytest.mark.parametrize("word,_count", CORPUS_ONLY + [("jylla", 24252),
+                                                       ("wanrah", 4604)])
+def test_admitted_corpus_words_are_accepted(sp, word, _count):
+    """The acceptance repair. These are ordinary Khasi words the lexicon
+    does not record; `jylla` ('state') was rejected at 1 point of the 3
+    needed despite 24,252 corpus occurrences."""
+    assert sp.check(word).is_correct is True
+    assert not sp.check_text(word).to_dict().get("corrections")
 
-    These are real Khasi words and a user typing one still sees it
-    rejected. Fixing that is the acceptance repair, deliberately not done
-    here; this test exists so that repair cannot happen by accident as a
-    side effect of the supply change.
-    """
-    assert sp.check(word).is_correct is False
+
+def test_offered_corpus_words_are_accepted(sp):
+    """Never suggest a word the checker would itself reject."""
+    for typo, gold in [("jyla", "jylla"), ("wanra", "wanrah"),
+                       ("pyntreika", "pyntreikam")]:
+        sug = sp.suggest(typo, n=5)
+        assert sug and sug[0] == gold, (typo, sug)
+        assert sp.check(gold).is_correct, f"{gold!r} offered, then rejected"
 
 
 # ----------------------------------------------------------------------
@@ -146,19 +155,50 @@ def test_corpus_types_are_admitted_in_lexicon_orthography(sp):
     none begin plain `ia-` — so a pool holding `iatreilang` would offer a
     spelling the dictionary never uses.
     """
+    from khasi_spell.corpus_pool import _ain_confirmed
     db = sp.analyser.db
-    plain = sorted(w for w in getattr(db, "_corpus_forms", set())
-                   if w.startswith("ia") or w.endswith("ain"))
-    assert not plain[:5], f"un-canonicalised corpus forms in pool: {plain[:5]}"
+    forms = getattr(db, "_corpus_forms", set())
+    plain_ia = sorted(w for w in forms if w.startswith("ia"))
+    assert not plain_ia[:5], f"un-canonicalised corpus forms in pool: {plain_ia[:5]}"
+    # -ain keeps its plain spelling only where the lexicon's own -aiñ rule
+    # does not back the tilde — names and loans such as `hussain`.
+    wrongly_plain = sorted(w for w in forms
+                           if w.endswith("ain") and _ain_confirmed(w, db))
+    assert not wrongly_plain[:5], wrongly_plain[:5]
 
 
-@pytest.mark.parametrize("typo,gold", [
-    ("ïiatreilang", "ïatreilang"),
+def test_ain_is_restored_only_where_the_lexicon_agrees(sp):
+    """`hussain` is a name and `risain` a loan (resign); `hussaiñ` and
+    `risaiñ` are spellings no one writes. `thawain` is a Khasi compound whose
+    final element the lexicon records with the tilde."""
+    forms = getattr(sp.analyser.db, "_corpus_forms", set())
+    assert "hussaiñ" not in forms and "risaiñ" not in forms
+    assert "thawaiñ" in forms
+
+
+def test_misspelled_diacritic_form_is_corrected(sp):
+    assert "ïatreilang" in sp.suggest("ïiatreilang", n=5)
+
+
+@pytest.mark.parametrize("plain,standard", [
     ("iatreilang", "ïatreilang"),
     ("jingiatreilang", "jingïatreilang"),
 ])
-def test_reduced_spelling_is_corrected_to_the_diacritic_one(sp, typo, gold):
-    assert gold in sp.suggest(typo, n=5)
+def test_reduced_spelling_is_accepted_with_the_diacritic_offered(sp, plain, standard):
+    """The corpus writes every ïa- word without its ï. Treated exactly like a
+    lexicon word typed that way (`iathuh`): accepted, with the standard
+    spelling offered as an alternative rather than as a correction."""
+    assert sp.check(plain).is_correct
+    assert standard in [v.variant for v in sp.variants(plain)]
+
+
+def test_runtogether_spellings_are_not_admitted(sp):
+    """`jongki` is `jong ki` written solid. The split table corrects it; the
+    pool must neither offer it nor, now, accept it."""
+    forms = getattr(sp.analyser.db, "_corpus_forms", set())
+    assert "jongki" not in forms
+    r = sp.check("jongki")
+    assert r.is_correct is False and r.suggestions[0] == "jong ki"
 
 
 def test_suggestions_do_not_cycle(sp):
@@ -189,22 +229,31 @@ def test_pool_growth_is_bounded(sp):
 
 
 def test_check_and_check_text_agree_on_corpus_types(sp):
-    """WEAK — records a disagreement, and a cost the supply fix creates.
-
-    `_flag_words` reports a gate-3 rejection only when it has suggestions,
-    so today these words are rejected by `check()` and silently dropped by
-    `check_text()`: no underline, which is the right outcome reached by the
-    wrong route. Giving them candidates removes that accident — the word is
-    still rejected, but now it is visibly flagged and a correction is
-    offered for a word that was never wrong.
-
-    The assertion is therefore deliberately one-directional: it pins that
-    the two entry points do not contradict each other, and the docstring
-    records that agreement here is currently bought at the price of a false
-    alarm. That price is what the acceptance repair has to pay back.
-    """
+    """Both entry points go through the same vote, so an accepted corpus
+    word is neither rejected by check() nor underlined by check_text()."""
     for word, _ in CORPUS_ONLY:
-        single_ok = sp.check(word).is_correct
-        flagged = bool(sp.check_text(word).to_dict().get("corrections"))
-        if single_ok:
-            assert not flagged, f"{word}: accepted alone but flagged in text"
+        assert sp.check(word).is_correct
+        assert not sp.check_text(word).to_dict().get("corrections"), word
+
+
+def test_acceptance_can_be_switched_off():
+    """`corpus_pool_accept=False` restores supply-only behaviour, which is
+    how the acceptance repair is measured against its absence."""
+    off = KhasiSpeller(eager=True, corpus_pool_accept=False)
+    assert off.check("pyntreikam").is_correct is False
+    assert "pyntreikam" in off.suggest("pyntreika", n=5)
+    del off
+
+
+def test_pool_off_is_not_honoured_after_a_pooled_speller(sp):
+    """WEAK — pins a known weakness, not a desirable end state.
+
+    KhasiDB is memoised per data source, so every speller in a process
+    shares one database and one delete index, and corpus_pool writes into
+    both. A later `use_corpus_pool=False` speller therefore still offers
+    pool words. Acceptance does not leak (its switch is per-checker), but
+    supply does. Measure pool-on against pool-off in separate processes.
+    """
+    off = KhasiSpeller(eager=True, use_corpus_pool=False)
+    assert "pyntreikam" in off.suggest("pyntreika", n=5)
+    del off
