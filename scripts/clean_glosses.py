@@ -39,6 +39,30 @@ Rules, in the order they run (examples are synthetic):
   debris_only     a gloss element that is at least 40% symbols, or has fewer
                   than three letters left after cleaning, is dropped; an entry left with none gets "[unglossed: scan debris]".
 
+Pass 2 — structure. The glosses were split into a list at every comma, even
+inside brackets and numbers, and each piece was capitalised. So a gloss like
+"a thing (abc, def)" became ["A thing (abc", "Def)"], and "20,000" became
+["20", "000"]. This pass rejoins them:
+
+  join_number     a piece ending in a digit + a piece opening with 2–3 digits
+                  -> "20,000" (Indian grouping "2,00,000" too).
+  join_bracket    a piece that opens "(" is joined with the following pieces
+                  until the bracket closes (at most six), with ", "; the
+                  capital the split added is lowered unless the word is a
+                  known name in data/gazetteer.json.
+  join_label      a class label split from its noun: "Ka" + "N. a thing" ->
+                  "Ka, n. a thing" (a lone "W" there is a misread "U"); a
+                  part-of-speech letter: "V" + "To go" -> "V. to go".
+  drop_empty      a piece with no run of two letters or digits ("/", "?/").
+  manual          data/gloss_manual_fixes.json, {entry_id: {"gloss": [...],
+                  "note": "..."}}: corrections a rule cannot make, applied
+                  last and logged like the rest (git-ignored: lexicon text).
+
+gloss_normalized is rebuilt as the pieces joined with "; ", which is how it
+was made in the first place. Tokens that no rule can repair — letters mixed
+with < > // or capitals inside a word — are listed in data/gloss_review.csv
+for a Khasi speaker (git-ignored).
+
 Usage:
     python3 scripts/clean_glosses.py --dry-run     # report only
     python3 scripts/clean_glosses.py               # write, with a backup
@@ -137,6 +161,113 @@ def _braces(text: str) -> str:
     return text
 
 
+MANUAL = ROOT / "data" / "gloss_manual_fixes.json"
+REVIEW = ROOT / "data" / "gloss_review.csv"
+GAZETTEER = ROOT / "data" / "gazetteer.json"
+NUM_TAIL = re.compile(r"\d$")
+NUM_HEAD = re.compile(r"^\d{2,3}(?!\d)")
+HAS_CONTENT = re.compile(r"[A-Za-zÏïÑñ0-9]{2,}")
+CAP_WORD = re.compile(r"^([A-ZÏÑ])([a-zïñ'-]*)")
+GARBLED = re.compile(r"\S*[A-Za-z][<>]\S*|\S*[<>][A-Za-z]\S*|\S*//\S*|\b[a-z]+[A-Z]+[A-Za-z]*\b")
+
+
+def _names() -> set:
+    try:
+        g = json.loads(GAZETTEER.read_text(encoding="utf-8"))
+        return {t.lower() for t in (g.get("tokens") if isinstance(g, dict) else g)}
+    except (OSError, ValueError):
+        return set()
+
+
+def _lower_split_capital(piece: str, names: set) -> str:
+    m = CAP_WORD.match(piece)
+    if m and (m.group(1) + m.group(2)).lower() not in names:
+        return m.group(1).lower() + piece[1:]
+    return piece
+
+
+CLASS_LABELS = {"U", "Ka", "Ki", "I"}
+POS_LETTERS = {"N", "V"}
+NOUN_HEAD = re.compile(r"^N\.?(?:\s+|$)")
+
+
+def _lower_first(piece: str) -> str:
+    """Undo the capital the split added: "Moon" -> "moon", "A thing" -> "a thing"."""
+    if not piece[:1].isupper() or piece.startswith(("I ", "I'")):
+        return piece
+    if piece[1:2].islower() or piece[1:2] in (" ", ""):
+        return piece[:1].lower() + piece[1:]
+    return piece
+
+
+def restructure(pieces: list, fired: Counter, names: set) -> list:
+    """Rejoin pieces the comma split broke apart; drop empty ones."""
+    # 1. numbers: "20" + "000" -> "20,000"
+    out = []
+    for p in pieces:
+        if (out and isinstance(p, str) and isinstance(out[-1], str)
+                and NUM_TAIL.search(out[-1]) and NUM_HEAD.match(p)):
+            out[-1] = out[-1] + "," + p
+            fired["join_number"] += 1
+        else:
+            out.append(p)
+    # 2. brackets: "a thing (abc" + "Def)" -> "a thing (abc, def)"
+    res, i = [], 0
+    while i < len(out):
+        p = out[i]
+        if isinstance(p, str) and p.count("(") > p.count(")"):
+            j, depth = i, p.count("(") - p.count(")")
+            while j + 1 < len(out) and j - i < 6 and depth > 0 and isinstance(out[j + 1], str):
+                j += 1
+                depth += out[j].count("(") - out[j].count(")")
+            if depth <= 0 and j > i:
+                joined = p
+                for x in out[i + 1:j + 1]:
+                    if HAS_CONTENT.search(x) or LETTERS.search(x):
+                        joined += ", " + _lower_split_capital(x, names)
+                    elif ")" in x:                      # a lone ")" closes, no comma
+                        joined += x.strip()
+                res.append(joined)
+                fired["join_bracket"] += 1
+                i = j + 1
+                continue
+        res.append(p)
+        i += 1
+    # 3. labels split from their meaning: "Ka" + "N. hearth" -> "Ka, n. hearth";
+    #    "V" + "To swell" -> "V. to swell". A lone "W" before a noun is a misread "U".
+    lab, i = [], 0
+    while i < len(res):
+        p = res[i].strip() if isinstance(res[i], str) else res[i]
+        nxt = res[i + 1] if i + 1 < len(res) and isinstance(res[i + 1], str) else None
+        if isinstance(p, str) and (p in CLASS_LABELS or p == "W") and nxt is not None:
+            rest, k = None, i + 1
+            if NOUN_HEAD.match(nxt) and nxt.strip() != "N":
+                rest = NOUN_HEAD.sub("", nxt, count=1)
+            elif nxt.strip() == "N" and i + 2 < len(res) and isinstance(res[i + 2], str):
+                rest, k = res[i + 2], i + 2
+            if rest:
+                lab.append(f"{'U' if p == 'W' else p}, n. {_lower_first(rest)}")
+                fired["join_label"] += 1
+                i = k + 1
+                continue
+        if isinstance(p, str) and p in POS_LETTERS and nxt is not None and HAS_CONTENT.search(nxt):
+            lab.append(f"{p}. {_lower_first(nxt)}")
+            fired["join_label"] += 1
+            i += 2
+            continue
+        lab.append(res[i])
+        i += 1
+    # 4. pieces with nothing left to read
+    final = []
+    for p in lab:
+        if (isinstance(p, str) and not p.startswith("[unglossed:") and not HAS_CONTENT.search(p)
+                and p.strip() != "I"):             # the pronoun "I" is a meaning, not debris
+            fired["drop_empty"] += 1
+            continue
+        final.append(p)
+    return final
+
+
 def clean(text: str, fired: Counter, headword: str = ""):
     """Return (cleaned, cut_tail). cleaned may be '' for a debris-only string."""
     s, tail = text, ""
@@ -196,58 +327,73 @@ def main() -> int:
     args = ap.parse_args()
 
     data = json.loads(args.db.read_text(encoding="utf-8"))
-    fired, log = Counter(), []
+    manual = json.loads(MANUAL.read_text(encoding="utf-8")) if MANUAL.exists() else {}
+    surfaces = {((e.get("form") or {}).get("surface") or "").lower() for e in data.get("lexicon", [])}
+    names = _names() - surfaces      # a gazetteer token that is also a Khasi word is not a name
+    fired, log, review = Counter(), [], []
     for entry in data.get("lexicon", []):
         sem = entry.get("semantics") or {}
         glosses = sem.get("gloss")
         if not isinstance(glosses, list):
             continue
-        new_list, changed = [], False
-        for g in glosses:
+        eid = entry.get("entry_id")
+        word = (entry.get("form") or {}).get("surface") or ""
+        pieces, tails = [], []
+        for g in glosses:                                   # pass 1: debris
             if not isinstance(g, str) or g.startswith("[unglossed:") or not needs_cleaning(g):
-                new_list.append(g); continue
-            c, tail = clean(g, fired, (entry.get("form") or {}).get("surface") or "")
-            if c != g:
-                changed = True
-                log.append({"entry_id": entry.get("entry_id"), "field": "gloss",
-                            "before": g, "after": c, "removed_tail": tail})
+                pieces.append(g); continue
+            c, tail = clean(g, fired, word)
+            if tail:
+                tails.append(tail)
             if c:
-                new_list.append(c)
-        if not changed:
-            continue
-        if not new_list:
-            new_list = [PLACEHOLDER]
+                pieces.append(c)
+        pieces = restructure(pieces, fired, names)          # pass 2: structure
+        note = None
+        if eid in manual:                                   # hand corrections
+            pieces, note = list(manual[eid]["gloss"]), manual[eid].get("note")
+            fired["manual"] += 1
+        if not pieces:
+            pieces = [PLACEHOLDER]
             fired["entry_left_unglossed"] += 1
-        sem["gloss"] = new_list
-        gn = sem.get("gloss_normalized")
-        if isinstance(gn, str) and needs_cleaning(gn):
-            c, tail = clean(gn, Counter(), (entry.get("form") or {}).get("surface") or "")
-            c = c or PLACEHOLDER
-            log.append({"entry_id": entry.get("entry_id"), "field": "gloss_normalized",
-                        "before": gn, "after": c, "removed_tail": tail})
-            sem["gloss_normalized"] = c
+        for g in pieces:
+            bad = GARBLED.findall(g) if isinstance(g, str) else []
+            if bad:
+                review.append((eid, word, "; ".join(x for x in pieces if isinstance(x, str)), " ".join(bad)))
+                break
+        if pieces == glosses:
+            continue
+        normalized = "; ".join(x for x in pieces if isinstance(x, str))
+        log.append({"entry_id": eid, "field": "gloss_list", "before": glosses, "after": pieces,
+                    "normalized_before": sem.get("gloss_normalized"), "normalized_after": normalized,
+                    "removed_tails": tails, "note": note})
+        sem["gloss"] = pieces
+        sem["gloss_normalized"] = normalized
 
-    entries = len({r["entry_id"] for r in log})
-    print(f"  gloss strings cleaned: {sum(1 for r in log if r['field'] == 'gloss')} "
-          f"in {entries} entries (+{sum(1 for r in log if r['field'] == 'gloss_normalized')} gloss_normalized)")
+    print(f"  entries changed: {len(log)}")
     for k, v in fired.most_common():
         print(f"    {k:<22}{v:>6}")
-    for r in [x for x in log if x["field"] == "gloss"][: args.show]:
-        print(f"\n  {r['entry_id']}\n    - {r['before']!r}\n    + {r['after']!r}"
-              + (f"\n    cut: {r['removed_tail']!r}" if r["removed_tail"] else ""))
+    print(f"  entries with garbled words left for a reader: {len(review)}")
+    for r in log[: args.show]:
+        print(f"\n  {r['entry_id']}\n    - {r['before']}\n    + {r['after']}"
+              + (f"\n    cut: {r['removed_tails']}" if r["removed_tails"] else ""))
     if args.dry_run:
         print("\n  --dry-run: nothing written")
         return 0
-    if not log:
-        print("\n  nothing to do"); return 0
-    backup = args.db.with_name(f"{args.db.name}.bak.{datetime.now():%Y%m%d_%H%M%S}")
-    shutil.copy2(args.db, backup)
-    args.db.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    prior = json.loads(LOG.read_text(encoding="utf-8")) if LOG.exists() else []
-    stamp = datetime.now().isoformat(timespec="seconds")
-    LOG.write_text(json.dumps(prior + [dict(r, run=stamp) for r in log], ensure_ascii=False, indent=1),
-                   encoding="utf-8")
-    print(f"\n  backup -> {backup.name}\n  log    -> {LOG.relative_to(ROOT)} ({len(log)} changes)")
+    if log:
+        backup = args.db.with_name(f"{args.db.name}.bak.{datetime.now():%Y%m%d_%H%M%S}")
+        shutil.copy2(args.db, backup)
+        args.db.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        prior = json.loads(LOG.read_text(encoding="utf-8")) if LOG.exists() else []
+        stamp = datetime.now().isoformat(timespec="seconds")
+        LOG.write_text(json.dumps(prior + [dict(r, run=stamp) for r in log], ensure_ascii=False,
+                                  indent=1), encoding="utf-8")
+        print(f"\n  backup -> {backup.name}\n  log    -> {LOG.relative_to(ROOT)} ({len(log)} entries)")
+    import csv
+    with REVIEW.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["entry_id", "surface", "gloss", "garbled", "corrected_gloss", "note"])
+        w.writerows([list(r) + ["", ""] for r in review])
+    print(f"  review -> {REVIEW.relative_to(ROOT)} ({len(review)} entries)")
     return 0
 
 

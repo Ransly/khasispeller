@@ -79,3 +79,5 @@ IMPROVEMENT_PROMPT.md
 # Before/after record of scripts/clean_glosses.py. It quotes lexicon glosses,
 # which are All Rights Reserved, so it never goes to the public repository.
 data/gloss_cleanup_log.json
+data/gloss_manual_fixes.json
+data/gloss_review.csv
