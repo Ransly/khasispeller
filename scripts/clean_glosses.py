@@ -50,6 +50,7 @@ inside brackets and numbers, and each piece was capitalised. So a gloss like
                   until the bracket closes (at most six), with ", "; the
                   capital the split added is lowered unless the word is a
                   known name in data/gazetteer.json.
+  join_square     the same for "[ … ]", joined with a space (at most three).
   join_label      a class label split from its noun: "Ka" + "N. a thing" ->
                   "Ka, n. a thing" (a lone "W" there is a misread "U"); a
                   part-of-speech letter: "V" + "To go" -> "V. to go".
@@ -233,6 +234,26 @@ def restructure(pieces: list, fired: Counter, names: set) -> list:
                 continue
         res.append(p)
         i += 1
+    # 2b. square brackets split the same way: "a thing. [Imit." + "Ab-cd.]" ->
+    #     "a thing. [Imit. ab-cd.]". Joined with a space — inside a bracket the
+    #     break was a line end as often as a comma — and at most three pieces.
+    sq, i = [], 0
+    while i < len(res):
+        p = res[i]
+        if isinstance(p, str) and p.count("[") > p.count("]"):
+            j, depth = i, p.count("[") - p.count("]")
+            while j + 1 < len(res) and j - i < 3 and depth > 0 and isinstance(res[j + 1], str):
+                j += 1
+                depth += res[j].count("[") - res[j].count("]")
+            if depth <= 0 and j > i:
+                joined = " ".join([p] + [_lower_split_capital(x, names) for x in res[i + 1:j + 1]])
+                sq.append(IMIT_BRACKET.sub(lambda m: HYPHEN_GAP.sub(r"\1-\2", m.group(0)), joined))
+                fired["join_square"] += 1
+                i = j + 1
+                continue
+        sq.append(p)
+        i += 1
+    res = sq
     # 3. labels split from their meaning: "Ka" + "N. hearth" -> "Ka, n. hearth";
     #    "V" + "To swell" -> "V. to swell". A lone "W" before a noun is a misread "U".
     lab, i = [], 0

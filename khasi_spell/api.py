@@ -465,6 +465,25 @@ _POS_ABBREV = {
 }
 
 
+# The 1906 dictionary's "[Imit. x-y.]": its preface explains "Imitatives, or
+# word-collocations, have been given where necessary", i.e. the jingle pair
+# a word enters into ("ab" -> "ab-cd"). It is not part of the meaning,
+# so it is lifted out and shown on its own line. A note the scan cut short
+# ("[Imit. ka") carries nothing readable and is dropped.
+_IMIT = re.compile(r"\[Imit\b[.:]?\s*([^\]]*)(?:\]|$)")
+_IMIT_HYPHEN_GAP = re.compile(r"(\w)- (\w)")
+
+
+def _imitatives(text: str) -> tuple[str, list]:
+    """Return (text without its [Imit. …] notes, the collocations found)."""
+    found = []
+    for m in _IMIT.finditer(text):
+        c = _IMIT_HYPHEN_GAP.sub(r"\1-\2", " ".join(m.group(1).split())).strip(" .;,")
+        if len(re.findall(r"[A-Za-zÏïÑñ]", c)) >= 4:
+            found.append(c)
+    return " ".join(_IMIT.sub(" ", text).split()).strip(), found
+
+
 def _split_senses(gloss_list, pos: str, clitic: str) -> dict:
     """Separate a dictionary gloss into senses, notes and grammar.
 
@@ -475,13 +494,14 @@ def _split_senses(gloss_list, pos: str, clitic: str) -> dict:
     `grammar.clitic`, so printing it as a sense states it twice and reads as
     though the word means "U".
 
-    Returns `{"senses": [...], "notes": [...]}`, dropping a bare article and a
-    POS abbreviation that merely repeats `grammar.pos`.
+    Returns `{"senses": [...], "notes": [...], "imitatives": [...]}`, dropping a
+    bare article and a POS abbreviation that merely repeats `grammar.pos`.
     """
-    senses, notes = [], []
+    senses, notes, imits = [], [], []
     for raw in (gloss_list or []):
         for part in str(raw).split(";"):
-            s = part.strip()
+            s, found = _imitatives(part.strip())
+            imits.extend(x for x in found if x not in imits)
             if not s:
                 continue
             # "(short o)", "(better than dynda)" — the source's own asides.
@@ -507,6 +527,8 @@ def _split_senses(gloss_list, pos: str, clitic: str) -> dict:
         out["senses"] = senses
     if notes:
         out["notes"] = notes
+    if imits:
+        out["imitatives"] = imits
     arts = _articles()
     if clitic and clitic.lower() in arts:
         out["article"] = clitic.lower()

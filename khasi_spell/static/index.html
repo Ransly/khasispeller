@@ -362,6 +362,17 @@ dl.kv dd{margin:0;font-weight:600}
 /* A part-of-speech lifted out of the sense text ("Adverb: in good condition"). */
 .senses .sn i{font-style:normal;font-size:10.5px;letter-spacing:.4px;
   text-transform:uppercase;color:var(--mut2);transform:translateY(-1px)}
+/* The dictionary's imitative — "[Imit. ab-cd.]", its word-collocation —
+   on a labelled line of its own instead of as bracketed text in a sense. */
+.wp-imit{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 8px;
+  font-size:13.5px;line-height:1.5}
+.wp-imit .lbl{font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--mut2);cursor:help}
+.wp-imit .pair{font-style:italic;color:var(--ink)}
+.wp-imit .pair + .pair::before{content:"·";font-style:normal;color:var(--mut2);margin:0 8px}
+.imit-inline{color:var(--mut)}
+.imit-inline i{font-style:normal;font-size:10px;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--mut2);margin:0 3px 0 4px}
 /* Grammar line: word class, noun-class article, gender. The class was set as
    muted body text, which read as an afterthought rather than a label. */
 .wp-gram{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px}
@@ -769,6 +780,33 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+/* "[Imit. x-y.]" is the source dictionary's imitative — in its own words,
+   "Imitatives, or word-collocations" — not part of the meaning. splitImit()
+   takes it out of a gloss; glossHtml() shows it as a small label and the pair;
+   glossPlain() is the tooltip form. A note the scan cut short ("[Imit. ka")
+   carries nothing readable and is dropped. The API does the same for the word
+   panel's senses; this covers the cards, the menus and an older server. */
+const IMIT_TIP = "Imitative: the dictionary's word-collocation, the paired "
+  + "expression this word forms";
+function splitImit(g){
+  const imits = [];
+  const text = String(g == null ? "" : g).replace(/\[Imit\b[.:]?\s*([^\]]*)(?:\]|$)/g, (_, c) => {
+    c = c.replace(/\s+/g, " ").replace(/(\w)- (\w)/g, "$1-$2").replace(/^[\s.;,]+|[\s.;,]+$/g, "");
+    if ((c.match(/[A-Za-zÏïÑñ]/g) || []).length >= 4 && !imits.includes(c)) imits.push(c);
+    return " ";
+  }).replace(/\s+/g, " ").trim();
+  return {text, imits};
+}
+function glossHtml(g){
+  const {text, imits} = splitImit(g);
+  return esc(text) + imits.map(c => '<span class="imit-inline" title="' + esc(IMIT_TIP)
+    + '"><i>imitative</i>' + esc(c) + '</span>').join("");
+}
+function glossPlain(g){
+  const {text, imits} = splitImit(g);
+  return text + imits.map(c => " (imitative: " + c + ")").join("");
+}
+
 let lastResult = null, flagged = [], cursor = 0, detailTab = "sug", _seq = 0;
 // Words whose alternative spelling the reader has dismissed. Keyed on the
 // word so a dismissal survives the re-check that every edit triggers.
@@ -1118,7 +1156,7 @@ function renderResults(res){
       + '<td><span class="tag ' + (isInvalid(c.gate) ? "err" : "warn") + '">'
       + (isInvalid(c.gate) ? FLAG.invalid : FLAG.unknown) + '</span></td>'
       + '<td><button class="chip fix" title="Replace ' + esc(c.original) + ' with '
-      + esc(c.suggestion) + (gl ? " — " + esc(gl) : "") + '"'
+      + esc(c.suggestion) + (gl ? " — " + esc(glossPlain(gl)) : "") + '"'
       + ' onclick="event.stopPropagation();applyFix(' + i + ',\'' + esc(c.suggestion) + '\')">'
       + esc(c.suggestion) + '</button></td>'
       + '<td style="color:' + pctClass(p) + ';font-weight:700" title="'
@@ -1138,7 +1176,7 @@ function renderResults(res){
     + '<span class="sub" style="margin:0">also written</span>'
     + '<span class="chips">' + liveOptions(v).map(x =>
         '<button class="chip alt" title="Replace ' + esc(v.word) + ' with ' + esc(x.variant)
-        + (x.gloss ? " — " + esc(x.gloss) : "")
+        + (x.gloss ? " — " + esc(glossPlain(x.gloss)) : "")
         + '" onclick="applyVariantPick(' + i + ',\''
         + esc(x.variant) + '\')">' + esc(x.variant)
         + '</button>').join("")
@@ -1287,7 +1325,7 @@ function openVariantMenu(i, anchor){
     + ' onclick="applyVariantPick(' + i + ',\'' + esc(x.variant) + '\');closePop()">'
     + '<span class="v">' + esc(x.variant) + '</span>'
     + (x.canonical ? '<span class="tag ok">recorded</span>' : '')
-    + (x.gloss ? '<span class="g">' + esc(x.gloss) + '</span>'
+    + (x.gloss ? '<span class="g">' + glossHtml(x.gloss) + '</span>'
                : '<span class="g">no dictionary entry'
                  + (x.source === "root" ? ' &mdash; derived form'
                     : x.source === "corpus" ? ' &mdash; in common use in the corpus' : '')
@@ -1322,7 +1360,7 @@ function openFixMenu(i, anchor){
       + '<span class="rk">' + (k + 1) + '</span>'
       + '<span class="v">' + esc(s) + '</span>'
       + (k === 0 ? '<span class="tag ok">best</span>' : '')
-      + (gl ? '<span class="g">' + esc(gl) + '</span>'
+      + (gl ? '<span class="g">' + glossHtml(gl) + '</span>'
             // Provenance is not known here: a gloss-less suggestion may be
             // a derived form or a frequent corpus word, so say only what is
             // true of both.
@@ -1657,19 +1695,31 @@ function wordPanel(w, r, a){
   // aside are lifted into their own fields there. Fall back to splitting the
   // raw gloss for a word the analyser answered without an entry.
   const mo = (a && a.morphology) || {};
-  const senseList = (mo.senses && mo.senses.length)
+  const rawSenses = (mo.senses && mo.senses.length)
       ? mo.senses : (gloss ? gloss.split(";").map(s => s.trim()).filter(Boolean) : []);
-  if (senseList.length){
+  // Imitatives: from the API when it has lifted them, and from any sense that
+  // still carries one (the fallback path, or an older server).
+  const imitList = (mo.imitatives || []).slice();
+  const senseList = [];
+  rawSenses.forEach(x => {
+    const r2 = splitImit(x);
+    r2.imits.forEach(c => { if (!imitList.includes(c)) imitList.push(c); });
+    if (r2.text) senseList.push(r2.text);
+  });
+  if (senseList.length || imitList.length){
     if (borrowed)
       h += '<p class="sub" style="margin:0 0 3px">No dictionary entry for <b>'
          + esc(w) + '</b>. The meaning below belongs to its root'
          + (mo.root ? ', <b>' + esc(mo.root) + '</b>' : '') + '.</p>';
-    h += '<p class="senses wp-lead">' + senseList.map(s => {
+    if (senseList.length) h += '<p class="senses wp-lead">' + senseList.map(s => {
       const m = String(s).match(/^([A-Za-z]{1,12})\.?\s*:\s*(.+)$/);
       return m ? '<span class="sn"><i>' + esc(m[1].toLowerCase()) + '</i>'
                  + esc(m[2]) + '</span>'
                : '<span class="sn">' + esc(s) + '</span>';
     }).join("") + '</p>';
+    if (imitList.length)
+      h += '<p class="wp-imit"><span class="lbl" title="' + esc(IMIT_TIP) + '">Imitative</span>'
+         + imitList.map(c => '<span class="pair">' + esc(c) + '</span>').join("") + '</p>';
     // Grammar of the word, as a labelled line rather than muted prose.
     //
     // The class shown is the one the DERIVATION arrives at, not the root's.
@@ -1781,7 +1831,7 @@ function wordPanel(w, r, a){
         + '<span class="body"><span class="w">' + esc(s) + '</span>'
         + (i===0 ? ' <span class="tag ok">Best match</span>' : '')
         + (c.known_confusion ? ' <span class="tag ok">known confusion</span>' : '')
-        + (gl ? '<span class="gl">' + esc(gl) + '</span>'
+        + (gl ? '<span class="gl">' + glossHtml(gl) + '</span>'
               // A gloss-less candidate may be generated or a corpus word;
               // the candidate record does not say which.
               : '<span class="gl none">no dictionary entry</span>')
@@ -2055,7 +2105,7 @@ function voteCard(r, onPick){
     // this panel wants that first; the gate and the vote explain how the
     // checker reached its verdict, which is a second question.
     + (r.gloss
-        ? '<p class="gl" style="margin:2px 0 8px">' + esc(r.gloss) + '</p>'
+        ? '<p class="gl" style="margin:2px 0 8px">' + glossHtml(r.gloss) + '</p>'
         : '<p class="gl none" style="margin:2px 0 8px">no dictionary entry'
           + (sig.morphology ? ' &mdash; derived or compound form'
              : sig.frequent ? ' &mdash; in common use in the corpus' : '')
@@ -2076,7 +2126,7 @@ function voteCard(r, onPick){
     + (r.suggestions.length
         ? '<p class="sub" style="margin-top:12px">Suggestions</p><div class="chips">'
           + topSuggestions(r.suggestions).map((s,i) => '<button class="chip"'
-            + ((r.glosses && r.glosses[i]) ? ' title="' + esc(r.glosses[i]) + '"' : '')
+            + ((r.glosses && r.glosses[i]) ? ' title="' + esc(glossPlain(r.glosses[i])) + '"' : '')
             + ' onclick="' + onPick(s) + '">' + esc(s) + ' <span class="tag mut">'
             + pctBar(matchPct(r.distances && r.distances[i], i)) + '</span></button>').join("")
           + '</div>'
@@ -2084,18 +2134,18 @@ function voteCard(r, onPick){
           // tooltip: on a touch screen there is no hover, and the meaning is
           // the thing that decides between two similar-looking spellings.
           + ((r.glosses && r.glosses[0])
-              ? '<div class="gl">' + esc(r.glosses[0]) + '</div>'
+              ? '<div class="gl">' + glossHtml(r.glosses[0]) + '</div>'
               : '<div class="gl none">no dictionary entry</div>') : "")
     + ((r.variants && r.variants.length)
         ? '<div class="altrow" style="margin-top:12px;border:0">'
           + '<span class="sub" style="margin:0">also written</span>'
           + '<span class="chips">' + r.variants.map(v =>
             '<button class="chip alt" title="Check ' + esc(v.variant) + ' instead'
-            + (v.gloss ? " — " + esc(v.gloss) : "") + '"'
+            + (v.gloss ? " — " + esc(glossPlain(v.gloss)) : "") + '"'
             + ' onclick="' + onPick(v.variant) + '">' + esc(v.variant)
             + '</button>').join("") + '</span>'
           + (r.variants[0].gloss
-              ? '<span class="gl">' + esc(r.variants[0].gloss) + '</span>' : "")
+              ? '<span class="gl">' + glossHtml(r.variants[0].gloss) + '</span>' : "")
           + '</div>' : "");
 }
 
