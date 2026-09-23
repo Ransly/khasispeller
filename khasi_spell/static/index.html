@@ -171,6 +171,10 @@ mark.flash{animation:fl 1.1s ease-out}
 .stat .b .ic{width:14px;height:14px}
 .stat .n{font-size:16px;font-weight:700;line-height:1.1}
 .stat .l{font-size:11.5px;color:var(--mut);line-height:1.25}
+/* One short line saying what the count means, so the two kinds of flagged
+   word can be told apart without hovering. */
+.stat .s{font-size:10.5px;color:var(--mut2);line-height:1.2;margin-top:1px}
+.stat[title]{cursor:help}
 .b.blue{background:var(--blue-s);color:var(--blue)}
 .b.green{background:var(--green-s);color:var(--green)}
 .b.red{background:var(--red-s);color:var(--red)}
@@ -665,7 +669,10 @@ body{
         <svg class="ic" style="width:18px;height:18px;color:var(--blue)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
         <div class="n" id="vocab">&mdash;</div>
       </div>
-      <div class="l">Khasi word forms</div>
+      <!-- "Khasi word forms" read as grammar jargon. This is the number of
+           different words the checker knows, and corrections come only from
+           them: dictionary words plus the frequent corpus words. -->
+      <div class="l" title="The number of different Khasi words the checker knows: the words in the dictionary plus common words from Khasi newspaper text. Corrections are always chosen from these." style="cursor:help">Known Khasi words</div>
       <span class="t">Preserving Khasi, Empowering Meghalaya</span>
     </div>
   </div>
@@ -967,7 +974,7 @@ function classOf(kind){ return kind === "err" ? "err" : kind === "warn" ? "warn"
 function spansOf(res){
   const out = [];
   res.corrections.forEach((c,i) => out.push({start:c.start, end:c.end,
-    kind: c.gate === 1 ? "err" : "warn", idx:i}));
+    kind: isInvalid(c.gate) ? "err" : "warn", idx:i}));
   // Variants carry their own index so the mark can be clicked. They used to
   // be idx:-1, which made the one thing a reader most wants to interact with
   // the one thing that was inert.
@@ -1032,7 +1039,8 @@ function markup(res, selectable){
            + ' onclick="event.stopPropagation();openFixMenu(' + s.idx + ', this)"'
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openFixMenu(' + s.idx + ', this)}"'
-           + ' title="' + (c.gate === 1 ? "Possible spelling error" : "Not recognised")
+           + ' title="' + (isInvalid(c.gate) ? FLAG.invalid + " — not possible in Khasi"
+                                              : FLAG.unknown + " — not in the dictionary")
            + (c.suggestion ? ' — suggested: ' + esc(c.suggestion) : "")
            + ' — click to choose"';
     } else if (s.vidx !== undefined) {
@@ -1054,14 +1062,36 @@ function markup(res, selectable){
   return html + inspectable(res.text.slice(cur));
 }
 
+/* The two kinds of flagged word, named the same everywhere on the page.
+   "Possible Errors" and "Not Recognised" did not say how they differed.
+   Gate 0 (a letter or pair that cannot stand alone, like `ng`) and gate 1
+   (breaks Khasi spelling rules) are certain: the word cannot be right as
+   written. Gate 0 used to be counted with the unknown words. Gate 3 means
+   no dictionary entry, no grammatical build and no common use in the corpus:
+   usually a typo, sometimes a word the dictionary lacks. */
+function isInvalid(g){ return g === 0 || g === 1; }
+const FLAG = {
+  invalid: "Invalid spelling",
+  unknown: "Unknown word",
+  invalidWhy: "Not possible in Khasi: the word uses a letter that is not in the "
+    + "Khasi alphabet (c, f, q, v, x, z), a letter combination Khasi does not "
+    + "allow, or a letter pair that cannot stand alone, like ng. It cannot be "
+    + "right as written. English words in the text usually land here too.",
+  unknownWhy: "Follows Khasi spelling rules, but it is not in the dictionary, "
+    + "cannot be built from a known word, and is not common in Khasi text. "
+    + "Usually a typo; sometimes a real word the dictionary does not have yet.",
+};
+
 function renderResults(res){
   const total = (res.text.match(/[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g) || []).length;
-  const errs  = res.corrections.filter(c => c.gate === 1).length;
-  const unk   = res.corrections.filter(c => c.gate !== 1).length;
+  const errs  = res.corrections.filter(c => isInvalid(c.gate)).length;
+  const unk   = res.corrections.filter(c => !isInvalid(c.gate)).length;
   const valid = Math.max(0, total - errs - unk);
 
-  const stat = (n, l, cls, svg) => '<div class="stat"><div class="b ' + cls + '">' + svg
-    + '</div><div><div class="n">' + n + '</div><div class="l">' + l + '</div></div></div>';
+  const stat = (n, l, cls, svg, sub, tip) => '<div class="stat" title="' + esc(tip) + '">'
+    + '<div class="b ' + cls + '">' + svg
+    + '</div><div><div class="n">' + n + '</div><div class="l">' + l + '</div>'
+    + '<div class="s">' + sub + '</div></div></div>';
   const S = {
     doc:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
     ok:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
@@ -1085,8 +1115,8 @@ function renderResults(res){
       + ', with meanings and why it was flagged"'
       + ' onclick="gotoWord(' + i + ')"><td>' + (i+1) + '</td>'
       + '<td><span class="tw"><b>' + esc(c.original) + '</b></span></td>'
-      + '<td><span class="tag ' + (c.gate === 1 ? "err" : "warn") + '">'
-      + (c.gate === 1 ? "Possible spelling error" : "Not recognised") + '</span></td>'
+      + '<td><span class="tag ' + (isInvalid(c.gate) ? "err" : "warn") + '">'
+      + (isInvalid(c.gate) ? FLAG.invalid : FLAG.unknown) + '</span></td>'
       + '<td><button class="chip fix" title="Replace ' + esc(c.original) + ' with '
       + esc(c.suggestion) + (gl ? " — " + esc(gl) : "") + '"'
       + ' onclick="event.stopPropagation();applyFix(' + i + ',\'' + esc(c.suggestion) + '\')">'
@@ -1142,12 +1172,18 @@ function renderResults(res){
   + '<span style="font-size:12px;color:var(--mut)">Analysis completed in '
   + (res._ms/1000).toFixed(2) + ' seconds</span></div><div class="bd">'
   + '<div class="stats">'
-  + stat(total,"Total Words","blue",S.doc) + stat(valid,"Valid Words","green",S.ok)
-  + stat(errs,"Possible Errors","red",S.bang) + stat(unk,"Not Recognised","amber",S.q)
+  + stat(total,"Total Words","blue",S.doc,"in your text","Every word in your text.")
+  + stat(valid,"Valid Words","green",S.ok,"no problem found",
+         "Nothing to report. Most are in the dictionary, built from a known word, "
+       + "or common in Khasi text. Names and acronyms are not checked and are counted here too.")
+  + stat(errs,"Invalid Spelling","red",S.bang,"not possible in Khasi",FLAG.invalidWhy)
+  + stat(unk,"Unknown Words","amber",S.q,"not in the dictionary",FLAG.unknownWhy)
   + '</div>'
   + '<div class="legend">'
-  + '<span><i class="sw" style="background:var(--red-b)"></i>Possible spelling error</span>'
-  + '<span><i class="sw" style="background:var(--amber-b)"></i>Not recognised</span>'
+  + '<span title="' + esc(FLAG.invalidWhy) + '"><i class="sw" style="background:var(--red-b)"></i>'
+  + 'Invalid spelling &mdash; not possible in Khasi</span>'
+  + '<span title="' + esc(FLAG.unknownWhy) + '"><i class="sw" style="background:var(--amber-b)"></i>'
+  + 'Unknown word &mdash; not in the dictionary</span>'
   + '<span><i class="sw" style="border-bottom:2px dotted var(--green);'
   + 'background:var(--green-s2)"></i>Correct &mdash; another spelling exists</span>'
   + '<span><i class="sw" style="background:var(--slate-s)"></i>Withheld (name)</span>'
@@ -1296,7 +1332,7 @@ function openFixMenu(i, anchor){
 
   showPop(anchor, "fix",
       '<div class="ph"><b>' + esc(c.original) + '</b><i>'
-    + (c.gate === 1 ? "spelling error" : "not recognised") + '</i></div>'
+    + (isInvalid(c.gate) ? "invalid spelling" : "unknown word") + '</i></div>'
     // With no candidate to offer, say WHY the word was flagged rather than
     // why the search came back empty. The engine carries the phonology
     // module's own wording — "Illegal characters: f — not in Khasi
@@ -1584,8 +1620,8 @@ function wordPanel(w, r, a){
   const gate = r ? r.gate : null;
   const ok = r ? r.is_correct : true;
   const badge = ok ? '<span class="tag ok">ACCEPTED</span>'
-      : gate === 1 ? '<span class="tag err">NOT A LEGAL KHASI FORM</span>'
-                   : '<span class="tag warn">NOT RECOGNISED</span>';
+      : isInvalid(gate) ? '<span class="tag err" title="' + esc(FLAG.invalidWhy) + '">INVALID SPELLING</span>'
+                        : '<span class="tag warn" title="' + esc(FLAG.unknownWhy) + '">UNKNOWN WORD</span>';
   const ipa = ((a && a.phonology && a.phonology.ipa) || {}).surface || "";
 
   /* The word's OWN gloss, when the lexicon has an entry for it.
@@ -2011,8 +2047,9 @@ function voteCard(r, onPick){
     : '<tr><td colspan="2" class="sub">no positive signal</td></tr>';
   return '<h3>' + esc(r.word) + ' '
     + (ok ? '<span class="tag ok">ACCEPTED</span>'
-          : '<span class="tag ' + (r.gate===1?"err":"warn") + '">'
-            + (r.gate===1 ? "NOT A LEGAL KHASI FORM" : "NOT RECOGNISED") + '</span>')
+          : '<span class="tag ' + (isInvalid(r.gate)?"err":"warn") + '" title="'
+            + esc(isInvalid(r.gate) ? FLAG.invalidWhy : FLAG.unknownWhy) + '">'
+            + (isInvalid(r.gate) ? "INVALID SPELLING" : "UNKNOWN WORD") + '</span>')
     + '</h3>'
     // What the word MEANS, before any of the machinery. A reader opening
     // this panel wants that first; the gate and the vote explain how the
