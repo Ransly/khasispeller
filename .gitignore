@@ -75,3 +75,7 @@ data/ocr_repair_review.csv
 
 # Working notes
 IMPROVEMENT_PROMPT.md
+
+# Before/after record of scripts/clean_glosses.py. It quotes lexicon glosses,
+# which are All Rights Reserved, so it never goes to the public repository.
+data/gloss_cleanup_log.json
