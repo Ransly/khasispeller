@@ -31,8 +31,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import threading
 from collections import OrderedDict
 from typing import Optional, Sequence
+
+from khasi_spell.ngram import pad_context
 
 BOS, EOS = "<s>", "</s>"
 BACKOFF = 0.4
@@ -52,6 +55,11 @@ class PgNgramLM:
                  cache_size: int = DEFAULT_CACHE):
         self._url = database_url or os.environ.get("DATABASE_URL", "").strip()
         self._conn = None
+        # One lock around the cache and the connection. The HTTP service
+        # calls slot_score() from several request threads; an OrderedDict
+        # being reordered and evicted concurrently can raise KeyError, and a
+        # psycopg2 connection must not run two statements at once.
+        self._lock = threading.RLock()
         self._cache: "OrderedDict[str, int]" = OrderedDict()
         self._cache_size = cache_size
         self.total = 0
@@ -90,9 +98,7 @@ class PgNgramLM:
         """Fetch only the scalars. The counts stay in the database."""
         if self._loaded:
             return self
-        import psycopg2
-        self._conn = psycopg2.connect(self._url)
-        self._conn.autocommit = True
+        self._connect()
         with self._conn.cursor() as cur:
             cur.execute("SELECT key, value FROM ngram_meta")
             rows = dict(cur.fetchall())
@@ -106,6 +112,11 @@ class PgNgramLM:
             )
         self._loaded = True
         return self
+
+    def _connect(self) -> None:
+        import psycopg2
+        self._conn = psycopg2.connect(self._url)
+        self._conn.autocommit = True
 
     @property
     def loaded(self) -> bool:
@@ -145,29 +156,54 @@ class PgNgramLM:
         which is exactly the case the ranker generates.
         """
         self.load()
-        out, missing = {}, []
-        for g in grams:
-            if g in self._cache:
-                self._cache.move_to_end(g)
-                out[g] = self._cache[g]
-                self.hits += 1
-            else:
-                missing.append(g)
-                self.misses += 1
-        if missing:
-            self.queries += 1
-            with self._conn.cursor() as cur:
-                cur.execute(
-                    "SELECT gram, count FROM ngram_counts WHERE gram = ANY(%s)",
-                    (list(set(missing)),),
-                )
-                found = dict(cur.fetchall())
-            self.fetched += len(found)
-            for g in missing:
-                c = int(found.get(g, 0))
-                self._remember(g, c)
-                out[g] = c
-        return out
+        with self._lock:
+            out, missing = {}, []
+            for g in grams:
+                c = self._cache.get(g)
+                if c is not None:
+                    self._cache.move_to_end(g)
+                    out[g] = c
+                    self.hits += 1
+                else:
+                    missing.append(g)
+                    self.misses += 1
+            if missing:
+                self.queries += 1
+                found = self._fetch(list(set(missing)))
+                self.fetched += len(found)
+                for g in missing:
+                    c = int(found.get(g, 0))
+                    self._remember(g, c)
+                    out[g] = c
+            return out
+
+    def _fetch(self, grams: list) -> dict:
+        """One round trip, reconnecting once if the connection has gone.
+
+        A managed database closes idle connections and restarts for
+        maintenance. Without a reconnect the first dropped connection made
+        every later call raise, so context re-ranking — and with it /check —
+        failed until the process restarted.
+        """
+        import psycopg2
+        sql = "SELECT gram, count FROM ngram_counts WHERE gram = ANY(%s)"
+        for attempt in (1, 2):
+            try:
+                if self._conn is None or self._conn.closed:
+                    self._connect()
+                with self._conn.cursor() as cur:
+                    cur.execute(sql, (grams,))
+                    return dict(cur.fetchall())
+            except (psycopg2.InterfaceError, psycopg2.OperationalError):
+                if attempt == 2:
+                    raise
+                try:
+                    if self._conn is not None:
+                        self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+        return {}
 
     # ------------------------------------------------------------------
     # Scoring — identical arithmetic to NgramLM, over a fetched dict
@@ -207,10 +243,12 @@ class PgNgramLM:
 
     def slot_score(self, word: str, left: Sequence[str],
                    right: Sequence[str]) -> float:
-        """Log score for *word* in a slot — one query, not fifteen."""
+        """Log score for *word* in a slot — one query, not fifteen.
+
+        Context is padded exactly as NgramLM pads it (ngram.pad_context).
+        """
         self.load()
-        l2, l1 = (list(left) + [BOS, BOS])[-2:] if len(left) < 2 else list(left)[-2:]
-        r1, r2 = (list(right) + [EOS, EOS])[:2] if len(right) < 2 else list(right)[:2]
+        (l2, l1), (r1, r2) = pad_context(left, right)
 
         keys = (self._keys_for_trigram(l2, l1, word)
                 + self._keys_for_trigram(l1, word, r1)

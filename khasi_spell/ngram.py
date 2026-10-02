@@ -33,18 +33,28 @@ import math
 from pathlib import Path
 from typing import Optional, Sequence
 
-DEFAULT_PATH = Path(__file__).parent.parent / "data" / "ngrams.json.gz"
+from khasi_engine import paths as _paths
+
+DEFAULT_PATH = _paths.data_file("ngrams.json.gz")
 
 BOS, EOS = "<s>", "</s>"
 BACKOFF = 0.4          # Brants et al.'s constant; performance is flat near it
 FLOOR = 1e-10          # keeps log() finite for words the corpus never saw
 
 
+def pad_context(left: Sequence[str], right: Sequence[str]) -> tuple:
+    """((l2, l1), (r1, r2)): the two words either side of a slot, padded with
+    sentence markers where the sentence runs out. Shared with ngram_pg."""
+    l2, l1 = ([BOS, BOS] + list(left))[-2:]
+    r1, r2 = (list(right) + [EOS, EOS])[:2]
+    return (l2, l1), (r1, r2)
+
+
 class NgramLM:
     """Trigram language model with Stupid Backoff."""
 
     def __init__(self, path: Optional[str | Path] = None, lazy: bool = True):
-        self._path = Path(path) if path else DEFAULT_PATH
+        self._path = Path(path) if path else _paths.data_file("ngrams.json.gz")
         self.uni: dict[str, int] = {}
         self.bi: dict[str, int] = {}
         self.tri: dict[str, int] = {}
@@ -84,7 +94,7 @@ class NgramLM:
 
     def info(self) -> dict:
         self.load()
-        return {"path": str(self._path), "tokens": self.total,
+        return {"path": str(self._path), "backend": "file", "tokens": self.total,
                 "unigrams": len(self.uni), "bigrams": len(self.bi),
                 "trigrams": len(self.tri), **{k: v for k, v in self.meta.items()
                                               if k.startswith(("sentences", "min_"))}}
@@ -129,10 +139,15 @@ class NgramLM:
         (l2, l1, w), (l1, w, r1) and (w, r1, r2). Everything else in the
         sentence is identical across candidates and would cancel, so scoring
         it would be wasted work and would dilute the margin.
+
+        Missing context is padded with the sentence markers the model was
+        built with: BEFORE the left words, AFTER the right ones. The left
+        padding used to be appended after the words, so a slot with exactly
+        one word to its left was scored as if it opened the sentence and
+        that word was thrown away — the second word of every sentence.
         """
         self.load()
-        l2, l1 = (list(left) + [BOS, BOS])[-2:] if len(left) < 2 else list(left)[-2:]
-        r1, r2 = (list(right) + [EOS, EOS])[:2] if len(right) < 2 else list(right)[:2]
+        (l2, l1), (r1, r2) = pad_context(left, right)
 
         total = math.log(max(self.s_trigram(l2, l1, word), FLOOR))
         total += math.log(max(self.s_trigram(l1, word, r1), FLOOR))

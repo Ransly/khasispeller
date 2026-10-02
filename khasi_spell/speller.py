@@ -18,18 +18,20 @@ Typical use
 
 Construction cost
 -----------------
-The lexicon is ~80 MB of JSON and takes roughly 15-20 seconds to load,
-so build one `KhasiSpeller` and keep it. Loading is deferred until the
-first call, so importing this module is cheap.
+The lexicon is a 64 MB JSON file (or a PostgreSQL database) and takes
+roughly 15-25 seconds to load, so build one `KhasiSpeller` and keep it.
+Loading is deferred until the first call, so importing this module is cheap.
 """
 
 from __future__ import annotations
 
-import re
-import unicodedata
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Optional
+
+from khasi_engine import tokens as _tokens
 
 
 def _nfc(text: str) -> str:
@@ -48,9 +50,11 @@ def _nfc(text: str) -> str:
     cheapest place to fix it: everything downstream then sees one spelling.
 
     Note that offsets in the returned results index the NORMALISED string,
-    which is why check_text() returns that string as `text`.
+    which is why check_text() returns that string as `text`. Only NFC is
+    applied to the text; the typographic apostrophe is tolerated at lookup
+    time instead, so the writer's own quotes survive in `corrected`.
     """
-    return unicodedata.normalize("NFC", text)
+    return _tokens.nfc(text)
 
 
 # The four gate stages the engine can stop at. Exposed because the stage
@@ -127,9 +131,10 @@ class Correction:
     gate: int = GATE_CHECKED
     method: str = ""
     # Why the word was flagged, in the phonology module's own words —
-    # "Illegal characters: f — not in Khasi orthography". Set only when the
-    # phonotactic gate is what rejected it, and carried to the UI so a word
-    # with no offerable correction can still explain itself. None otherwise.
+    # "Illegal characters: f — not in Khasi orthography" — or the checker's:
+    # "'hospital' is an English word, not a Khasi word", or a misspelled
+    # part of a compound. Carried to the UI so a word with no offerable
+    # correction can still explain itself. None otherwise.
     reason: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -184,8 +189,9 @@ class KhasiSpeller:
     Parameters
     ----------
     db_path :
-        Path to the lexicon JSON. Defaults to ``data/khasi_db.json``
-        alongside this package.
+        Path to the lexicon JSON. Defaults to ``data/khasi_db.json`` in the
+        project (or in ``KHASI_DATA_DIR`` when set). Ignored for loading when
+        ``DATABASE_URL`` is set: the lexicon then comes from PostgreSQL.
     use_embeddings :
         Enable FastText semantic re-ranking. Uses the bundled local model
         (needs gensim) or a remote Space via ``KHASI_W2V_URL``; falls back
@@ -222,6 +228,11 @@ class KhasiSpeller:
         checker offered words it then rejected — `jyla` was answered with
         `jylla`, which was flagged once accepted. ``is_known()`` is untouched
         either way. Ignored when ``use_corpus_pool`` is off.
+
+        Every one of these switches is per speller. The lexicon object is
+        shared by all spellers in a process, so corpus frequencies, the corpus
+        pool and taught words live on each speller's own checker and are never
+        written into the lexicon.
     corpus_pool_floor :
         Occurrences a corpus type needs before it may be offered. Lower
         admits more vocabulary and more noise.
@@ -251,8 +262,12 @@ class KhasiSpeller:
         self._corpus_freq_summary: Optional[dict] = None
         self._realword: Any = None
         self._ngram_lm: Any = None
-        self._variant_cache: dict = {}
+        self._lm_lock = threading.Lock()
+        # Bounded LRU. A plain dict grew with every distinct token a
+        # long-running service was ever sent.
+        self._variant_cache: "OrderedDict[str, list]" = OrderedDict()
         self._analyser: Any = None
+        self._lm_warned = False
         if eager:
             self._load()
 
@@ -354,10 +369,14 @@ class KhasiSpeller:
         Provenance: `admitted` forms are offerable because people write
         them, not because the dictionary records them. Anything showing a
         suggestion to a reader should be able to say which of the two it
-        is — `db.is_corpus_form()` answers that per word.
+        is — `is_corpus_form()` answers that per word.
         """
         self._load()
         return self._corpus_pool_summary
+
+    def is_corpus_form(self, word: str) -> bool:
+        """True when *word* is offerable only because the corpus attests it."""
+        return self._load().spell.is_corpus_form(word)
 
     @property
     def corpus_frequencies(self) -> Optional[dict]:
@@ -367,18 +386,17 @@ class KhasiSpeller:
 
     def _lm(self):
         """
-        The loaded trigram model, or None when it has not been built.
+        The trigram model, or None when none is available.
 
-        Cached on the instance: the model is ~5 MB gzipped and every token
-        of every sentence consults it, so re-reading it per call would
-        dominate the runtime. Shares the instance the real-word detector
-        already holds when there is one, so the two features never load it
-        twice.
+        One instance per speller, shared by context re-ranking and real-word
+        detection. The detector used to build its own copy, so a service that
+        ran both held two ~170 MB models. Loaded once, under a lock, because
+        the HTTP service calls this from several request threads.
         """
-        if self._realword is not None and self._realword._lm is not None:
-            return self._realword._lm
         if self._ngram_lm is None:
-            self._ngram_lm = self._build_lm()
+            with self._lm_lock:
+                if self._ngram_lm is None:
+                    self._ngram_lm = self._build_lm()
         return self._ngram_lm or None
 
     def _build_lm(self):
@@ -403,7 +421,10 @@ class KhasiSpeller:
 
         if want in ("pg", "postgres", "postgresql") or (want == "auto" and url):
             from khasi_spell.ngram_pg import PgNgramLM
-            if url and PgNgramLM.table_exists(url):
+            if not url:
+                print("[khasi-spell] KHASI_NGRAM_BACKEND asked for PostgreSQL "
+                      "but DATABASE_URL is not set; using the file model")
+            elif PgNgramLM.table_exists(url):
                 try:
                     return PgNgramLM(url).load()
                 except Exception as exc:
@@ -413,9 +434,6 @@ class KhasiSpeller:
                 print("[khasi-spell] KHASI_NGRAM_BACKEND asked for PostgreSQL "
                       "but ngram_counts is absent or empty; using the file "
                       "model. Run scripts/migrate_ngrams_to_pg.py")
-
-        if want == "pg":
-            pass  # explicit request already reported above
 
         from khasi_spell.ngram import NgramLM
         try:
@@ -429,21 +447,24 @@ class KhasiSpeller:
         State of the trigram model, shared by real-word detection and
         context re-ranking.
 
-        Reports availability without loading it — the model is ~5 MB gzipped
-        and only read when `check_realword()` is first called.
+        Reports availability without loading it: the model is read on the
+        first `check_text()` (context re-ranking) or `check_realword()`.
         """
+        import os
         from khasi_spell.ngram import NgramLM
-        # Two features can hold it — real-word detection and context
-        # re-ranking — so check both, or this reports "not loaded" while
-        # 170 MB of it is resident.
-        lm = self._realword._lm if (self._realword and self._realword._lm) else None
-        if lm is None and self._ngram_lm:
-            lm = self._ngram_lm
+        lm = self._ngram_lm or None
         if lm is not None:
             return {"available": True, "loaded": True, **lm.info()}
+        url = os.environ.get("DATABASE_URL", "").strip()
+        want = os.environ.get("KHASI_NGRAM_BACKEND", "auto").strip().lower()
+        if url and want != "file":
+            from khasi_spell.ngram_pg import PgNgramLM
+            if PgNgramLM.table_exists(url):
+                return {"available": True, "loaded": False,
+                        "path": "postgresql:ngram_counts", "backend": "postgresql"}
         probe = NgramLM()
         return {"available": probe._path.is_file(), "loaded": False,
-                "path": str(probe._path)}
+                "path": str(probe._path), "backend": "file"}
 
     @property
     def vocabulary_size(self) -> int:
@@ -455,7 +476,7 @@ class KhasiSpeller:
         overstates the vocabulary by about 2.5x. It was being shown in the
         interface as "Khasi word forms", which was wrong. Kept under this name
         because the parent platform's clients read it; use `word_forms` for
-        anything user-facing.
+        anything user-facing. Cheap: the table is cached on the lexicon.
         """
         return len(self._load().db.to_freq_dict())
 
@@ -464,13 +485,13 @@ class KhasiSpeller:
         """
         Distinct single-token forms the checker can actually offer.
 
-        `all_surface_forms()` — headwords, root lemmas and the tokens harvested
-        from multi-word entries, with multi-word strings excluded. This is the
-        honest headline number: it is exactly the set a correction can be drawn
-        from, so it describes what the tool can do rather than how big a table
-        happens to be.
+        The lexicon's `all_surface_forms()` — headwords, root lemmas and the
+        tokens harvested from multi-word entries — plus the corpus words this
+        speller admitted and any words taught with `add_word()`. Corrections
+        are drawn from these, and from forms the morphological generator
+        builds on demand from them.
         """
-        return len(self._load().db.all_surface_forms())
+        return self._load().spell.candidate_form_count()
 
     # ------------------------------------------------------------------
     # Word level
@@ -506,10 +527,15 @@ class KhasiSpeller:
             out.append(gloss)
         return out
 
-    def check(self, word: str) -> WordResult:
-        """Check one word and return the full outcome, including why."""
+    def check(self, word: str, n: int = 5) -> WordResult:
+        """Check one word and return the full outcome, including why.
+
+        *n* is the number of suggestions. The HTTP service used to call this
+        and then `suggest()` again for any other n, running the search twice
+        and re-aligning three parallel lists by hand.
+        """
         word = _nfc(word)
-        raw = self._load().spell.suggest(word, n=5)
+        raw = self._load().spell.suggest(word, n=n)
         gate = raw.get("gate_reached", GATE_CHECKED)
         return WordResult(
             word=word,
@@ -556,11 +582,15 @@ class KhasiSpeller:
         carries its diacritics or nothing is attested.
         """
         from khasi_spell import variants as _variants
-        key = word.lower()
+        key = _tokens.canonical(word).lower()
         hit = self._variant_cache.get(key)
         if hit is None:
             hit = _variants.find(word, self._load())
             self._variant_cache[key] = hit
+            while len(self._variant_cache) > 8192:
+                self._variant_cache.popitem(last=False)
+        else:
+            self._variant_cache.move_to_end(key)
         return hit
 
     def is_correct(self, word: str) -> bool:
@@ -578,78 +608,45 @@ class KhasiSpeller:
         return list(self._load().spell.suggest(_nfc(word), n=n).get("suggestions") or [])
 
     def correct(self, word: str) -> str:
-        """The single best correction, or the word unchanged if correct."""
+        """The single best correction, in the word's own capitalisation, or
+        the word unchanged if it is correct."""
         return self._load().spell.autocorrect(_nfc(word))
 
     # ------------------------------------------------------------------
     # Text level
     # ------------------------------------------------------------------
 
-    # Tokens as the engine sees them: letters plus ï/ñ, with word-internal
-    # apostrophes and hyphens held inside the token.
-    _TOKEN_RE = re.compile(r"[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*")
+    # Tokens exactly as the engine sees them (khasi_engine.tokens): every
+    # component tokenises with this one pattern, so a correction's offsets
+    # and a variant's offsets always refer to the same word.
+    _TOKEN_RE = _tokens.WORD_PATTERN
 
-    def _check_hyphenated(self, text: str, already: set) -> list["Correction"]:
+    # _check_hyphenated() was removed 2026-09-30. It verified the parts of a
+    # hyphenated compound here, in the text path only, so `check("man-miay")`
+    # accepted what `check_text()` flagged. The rule now lives in the engine
+    # (KhasiSpellChecker._hyphenated_part_veto), where every entry point
+    # passes. Tokenising here with a narrower pattern than the engine's also
+    # let it correct a fragment inside a word the engine had already flagged:
+    # `i^p-shnong` came back as `i^pa-shnong`.
+
+    @staticmethod
+    def _apply(text: str, corrections) -> str:
+        """*text* with each correction's top suggestion spliced in.
+
+        Right to left so earlier offsets stay valid, and never two edits to
+        the same characters: an overlap would slide the offsets and corrupt
+        the text. A correction with no suggestion (`sbngaifi` has an `f`) is
+        reported to the reader and left exactly as written.
         """
-        Catch hyphenated compounds whose parts are not all real words.
-
-        Phase 4 accepts any hyphenated token as `compound_hyphenated`
-        without checking that each part exists, so `man-miay` passes even
-        though `miay` does not. The compound is accepted, the misspelling
-        inside it is invisible, and `man-bha man-miay` sails through.
-
-        Rather than loosen Phase 4 — which would risk rejecting legitimate
-        compounds whose parts are unlisted — the parts are verified here and
-        a corrected compound is offered.
-        """
-        out: list[Correction] = []
-        db = self._load().db
-        for m in self._TOKEN_RE.finditer(text):
-            token = m.group(0)
-            if "-" not in token or m.start() in already:
+        out = text
+        floor = None
+        for c in sorted(corrections, key=lambda c: -c.start):
+            if not c.suggestion:
                 continue
-            # The whole token first. A hyphenated compound the lexicon
-            # records is a word in its own right, whatever its parts look
-            # like in isolation — `jrain-jrain` is an entry but neither
-            # `jrain` is, and splitting it produced the "correction"
-            # `jain-jain`, rewriting a real reduplication into a different
-            # word. `jdinkup-jainsem` and `saw-ka-siau` went the same way.
-            #
-            # This also made the two entry points contradict each other:
-            # `check()` accepts these (Phase 4 takes the compound whole)
-            # while `check_text()` flagged them, so the same word got
-            # opposite verdicts depending on which API was called — 3.3% of
-            # sampled lexicon compounds.
-            if db.is_known(token.lower()):
+            if floor is not None and c.end > floor:
                 continue
-
-            parts = token.split("-")
-            # Cheap gate next. is_correct() on an unknown word runs the full
-            # candidate scan (~2 s), so asking it about every hyphenated token
-            # and every part cost 34 s on one sentence. db.is_known() is a
-            # hash lookup; only parts that fail it are worth the real work.
-            if all(not p or db.is_known(p.lower()) for p in parts):
-                continue
-            fixed, changed = [], False
-            for part in parts:
-                if not part or db.is_known(part.lower()):
-                    fixed.append(part)
-                    continue
-                sugg = self.suggest(part, n=1)
-                if not sugg:
-                    fixed.append(part)
-                    continue
-                # Preserve the original capitalisation of the part.
-                repl = sugg[0].capitalize() if part[:1].isupper() else sugg[0]
-                fixed.append(repl)
-                changed = True
-            if changed:
-                out.append(Correction(
-                    original=token, suggestion="-".join(fixed),
-                    start=m.start(), end=m.end(),
-                    suggestions=["-".join(fixed)],
-                    gate=GATE_CHECKED, method="hyphenated_part",
-                ))
+            out = out[:c.start] + c.suggestion + out[c.end:]
+            floor = c.start
         return out
 
     def _variant_candidate(self, token: str) -> bool:
@@ -664,7 +661,7 @@ class KhasiSpeller:
         """
         from khasi_spell import variants as _v
         db = self._load().db
-        w = token.lower()
+        w = _tokens.canonical(token).lower()
         if any(ch in _v.DIACRITIC_OF.values() for ch in w):
             return True
         if db._folded_index.get(db._fold_key(w)):
@@ -715,7 +712,8 @@ class KhasiSpeller:
         out: list[VariantFlag] = []
         for m in self._TOKEN_RE.finditer(text):
             token = m.group(0)
-            if m.start() in flagged or len(token) < 2:
+            if len(token) < 2 or any(s < m.end() and m.start() < e
+                                     for s, e in flagged):
                 continue
             if foreign.is_proper_case(
                     token, foreign.is_sentence_initial(text, m.start())):
@@ -736,24 +734,27 @@ class KhasiSpeller:
         """
         Check a sentence or paragraph.
 
-        Tokens accepted by the morphology gate are skipped silently, so
-        productively derived words never appear as corrections.
+        Tokens accepted by the confidence vote are skipped silently, so
+        productively derived words never appear as corrections. Every
+        suggestion carries the capitalisation of the word it replaces.
 
         With *context* set (the default), each correction's candidates are
-        re-ranked against the neighbouring words using the trigram model,
-        which raises top-1 on the sentence benchmark from 86.4% to 89.6%
-        on held-out items. Set it False to rank every token in isolation.
-        The pass is a silent no-op when data/ngrams.json.gz has not been
-        built. See `khasi_spell.context`.
+        re-ranked against the neighbouring words in the same sentence using
+        the trigram model. See README "Context-aware ranking" for the
+        measurement. Set it False to rank every token in isolation. The pass
+        is skipped when no model is available, and if the model backend
+        fails mid-request (a dropped database connection) the corrections
+        keep the engine's own order instead of the request failing.
 
         With *skip_foreign* set (the default), proper nouns and acronyms are
         withheld from `corrections` and reported on `TextResult.skipped`
-        instead — they cut the flag rate on untouched corpus text from 8.23%
-        to about 3.5% of tokens. See `khasi_spell.foreign` for what this
-        gives up.
+        instead. A known name must be capitalised to be withheld, and a
+        capital opening a sentence, a line or a quotation does not count as
+        a name. See `khasi_spell.foreign` for what this gives up.
         """
         text = _nfc(text)
         raw = self._load().check_sentence(text)
+        text = raw.get("input", text)
         corrections = [
             Correction(
                 original=c["original"],
@@ -769,24 +770,7 @@ class KhasiSpeller:
             )
             for c in (raw.get("corrections") or [])
         ]
-        # Hyphenated compounds hiding a bad part, then re-apply so the
-        # corrected string reflects them too.
-        taken = {c.start for c in corrections}
-        extra = self._check_hyphenated(text, taken)
-        corrections.extend(extra)
         corrections.sort(key=lambda c: c.start)
-
-        corrected = raw.get("corrected", text)
-        if extra:
-            corrected = text
-            for c in sorted(corrections, key=lambda c: -c.start):
-                # A correction with no suggestion is a word known to be wrong
-                # that nothing can fix — `sbngaifi` contains an `f`. It is
-                # reported so the reader sees it, and left exactly as written,
-                # because the alternative is splicing None into their text.
-                if not c.suggestion:
-                    continue
-                corrected = corrected[:c.start] + c.suggestion + corrected[c.end:]
 
         # Withhold proper nouns and acronyms. Done before re-ranking so the
         # language model is not asked to score candidates for a token that
@@ -806,41 +790,32 @@ class KhasiSpeller:
                     skipped.append({"word": c.original, "start": c.start,
                                     "end": c.end, "reason": why,
                                     "would_suggest": c.suggestion})
-            if len(kept) != len(corrections):
-                corrections = kept
-                corrected = text
-                for c in sorted(corrections, key=lambda c: -c.start):
-                    if not c.suggestion:
-                        continue
-                    corrected = corrected[:c.start] + c.suggestion + corrected[c.end:]
+            corrections = kept
 
         # Re-rank each correction's candidates against its neighbours. The
         # engine ranks every token in isolation; the trigram model breaks
-        # ties it cannot see. Silent no-op when the model is absent, which
-        # is a normal state rather than an error.
+        # ties it cannot see. A missing model is a normal state; a failing
+        # one (PostgreSQL gone away) must not turn a spelling check into an
+        # HTTP 500, so any error leaves the engine's own order in place.
         if context and corrections:
-            moved = 0
             try:
                 from khasi_spell import context as _context
 
-                moved = _context.rerank(text, corrections, self._lm())
-            except FileNotFoundError:
-                pass
-            # Only rebuild when a top choice actually moved. Otherwise the
-            # engine's own `corrected` string stands, rather than being
-            # replaced by a reconstruction that could differ from it.
-            if moved:
-                corrected = text
-                for c in sorted(corrections, key=lambda c: -c.start):
-                    if not c.suggestion:
-                        continue
-                    corrected = corrected[:c.start] + c.suggestion + corrected[c.end:]
+                _context.rerank(text, corrections, self._lm())
+            except Exception as exc:
+                if not self._lm_warned:
+                    print(f"[khasi-spell] context re-ranking skipped: {exc}")
+                    self._lm_warned = True
 
-        flags = self._collect_variants(text, {c.start for c in corrections}) \
+        # One reconstruction, from the corrections as finally ranked and
+        # filtered, so `corrected` can never disagree with `corrections`.
+        corrected = self._apply(text, corrections)
+
+        flags = self._collect_variants(text, [(c.start, c.end) for c in corrections]) \
             if variants else []
 
         return TextResult(
-            text=raw.get("input", text),
+            text=text,
             corrected=corrected,
             corrections=corrections,
             variants=flags,
@@ -864,21 +839,24 @@ class KhasiSpeller:
         not Khasi words; this flags strings that are Khasi words but appear
         to be the wrong ones, using a trigram model over the corpus.
 
-        Measured at 96% precision and 34% recall on injected errors, with a
-        0.7% false-positive rate on untouched text. Lower *min_margin* to
-        about 7.0 for roughly half the errors at 86% precision.
+        *min_margin* applies to THIS call only. It used to be written onto
+        the shared detector, so in the HTTP service one request's
+        sensitivity became every later request's default. Defaults to
+        `RealWordDetector.min_margin`; see khasi_spell.realword for the
+        measured precision and recall at each setting.
 
-        Returns a list of `RealWordFlag`. Requires data/ngrams.json.gz —
-        raises FileNotFoundError with build instructions if it is absent.
+        Returns a list of `RealWordFlag`, with offsets into the NFC text.
+        Raises FileNotFoundError with build instructions when no trigram
+        model is available.
         """
         from khasi_spell.realword import RealWordDetector
 
         text = _nfc(text)
         if self._realword is None:
-            self._realword = RealWordDetector(self)
-        if min_margin is not None:
-            self._realword.min_margin = min_margin
-        return self._realword.check(text)
+            with self._lm_lock:
+                if self._realword is None:
+                    self._realword = RealWordDetector(self)
+        return self._realword.check(text, min_margin=min_margin)
 
     # ------------------------------------------------------------------
     # Vocabulary
@@ -886,25 +864,25 @@ class KhasiSpeller:
 
     def add_word(self, word: str, frequency: int = 20) -> None:
         """
-        Teach the checker a word for this session only.
+        Teach this speller a word for the session only.
 
-        Not persisted — the lexicon file is not written. Use this for
-        personal or institutional terms. The default frequency matches
-        the weight the lexicon assigns to a root form.
+        The word is accepted from then on, whatever its letters — names and
+        loans such as `Meghalaya` or `Congress`, which break Khasi
+        phonotactics and were still rejected after being "added" — and it
+        becomes a correction candidate, so a typo of it is corrected to it.
+
+        Not persisted, and not shared: other spellers in the process do not
+        see it. *frequency* is its weight in the ranking tie-break.
         """
         checker = self._load().spell
+        normalised = _tokens.canonical(word).lower().strip()
+        if not normalised:
+            return
         speller = checker._speller
         if speller is not None and hasattr(speller, "add_word"):
-            normalised = _nfc(word).lower()
             speller.add_word(normalised, frequency)
-            # …and make it offerable, not merely acceptable. Teaching only the
-            # frequency dictionary stopped the word being flagged but left it
-            # out of the candidate index, so a typo of the word it had just
-            # learnt still came back with no suggestion at all.
-            checker.teach_word(normalised)
-            self._variant_cache.clear()   # a new word can change variants
-        else:  # pragma: no cover - only when the Speller failed to build
-            raise RuntimeError("underlying Speller unavailable; cannot add word")
+        checker.teach_word(normalised)
+        self._variant_cache.clear()   # a new word can change variants
 
     def add_words(self, words) -> None:
         """Teach the checker several words for this session only."""

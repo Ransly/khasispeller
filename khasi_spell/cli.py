@@ -21,6 +21,7 @@ import json
 import sys
 from pathlib import Path
 
+from khasi_engine import paths as _paths
 from khasi_spell import context as _ctx
 from khasi_spell.speller import KhasiSpeller
 
@@ -40,11 +41,16 @@ BOLD = lambda s: _c("1", s)
 
 
 def _speller(args) -> KhasiSpeller:
-    return KhasiSpeller(
-        db_path=args.db,
-        use_embeddings=args.embeddings,
-        eager=True,
-    )
+    # The engine reports its start-up progress with print(). Sent to
+    # stdout, those lines came before the result, so `--json` output was
+    # not valid JSON; they go to stderr instead, where progress belongs.
+    import contextlib
+    with contextlib.redirect_stdout(sys.stderr):
+        return KhasiSpeller(
+            db_path=args.db,
+            use_embeddings=args.embeddings,
+            eager=True,
+        )
 
 
 # ----------------------------------------------------------------------
@@ -96,8 +102,18 @@ def cmd_check(args) -> int:
                           skip_foreign=not args.check_names)
 
     if args.json:
-        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
-        return 0 if not result.has_errors else 1
+        payload = result.to_dict()
+        flagged = result.has_errors
+        # --realword used to be silently ignored under --json.
+        if getattr(args, "realword", False):
+            try:
+                rw = sp.check_realword(args.text, min_margin=getattr(args, "margin", None))
+                payload["realword"] = [f.to_dict() for f in rw]
+                flagged = flagged or bool(rw)
+            except FileNotFoundError as e:
+                payload["realword_error"] = str(e)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if flagged else 0
 
     if not result.has_errors:
         print(GREEN("No spelling errors found."))
@@ -117,8 +133,9 @@ def cmd_check(args) -> int:
     print(f"{YELLOW(str(n))} issue{'s' if n != 1 else ''} found:\n")
     for c in result.corrections:
         alts = ", ".join(c.suggestions[1:4])
-        print(f"  {RED(c.original)} -> {GREEN(c.suggestion)}"
-              f"   {DIM('[' + str(c.start) + ':' + str(c.end) + ']')}")
+        print(f"  {RED(c.original)} -> "
+              + (GREEN(c.suggestion) if c.suggestion else DIM("(no suggestion)"))
+              + f"   {DIM('[' + str(c.start) + ':' + str(c.end) + ']')}")
         if alts:
             print(DIM(f"      also: {alts}"))
     print(f"\n{BOLD('Corrected:')} {result.corrected}")
@@ -207,6 +224,10 @@ def cmd_file(args) -> int:
     sp = _speller(args)
     result = sp.check_text(text, context=not args.no_context,
                           skip_foreign=not args.check_names)
+    # Offsets index the NFC-normalised text the checker returns, which is
+    # shorter than the file wherever it held decomposed ï/ñ. Line and column
+    # numbers are computed from that same string.
+    text = result.text
 
     if args.json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
@@ -215,7 +236,12 @@ def cmd_file(args) -> int:
     if args.fix:
         out = Path(args.output) if args.output else path.with_suffix(path.suffix + ".corrected")
         out.write_text(result.corrected, encoding="utf-8")
-        print(f"{len(result.corrections)} correction(s) applied -> {out}")
+        # Count what changed, not what was flagged: a word known to be wrong
+        # but with nothing to offer (`sbngaifi`) is left as written.
+        applied = sum(1 for c in result.corrections if c.suggestion)
+        left = len(result.corrections) - applied
+        print(f"{applied} correction(s) applied -> {out}"
+              + (f"; {left} flagged word(s) left unchanged (no suggestion)" if left else ""))
         return 0
 
     # Report with line numbers, which is what makes file mode useful.
@@ -240,7 +266,8 @@ def cmd_file(args) -> int:
 
     for c in result.corrections:
         line, col = locate(c.start)
-        print(f"{path}:{line}:{col}: {RED(c.original)} -> {GREEN(c.suggestion)}")
+        print(f"{path}:{line}:{col}: {RED(c.original)} -> "
+              + (GREEN(c.suggestion) if c.suggestion else DIM("(no suggestion)")))
     print(f"\n{len(result.corrections)} issue(s).")
     return 1
 
@@ -271,7 +298,11 @@ def cmd_info(args) -> int:
             "alpha": _ctx.ALPHA,
             "window": _ctx.CONTEXT_WINDOW,
         },
-        "db_path": str(args.db) if args.db else "data/khasi_db.json (bundled)",
+        # Where the lexicon actually came from. This printed the bundled JSON
+        # path even when DATABASE_URL made the engine read PostgreSQL.
+        "lexicon_source": ("PostgreSQL" if getattr(sp.analyser.db, "_database_url", None)
+                           else str(sp.analyser.db._json_path)),
+        "data_dir": str(_paths.data_dir()),
     }
     if args.json:
         print(json.dumps(info, ensure_ascii=False, indent=2))
@@ -292,7 +323,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Morphology-gated spellchecker for the Khasi language.",
     )
     p.add_argument("--db", metavar="PATH", default=None,
-                   help="path to khasi_db.json (default: bundled lexicon)")
+                   help="path to khasi_db.json (default: data/khasi_db.json, or "
+                        "KHASI_DATA_DIR; ignored when DATABASE_URL is set)")
     p.add_argument("--embeddings", action="store_true",
                    help="enable FastText re-ranking (bundled model; lowers top-1 — see README)")
     p.add_argument("--json", action="store_true", help="machine-readable output")
@@ -349,6 +381,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Same `.env` the HTTP service reads, so the CLI and the service load the
+    # lexicon from the same place. Before the speller (and so the engine) is
+    # constructed.
+    from khasi_spell.env import load_dotenv
+    load_dotenv()
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)

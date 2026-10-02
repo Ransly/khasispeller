@@ -28,9 +28,10 @@ be recomputed without re-running the 48 ms/item measurement.
 """
 import contextlib, csv, collections, json, math, random, sys, time
 from pathlib import Path
-ROOT=Path("/home/rans/Desktop/MorpSpeller/khasi-spellchecker"); sys.path.insert(0,str(ROOT))
-CSVP=Path(sys.argv[2]) if len(sys.argv)>2 else Path(
-    "/home/rans/Desktop/MorpSpeller/khasi_test_pairs_v2.csv")
+ROOT=Path(__file__).resolve().parent.parent; sys.path.insert(0,str(ROOT))
+# usage: eval_pairs.py [N_SAMPLE] [pairs.csv] [out.json]
+CSVP=Path(sys.argv[2]) if len(sys.argv)>2 else ROOT.parent/"khasi_test_pairs_v2.csv"
+OUT=Path(sys.argv[3]) if len(sys.argv)>3 else Path("pairs_raw.json")
 KHASI=set("abdeghijklmnoprstuwy'-ïñáéíóúý")
 N_SAMPLE=int(sys.argv[1]) if len(sys.argv)>1 else 12000
 
@@ -39,14 +40,19 @@ with contextlib.redirect_stdout(sys.stderr):
     from khasi_spell import KhasiSpeller
     sp=KhasiSpeller(eager=True)
 db=sp.analyser.db
-surf=set(db.all_surface_forms())
+chk=sp.analyser.spell
+# The search space is the lexicon's forms PLUS this speller's corpus pool;
+# the pool lives on the checker, not on the shared lexicon object.
+surf=set(chk.candidate_forms())
+lex=set(db.all_surface_forms())
 
 # ---- coverage of the target vocabulary -----------------------------------
 targets=sorted({r['correct_word'] for r in rows})
 cov={"targets":len(targets),
      "in_search_space":sum(1 for t in targets if t.lower() in surf),
+     "in_lexicon_forms":sum(1 for t in targets if t.lower() in lex),
      "is_known":sum(1 for t in targets if db.is_known(t.lower())),
-     "is_attested":sum(1 for t in targets if db.is_attested(t.lower()))}
+     "is_attested":sum(1 for t in targets if chk.is_attested(t.lower()))}
 print(json.dumps({"coverage":cov}), file=sys.stderr)
 
 def lev(a,b):
@@ -76,6 +82,5 @@ for i,r in enumerate(sample):
     if (i+1)%1000==0:
         print(f"  {i+1}/{len(sample)}  {(time.time()-t0)/(i+1)*1000:.0f} ms/item", file=sys.stderr)
 json.dump({"coverage":cov,"n":len(recs),"records":recs},
-          open("/tmp/claude-1000/-home-rans-Desktop-MorpSpeller/eefe74a3-329c-4ab8-8fca-7473e5f465d5/scratchpad/rg/pairs_raw.json","w"),
-          ensure_ascii=False)
+          open(OUT,"w",encoding="utf-8"), ensure_ascii=False)
 print("done", len(recs), f"{time.time()-t0:.0f}s", file=sys.stderr)

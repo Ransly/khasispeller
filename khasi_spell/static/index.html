@@ -141,6 +141,10 @@ mark.alt:hover{background:var(--green-s)}
 mark.alt::after{content:"\2194";font-size:9px;vertical-align:super;
   margin-left:3px;opacity:.7;font-weight:700}
 mark.skip{background:var(--slate-s);color:var(--mut)}
+mark.rw{background:transparent;color:inherit;border-bottom:2px dashed var(--amber);
+  border-radius:0;cursor:pointer}
+.opt-rw{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);
+  cursor:pointer;min-height:36px}
 /* `sel` marks the word the Word Details panel is currently describing. It
    carries no outline on purpose: the mark already has its own fill, and a
    ring drawn around a flagged word reads as a second, competing signal about
@@ -716,6 +720,8 @@ body{
           <button class="btn" onclick="clearAll()">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
             Clear</button>
+          <label class="opt-rw" title="Also look for real Khasi words that look wrong for their neighbours. Contextual guesses, underlined with a dashed line and never applied for you.">
+            <input type="checkbox" id="opt-rw" checked> Check word choice</label>
           <button class="btn" onclick="loadExample()">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
             Try Example</button>
@@ -779,6 +785,23 @@ body{
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* A value for a JavaScript string argument inside an inline handler. esc()
+   alone is not enough there: the browser decodes &#39; back to ' BEFORE the
+   handler runs, so a word with an apostrophe — nga'm, k'ing, ka'n, all
+   ordinary Khasi — closed the string early and the click raised a syntax
+   error. JSON.stringify makes a double-quoted literal; esc() then protects
+   the attribute. */
+const jsq = s => esc(JSON.stringify(String(s == null ? "" : s)));
+
+/* A word, exactly as the server tokenises it (khasi_engine/tokens.py):
+   Latin letters including ï ñ á é í ó ú ý, joined by an internal apostrophe
+   (straight or typographic), a hyphen, or scan debris such as ^. The page
+   used a narrower pattern, so its word count and its clickable words could
+   split a word the server treated as one. A fresh RegExp each call, since a
+   /g pattern carries state between uses. */
+const WORD_SRC = "[A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff]+"
+  + "(?:['\u2019\u02bc^~\u00ab\u00bb\u2022|\\\\{}\\[\\]\\-][A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff]+)*";
+const wordRe = () => new RegExp(WORD_SRC, "g");
 
 /* "[Imit. x-y.]" is the source dictionary's imitative — in its own words,
    "Imitatives, or word-collocations" — not part of the meaning. splitImit()
@@ -839,9 +862,9 @@ let detailsOpen = false;
 const secOpen = {};
 
 /* How many candidates to show. The engine ranks and returns five, and all
-   five are shown: top-5 accuracy is 90.8% against 72.8% at top-1, so the
-   rows past the third are where a sizeable share of the right answers
-   actually live. Display-only — the API returns what it ranked either way. */
+   five are shown: on the frozen benchmark top-5 accuracy is far above top-1
+   (see the README's current figures), so the rows past the third are where
+   a sizeable share of the right answers actually live. */
 const MAX_SUGGESTIONS = 5;
 const topSuggestions = a => (a || []).slice(0, MAX_SUGGESTIONS);
 
@@ -865,15 +888,18 @@ function matchPct(dist, i){
   if (typeof dist !== "number" || dist < 0) return null;
   return Math.max(15, Math.round(100 * Math.exp(-0.13 * dist) * (1 - 0.12 * i)));
 }
-const pctText = p => p === null ? "&mdash;" : p + "%";
 /* A plain bar instead of a number. The value was never a probability — it is
    a function of distance AND list position — and printing it as "88%" invited
    readers to take it for confidence. The bar carries the same value as length,
    so the ordering still reads at a glance, with nothing to misquote. */
-const pctBar = p => p === null
+/* The tooltip carries the actual distance, in edits, as the About page
+   promises: the bar alone could not say how far a candidate really is. */
+const pctBar = (p, dist) => p === null
   ? '<span class="nobar" title="no ranked distance">&mdash;</span>'
   : '<span class="bar" role="img" aria-label="match strength"'
-    + ' title="match strength: a view of the ranking, not a probability">'
+    + ' title="' + (typeof dist === "number"
+        ? "distance " + dist.toFixed(2) + " edits · " : "")
+    + 'match strength: a view of the ranking, not a probability">'
     + '<i style="width:' + p + '%"></i></span>';
 const pctClass = p => p === null ? "var(--mut2)"
   : p >= 75 ? "var(--green)" : p >= 55 ? "var(--amber)" : "var(--mut)";
@@ -944,7 +970,7 @@ function busy(btn, on, label){
 /* ---------------- text checking ---------------- */
 function updateCount(){
   const t = $("text").value;
-  const w = (t.match(/[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g) || []).length;
+  const w = (t.match(wordRe()) || []).length;
   $("count").textContent = t.length + " characters · " + w + " words";
 }
 function loadExample(){
@@ -969,6 +995,17 @@ async function checkText(){
   try {
     const res = await api("/check", {text, context:true, skip_foreign:true});
     if (seq !== _seq) return;                       // a newer request won
+    // Word choice: real Khasi words that look wrong in context. The README
+    // has always described this switch; the page never had it. A failure
+    // here (no language model) must not lose the spelling result.
+    res.realword = [];
+    if ($("opt-rw") && $("opt-rw").checked) {
+      try {
+        const rw = await api("/realword", {text});
+        if (seq !== _seq) return;
+        if (rw.text === res.text) res.realword = rw.flags || [];
+      } catch (e) { res.realword = []; }
+    }
     res._ms = performance.now() - t0;
     lastResult = res;
     flagged = res.corrections.slice();
@@ -979,9 +1016,11 @@ async function checkText(){
     detailsOpen = false;
     renderResults(res); renderDetail();
     const n = res.corrections.length, v = (res.variants || []).filter(isLive).length;
+    const rwn = res.realword.length;
     announce(
       (n === 0 ? "Check complete. No spelling problems found."
                : "Check complete. " + n + (n === 1 ? " word" : " words") + " flagged.")
+      + (rwn ? " " + rwn + " possible wrong " + (rwn === 1 ? "word" : "words") + " to review." : "")
       + (v ? " " + v + " alternative " + (v === 1 ? "spelling" : "spellings") + " available." : "")
     );
   } catch (e) {
@@ -1006,13 +1045,13 @@ function announce(msg){
 }
 
 function classOf(kind){ return kind === "err" ? "err" : kind === "warn" ? "warn"
-                             : kind === "alt" ? "alt" : "skip"; }
+                             : kind === "alt" ? "alt" : kind === "rw" ? "rw" : "skip"; }
 
 /* Build one ordered list of marked spans from corrections, variants and skips. */
 function spansOf(res){
   const out = [];
   res.corrections.forEach((c,i) => out.push({start:c.start, end:c.end,
-    kind: isInvalid(c.gate) ? "err" : "warn", idx:i}));
+    kind: isRed(c) ? "err" : "warn", idx:i}));
   // Variants carry their own index so the mark can be clicked. They used to
   // be idx:-1, which made the one thing a reader most wants to interact with
   // the one thing that was inert.
@@ -1022,6 +1061,9 @@ function spansOf(res){
   });
   (res.skipped || []).forEach(s => {
     if (typeof s.start === "number") out.push({start:s.start, end:s.end, kind:"skip", idx:-1});
+  });
+  (res.realword || []).forEach((f,i) => {
+    out.push({start:f.start, end:f.end, kind:"rw", ridx:i, idx:-1});
   });
   return out.sort((a,b) => a.start - b.start);
 }
@@ -1033,12 +1075,12 @@ function spansOf(res){
    since acceptance is what the morphology actually decides. */
 function inspectable(chunk){
   let out = "", last = 0;
-  const re = /[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g;
+  const re = wordRe();
   let m;
   while ((m = re.exec(chunk)) !== null){
     out += esc(chunk.slice(last, m.index));
     out += '<span class="tok" title="Show why this word was accepted"'
-         + ' onclick="inspectWord(\'' + esc(m[0]) + '\')">' + esc(m[0]) + '</span>';
+         + ' onclick="inspectWord(' + jsq(m[0]) + ')">' + esc(m[0]) + '</span>';
     last = m.index + m[0].length;
   }
   return out + esc(chunk.slice(last));
@@ -1077,8 +1119,10 @@ function markup(res, selectable){
            + ' onclick="event.stopPropagation();openFixMenu(' + s.idx + ', this)"'
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openFixMenu(' + s.idx + ', this)}"'
-           + ' title="' + (isInvalid(c.gate) ? FLAG.invalid + " — not possible in Khasi"
-                                              : FLAG.unknown + " — not in the dictionary")
+           + ' title="' + (isEnglish(c) ? FLAG.english + " — not a Khasi word"
+                          : isInvalid(c.gate) ? FLAG.invalid + " — not possible in Khasi"
+                          : isJoin(c) ? FLAG.join + " — join it to the next word"
+                                      : FLAG.unknown + " — not in the dictionary")
            + (c.suggestion ? ' — suggested: ' + esc(c.suggestion) : "")
            + ' — click to choose"';
     } else if (s.vidx !== undefined) {
@@ -1092,6 +1136,14 @@ function markup(res, selectable){
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openVariantMenu(' + s.vidx + ', this)}"'
            + ' title="Also written: ' + esc(alts.join(", ")) + ' — click to choose"';
+    } else if (s.ridx !== undefined) {
+      const f = res.realword[s.ridx];
+      attr = ' id="rw' + s.ridx + '" tabindex="0" role="button"'
+           + ' aria-haspopup="menu" aria-expanded="false"'
+           + ' onclick="event.stopPropagation();openWordChoiceMenu(' + s.ridx + ', this)"'
+           + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
+           + 'event.preventDefault();openWordChoiceMenu(' + s.ridx + ', this)}"'
+           + ' title="' + esc(FLAG.realword + " — perhaps " + f.suggestion + "? Click to choose") + '"';
     }
     html += '<mark class="' + classOf(s.kind) + sel + '"' + attr + '>'
           + esc(res.text.slice(s.start, s.end)) + '</mark>';
@@ -1108,23 +1160,52 @@ function markup(res, selectable){
    no dictionary entry, no grammatical build and no common use in the corpus:
    usually a typo, sometimes a word the dictionary lacks. */
 function isInvalid(g){ return g === 0 || g === 1; }
+/* A spaced bound prefix (`jing ialehkai`) or a word broken across a line
+   (`kiiyn- nah`). Both halves may be real words; the fix is to write them as
+   one. These used to come back as gate 2 ("accepted") and were labelled
+   "Unknown word — not in the dictionary", which described neither. */
+const JOIN_METHODS = ["bound_prefix_spaced", "hyphen_line_break"];
+function isJoin(c){ return !!c && JOIN_METHODS.includes(c.method); }
+/* An English word (`hospital`, `state`): rejected by ruling, with no Khasi
+   suggestion, and counted with the invalid spellings. */
+function isEnglish(c){ return !!c && c.method === "english_word"; }
+function isRed(c){ return isInvalid(c.gate) || isEnglish(c); }
+function flagLabel(c){
+  return isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
+       : isJoin(c) ? FLAG.join : FLAG.unknown;
+}
 const FLAG = {
   invalid: "Invalid spelling",
   unknown: "Unknown word",
+  join: "Written apart",
+  joinWhy: "A prefix that cannot stand alone, or a word broken by a line-end "
+    + "hyphen, is written apart from the rest of its word. Join them.",
+  realword: "Word choice",
+  realwordWhy: "A real Khasi word that looks wrong for its neighbours: another "
+    + "word fits the sentence much better. A contextual guess, not a spelling "
+    + "error — check before accepting.",
   invalidWhy: "Not possible in Khasi: the word uses a letter that is not in the "
     + "Khasi alphabet (c, f, q, v, x, z), a letter combination Khasi does not "
     + "allow, or a letter pair that cannot stand alone, like ng. It cannot be "
-    + "right as written. English words in the text usually land here too.",
+    + "right as written. English words are counted here too.",
+  english: "English word",
+  englishWhy: "An English word, not a Khasi one. English words are flagged even "
+    + "when Khasi writers use them often (hospital, state), and no Khasi "
+    + "replacement is suggested: write the Khasi word, or leave it if you "
+    + "mean to use English.",
   unknownWhy: "Follows Khasi spelling rules, but it is not in the dictionary, "
     + "cannot be built from a known word, and is not common in Khasi text. "
     + "Usually a typo; sometimes a real word the dictionary does not have yet.",
 };
 
 function renderResults(res){
-  const total = (res.text.match(/[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*/g) || []).length;
-  const errs  = res.corrections.filter(c => isInvalid(c.gate)).length;
-  const unk   = res.corrections.filter(c => !isInvalid(c.gate)).length;
-  const valid = Math.max(0, total - errs - unk);
+  const total = (res.text.match(wordRe()) || []).length;
+  const errs  = res.corrections.filter(c => isRed(c)).length;
+  const joins = res.corrections.filter(c => !isRed(c) && isJoin(c)).length;
+  const unk   = res.corrections.filter(c => !isRed(c) && !isJoin(c)).length;
+  const rws   = (res.realword || []).length;
+  // A join covers two tokens of the count; a word-choice flag is a real word.
+  const valid = Math.max(0, total - errs - unk - 2 * joins);
 
   const stat = (n, l, cls, svg, sub, tip) => '<div class="stat" title="' + esc(tip) + '">'
     + '<div class="b ' + cls + '">' + svg
@@ -1137,62 +1218,7 @@ function renderResults(res){
     q:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.7-.7 1.3M12 16h.01"/></svg>'
   };
 
-  const rows = res.corrections.map((c,i) => {
-    const p = matchPct(c.distances && c.distances[0], 0);
-    const gl = (c.glosses && c.glosses[0]) || "";
-    // The suggestion chip is the action — clicking it rewrites the word — so
-    // it is styled as one. Blue for "apply this correction", to sit apart
-    // from the green chips that offer an alternative spelling of a word that
-    // is already right. A plain bordered chip signalled neither.
-    // The row itself selects the word in the Word Details panel — a separate
-    // button for that was one more thing to explain. The suggestion chip
-    // stops propagation so clicking it still applies the fix rather than
-    // merely selecting the row.
-    return '<tr class="pick' + (i === cursor ? ' active' : '') + '"'
-      + ' title="Show all suggestions for ' + esc(c.original)
-      + ', with meanings and why it was flagged"'
-      + ' onclick="gotoWord(' + i + ')"><td>' + (i+1) + '</td>'
-      + '<td><span class="tw"><b>' + esc(c.original) + '</b></span></td>'
-      + '<td><span class="tag ' + (isInvalid(c.gate) ? "err" : "warn") + '">'
-      + (isInvalid(c.gate) ? FLAG.invalid : FLAG.unknown) + '</span></td>'
-      + '<td><button class="chip fix" title="Replace ' + esc(c.original) + ' with '
-      + esc(c.suggestion) + (gl ? " — " + esc(glossPlain(gl)) : "") + '"'
-      + ' onclick="event.stopPropagation();applyFix(' + i + ',\'' + esc(c.suggestion) + '\')">'
-      + esc(c.suggestion) + '</button></td>'
-      + '<td style="color:' + pctClass(p) + ';font-weight:700" title="'
-      + (p === null ? "no ranked distance: built by the hyphenated-compound path"
-                    : "from the blended phoneme/Damerau distance and rank")
-      + '">' + pctBar(p) + '</td></tr>';
-  }).join("");
-
-  const alts = (res.variants || []).map((v,i) =>
-    !isLive(v) ? "" :
-      // The word itself opens its detail panel, so a reader never has to go
-      // hunting in the marked-up text to ask about the word already in front
-      // of them. Same for the rows in the corrections table above.
-      '<div class="altrow" id="altrow-v' + i + '"><span class="w tok"'
-    + ' title="Show the meaning and why ' + esc(v.word) + ' was accepted"'
-    + ' onclick="inspectWord(\'' + esc(v.word) + '\')">' + esc(v.word) + '</span>'
-    + '<span class="sub" style="margin:0">also written</span>'
-    + '<span class="chips">' + liveOptions(v).map(x =>
-        '<button class="chip alt" title="Replace ' + esc(v.word) + ' with ' + esc(x.variant)
-        + (x.gloss ? " — " + esc(glossPlain(x.gloss)) : "")
-        + '" onclick="applyVariantPick(' + i + ',\''
-        + esc(x.variant) + '\')">' + esc(x.variant)
-        + '</button>').join("")
-    + '</span>'
-    + '<span class="acts">'
-    + '<button class="btn sm" title="Use ' + esc(preferredVariant(v))
-    + '" onclick="acceptVariant(' + i + ')">&#10003; Accept</button>'
-    + '<button class="btn sm" title="Keep ' + esc(v.word)
-    + ' and stop offering this" onclick="ignoreVariant(' + i + ')">'
-    + '&#10005; Ignore</button></span>'
-    + '</div>').join("");
-
-  // Misspellings are NOT listed here. They already appear in the table above
-  // with their suggestions, and repeating them under a heading that says
-  // "Alternative Spellings" muddles the one distinction this panel exists to
-  // draw: an alternative is a second correct spelling, not a correction.
+  // Names and acronyms withheld from checking, one chip per word.
   const skipped = (res.skipped || []).length
     ? '<div class="panel"><h3>Withheld from checking</h3>'
       + '<p class="sub">Proper nouns and acronyms are never corrected. '
@@ -1225,6 +1251,12 @@ function renderResults(res){
   + '<span><i class="sw" style="border-bottom:2px dotted var(--green);'
   + 'background:var(--green-s2)"></i>Correct &mdash; another spelling exists</span>'
   + '<span><i class="sw" style="background:var(--slate-s)"></i>Withheld (name)</span>'
+  + (joins ? '<span title="' + esc(FLAG.joinWhy) + '"><i class="sw" style="background:var(--amber-b)"></i>'
+      + FLAG.join + ' &mdash; ' + joins + ' to join</span>' : '')
+  + ($("opt-rw") && $("opt-rw").checked
+      ? '<span title="' + esc(FLAG.realwordWhy) + '"><i class="sw" style="border-bottom:2px dashed var(--amber);'
+        + 'background:transparent"></i>' + FLAG.realword + ' &mdash; '
+        + (rws ? rws + ' to review' : 'nothing flagged') + '</span>' : '')
   + '</div>'
   // The corrections table is gone. Every column it carried — status, the
   // suggested word, the match percentage — is now in the popover on the
@@ -1240,20 +1272,13 @@ function renderResults(res){
   // did anything at all.
   + '<span class="h3note">Click a word for more detail</span></h3>'
   + '<div class="analysis" id="analysis">' + markup(res, true) + '</div>'
-  + (rows ? '<p class="sub" style="margin-top:12px">Click a highlighted word '
+  + ((res.corrections.length || rws) ? '<p class="sub" style="margin-top:12px">Click a highlighted word '
       + 'for its suggestions.</p>'
       : '<p class="sub" style="margin-top:12px">No spelling problems found.</p>')
   + '</div>'
   // The Alternative Spellings panel is gone, and so are its bulk buttons.
-  // Each row's word, its offered spelling and its Accept/Ignore all live in
-  // the green popover on the word itself, which additionally carries the
-  // meaning the row never showed.
-  //
-  // "Accept all" is not merely redundant, it was unsafe: the variant engine
-  // also offers the PLAIN spelling of a word that already carries its
-  // diacritics (route 2, `aiñ` -> `ain`), so accepting every offer at once
-  // rewrote correct words into forms this project has since ruled wrong —
-  // `ïaid` back to `iaid`, `suk-u-saiñ` back to `suk-u-sain`. Choosing a
+  // Each word's offered spelling and its Accept/Ignore live in the green
+  // popover on the word itself, which also carries the meaning. Choosing a
   // spelling is a per-word decision and the popover makes it one.
   + skipped
   + '<div class="row" style="margin-top:14px">'
@@ -1322,7 +1347,7 @@ function openVariantMenu(i, anchor){
 
   const opts = liveOptions(v).map((x, k) =>
       '<button class="opt" role="menuitem" data-k="' + k + '"'
-    + ' onclick="applyVariantPick(' + i + ',\'' + esc(x.variant) + '\');closePop()">'
+    + ' onclick="applyVariantPick(' + i + ',' + jsq(x.variant) + ');closePop()">'
     + '<span class="v">' + esc(x.variant) + '</span>'
     + (x.canonical ? '<span class="tag ok">recorded</span>' : '')
     + (x.gloss ? '<span class="g">' + glossHtml(x.gloss) + '</span>'
@@ -1335,7 +1360,7 @@ function openVariantMenu(i, anchor){
   showPop(anchor, "", '<div class="ph"><b>' + esc(v.word) + '</b><i>also written</i></div>'
     + opts
     + '<div class="pf">'
-    + '<button class="btn sm" onclick="closePop();inspectWord(\'' + esc(v.word) + '\')">Details</button>'
+    + '<button class="btn sm" onclick="closePop();inspectWord(' + jsq(v.word) + ')">Details</button>'
     + '<button class="btn sm" onclick="closePop();ignoreVariant(' + i + ')">Keep as is</button>'
     + '</div>');
 }
@@ -1355,8 +1380,9 @@ function openFixMenu(i, anchor){
     const p = matchPct(c.distances && c.distances[k], k);
     const gl = (c.glosses && c.glosses[k]) || "";
     return '<button class="opt" role="menuitem"'
-      + ' onclick="applyFix(' + i + ',\'' + esc(s) + '\');closePop()">'
-      + '<span class="m" style="color:' + pctClass(p) + '">' + pctBar(p) + '</span>'
+      + ' onclick="applyFix(' + i + ',' + jsq(s) + ');closePop()">'
+      + '<span class="m" style="color:' + pctClass(p) + '">'
+      + pctBar(p, c.distances && c.distances[k]) + '</span>'
       + '<span class="rk">' + (k + 1) + '</span>'
       + '<span class="v">' + esc(s) + '</span>'
       + (k === 0 ? '<span class="tag ok">best</span>' : '')
@@ -1370,7 +1396,7 @@ function openFixMenu(i, anchor){
 
   showPop(anchor, "fix",
       '<div class="ph"><b>' + esc(c.original) + '</b><i>'
-    + (isInvalid(c.gate) ? "invalid spelling" : "unknown word") + '</i></div>'
+    + flagLabel(c).toLowerCase() + '</i></div>'
     // With no candidate to offer, say WHY the word was flagged rather than
     // why the search came back empty. The engine carries the phonology
     // module's own wording — "Illegal characters: f — not in Khasi
@@ -1382,6 +1408,32 @@ function openFixMenu(i, anchor){
     + '<div class="pf">'
     + '<button class="btn sm" onclick="closePop();gotoWord(' + i + ')">Details</button>'
     + '</div>');
+}
+
+/* The menu for a word-choice flag. Deliberately the weakest-worded of the
+   three: the word IS Khasi, the model only thinks another fits better. */
+function openWordChoiceMenu(i, anchor){
+  const same = popAnchor === anchor;
+  closePop();
+  if (same) return;
+  const f = lastResult && lastResult.realword && lastResult.realword[i];
+  if (!f) return;
+  showPop(anchor, "fix",
+      '<div class="ph"><b>' + esc(f.word) + '</b><i>word choice</i></div>'
+    + '<button class="opt" role="menuitem" onclick="applyAt(' + f.start + ',' + f.end + ','
+      + jsq(f.suggestion) + ');closePop()">'
+    + '<span class="v">' + esc(f.suggestion) + '</span>'
+    + '<span class="g">fits this sentence better by ' + esc(f.margin.toFixed(1))
+    + ' log units</span></button>'
+    + '<div class="opt" style="cursor:default"><span class="g">' + esc(FLAG.realwordWhy)
+    + '</span></div>'
+    + '<div class="pf"><button class="btn sm" onclick="closePop();dismissWordChoice('
+    + i + ')">Keep ' + esc(f.word) + '</button></div>');
+}
+function dismissWordChoice(i){
+  if (!lastResult || !lastResult.realword) return;
+  lastResult.realword.splice(i, 1);
+  renderResults(lastResult); renderDetail();
 }
 
 function placePop(pop, anchor){
@@ -1411,26 +1463,6 @@ document.addEventListener("click", e => {
 window.addEventListener("resize", closePop);
 
 /* ---------------- sidebar detail ---------------- */
-function gotoAlt(i){
-  // Clicking a marked word should show what the alternative IS, not silently
-  // apply it: the word is already correct, so replacing it is a choice the
-  // reader makes, not one the click makes for them.
-  const row = $("altrow-v" + i);
-  if (row) {
-    row.scrollIntoView({behavior: "smooth", block: "center"});
-    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
-  }
-  const mk = $("alt" + i);
-  if (mk) { mk.classList.remove("flash"); void mk.offsetWidth; mk.classList.add("flash"); }
-  // A word carrying an alternative spelling is still a word, and clicking it
-  // must open its detail panel like any other. This route used to only scroll
-  // to the Alternative Spellings row, so once the panel became click-to-open
-  // these words — the highlighted ones, the ones a reader is most likely to
-  // click — opened nothing at all.
-  const v = lastResult && lastResult.variants && lastResult.variants[i];
-  if (v && v.word) inspectWord(v.word);
-}
-
 /* Selecting a word has to update the table too, not just the sidebar and the
    marked-up text — otherwise the row highlight and the Details/Showing label
    go stale and nothing connects the table to the panel beside it. */
@@ -1439,9 +1471,14 @@ function gotoWord(i){
   detailsOpen = true;              // clicking a flagged word opens the panel
   if (lastResult) renderResults(lastResult);
   // A flagged word now opens the SAME panel as any other word, rather than a
-  // separate tabbed view — one shape for every word.
+  // separate tabbed view — one shape for every word. A word written apart
+  // is explained through the joined word: "jing ialehkai" is two tokens and
+  // would otherwise be analysed as one impossible string.
   const c = flagged[i];
-  if (c) inspectWord(c.original); else renderDetail();
+  if (c && isJoin(c) && c.suggestion)
+    inspectWord(c.suggestion, "Written apart in your text as \u201c" + c.original + "\u201d.");
+  else if (c) inspectWord(c.original);
+  else renderDetail();
 }
 function pageWord(d){ if (!flagged.length) return;
   cursor = (cursor + d + flagged.length) % flagged.length; gotoWord(cursor); }
@@ -1450,19 +1487,26 @@ function pageWord(d){ if (!flagged.length) return;
    the /check response: the lexicon is already loaded, so one extra call is
    cheap, whereas carrying a vote for every token would make the payload grow
    with document length instead of with error count. */
-async function inspectWord(w){
-  inspected = {word: w, loading: true};
+let _inspectSeq = 0;
+async function inspectWord(w, note){
+  const seq = ++_inspectSeq;
+  inspected = {word: w, loading: true, note};
   detailsOpen = true;
   renderDetail();
   // Both halves of the panel are wanted every time now, so fetch them
   // together rather than lazily on a tab switch. loadAnalysis caches and
   // re-renders on its own, so the panel fills in whichever order they land.
   loadAnalysis(w);
+  let next;
   try {
-    inspected = {word: w, data: await api("/word", {word: w, n: MAX_SUGGESTIONS})};
+    next = {word: w, note, data: await api("/word", {word: w, n: MAX_SUGGESTIONS})};
   } catch (e) {
-    inspected = {word: w, error: e.message};
+    next = {word: w, note, error: e.message};
   }
+  // A slower answer for a word clicked earlier must not replace the panel
+  // for the word clicked last.
+  if (seq !== _inspectSeq) return;
+  inspected = next;
   renderDetail();
 }
 function closeInspect(){ inspected = null; detailsOpen = false; renderDetail(); }
@@ -1483,7 +1527,7 @@ async function loadAnalysis(word){
   if (key in analysisCache) return;
   analysisCache[key] = null;                    // claim it, so we fetch once
   try { analysisCache[key] = await api("/analyse", {word}); }
-  catch (e) { analysisCache[key] = null; }
+  catch (e) { delete analysisCache[key]; }      // allow a retry next time
   renderDetail();
 }
 
@@ -1654,10 +1698,11 @@ function analysisHtml(a){
    gate/method/`confidence_gate` line (engine diagnostics, not linguistics);
    the tab strip; and the Examples tab, which only ever said examples were
    unavailable from this endpoint. */
-function wordPanel(w, r, a){
+function wordPanel(w, r, a, note){
   const gate = r ? r.gate : null;
   const ok = r ? r.is_correct : true;
   const badge = ok ? '<span class="tag ok">ACCEPTED</span>'
+      : isEnglish(r) ? '<span class="tag err" title="' + esc(FLAG.englishWhy) + '">ENGLISH WORD</span>'
       : isInvalid(gate) ? '<span class="tag err" title="' + esc(FLAG.invalidWhy) + '">INVALID SPELLING</span>'
                         : '<span class="tag warn" title="' + esc(FLAG.unknownWhy) + '">UNKNOWN WORD</span>';
   const ipa = ((a && a.phonology && a.phonology.ipa) || {}).surface || "";
@@ -1677,10 +1722,10 @@ function wordPanel(w, r, a){
 
   let h = '<div class="wordhead"><span class="w">' + esc(w) + '</span>' + badge
     + (window.speechSynthesis ? '<button class="speak" title="Read aloud with the browser '
-      + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(\''
-      + esc(w) + '\')">'
+      + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(' + jsq(w) + ')">'
       + '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>' : "")
-    + '</div><div class="bd">';
+    + '</div><div class="bd">'
+    + (note ? '<p class="sub" style="margin:0 0 8px">' + esc(note) + '</p>' : '');
 
   // Meaning first: it is what the reader came for, and it is the one line
   // that is useful whether the word is right or wrong.
@@ -1826,7 +1871,7 @@ function wordPanel(w, r, a){
                                                      : "add " + esc(o.to)) + '</span>'
         ).join(" ");
       return '<button class="sug' + (i===0 ? " top" : "") + '"'
-        + ' onclick="applyPick(\'' + esc(w) + '\',\'' + esc(s) + '\')">'
+        + ' onclick="applyPick(' + jsq(w) + ',' + jsq(s) + ')">'
         + '<span class="rk">' + (i+1) + '</span>'
         + '<span class="body"><span class="w">' + esc(s) + '</span>'
         + (i===0 ? ' <span class="tag ok">Best match</span>' : '')
@@ -1836,7 +1881,8 @@ function wordPanel(w, r, a){
               // the candidate record does not say which.
               : '<span class="gl none">no dictionary entry</span>')
         + (ops ? '<span class="ops">' + ops + '</span>' : '')
-        + '</span><span class="m"><b style="color:' + pctClass(p) + '">' + pctBar(p)
+        + '</span><span class="m"><b style="color:' + pctClass(p) + '">'
+        + pctBar(p, r.distances && r.distances[i])
         + '</b><i>match</i></span></button>';
     }).join("");
     h += '<div class="wp-sec"><h4>Suggested corrections</h4>' + list
@@ -1888,7 +1934,7 @@ function renderDetail(){
       ? '<div class="bd"><span class="tag err">Error</span> ' + esc(inspected.error)
         + '</div>'
       : wordPanel(inspected.word, inspected.data,
-                  analysisCache[inspected.word.toLowerCase()]);
+                  analysisCache[inspected.word.toLowerCase()], inspected.note);
 }
 
 function say(w){
@@ -1908,13 +1954,10 @@ function preferredVariant(v){
   return pick ? pick.variant : "";
 }
 
-/* Accepting settles the word, so it must silence the row exactly as ignoring
-   does — and it has to silence BOTH spellings.
-
-   The alternative relation is symmetric: `iaid` offers `ïaid`, and `ïaid`
-   offers `iaid` right back. Accept only, and the re-check that follows finds
-   the newly written `ïaid`, offers the reverse swap, and the panel invites
-   you to undo what you just did — indefinitely. Recording both sides ends it. */
+/* Accepting settles the word, so it must silence the offer exactly as
+   ignoring does. Only the offers leading AWAY from the chosen spelling are
+   recorded, so a later check of the same text does not invite the reader to
+   undo a choice they have made. */
 function settleVariant(v, chosen){
   if (!v || !chosen) return;
   // Record only the offers that would lead AWAY from the spelling just
@@ -1934,13 +1977,8 @@ function acceptVariant(i){
   applyAt(v.start, v.end, pick);
 }
 
-/* Picking a spelling from the popover. Must settle the group BEFORE applying,
-   exactly as acceptVariant does: the re-check that follows would otherwise
-   look at the word just written and offer the spelling it came from — route 2
-   hands back the plain form of a diacritic word — so the word stayed green
-   after the reader had already decided. settleVariant() records the original
-   AND every spelling offered for it, so neither side of the pair is offered
-   again. */
+/* Picking a spelling from the popover. Settles the group BEFORE applying,
+   exactly as acceptVariant does, so the choice sticks across checks. */
 function applyVariantPick(i, variant){
   const v = lastResult && lastResult.variants && lastResult.variants[i];
   if (!v) return;
@@ -1955,28 +1993,6 @@ function ignoreVariant(i){
   const v = lastResult.variants[i];
   if (v) ignoredVariants.add(v.word.toLowerCase());
   renderResults(lastResult);
-}
-
-function acceptAllVariants(btn){
-  const vs = (lastResult.variants || [])
-    .filter(v => isLive(v) && preferredVariant(v))
-    .sort((a,b) => b.start - a.start);          // back to front
-  if (!vs.length) return;
-  // Splice from the end so each replacement cannot move the ones still to
-  // come, in the checked copy only, then redraw once.
-  for (const v of vs) {
-    const pick = preferredVariant(v);   // read before settling changes it
-    settleVariant(v, pick);
-    spliceResult(lastResult, v.start, v.end, pick);
-  }
-  flagged = lastResult.corrections.slice();
-  closePop();
-  renderResults(lastResult); renderDetail();   // the text visibly changes
-}
-
-function ignoreAllVariants(btn){
-  for (const v of (lastResult.variants || [])) ignoredVariants.add(v.word.toLowerCase());
-  renderResults(lastResult);   // the panel disappears; that is the feedback
 }
 
 /* A replacement takes the capitalisation of the word it replaces. The engine
@@ -2010,6 +2026,7 @@ function spliceResult(r, start, end, replacement){
   r.corrections = r.corrections.filter(keep).map(shift);
   r.variants = (r.variants || []).filter(keep).map(shift);
   r.skipped = (r.skipped || []).filter(keep).map(shift);
+  r.realword = (r.realword || []).filter(keep).map(shift);
   return rep;
 }
 function applyAt(start, end, replacement){
@@ -2128,7 +2145,8 @@ function voteCard(r, onPick){
           + topSuggestions(r.suggestions).map((s,i) => '<button class="chip"'
             + ((r.glosses && r.glosses[i]) ? ' title="' + esc(glossPlain(r.glosses[i])) + '"' : '')
             + ' onclick="' + onPick(s) + '">' + esc(s) + ' <span class="tag mut">'
-            + pctBar(matchPct(r.distances && r.distances[i], i)) + '</span></button>').join("")
+            + pctBar(matchPct(r.distances && r.distances[i], i), r.distances && r.distances[i])
+            + '</span></button>').join("")
           + '</div>'
           // The gloss of the top candidate, shown rather than hidden in a
           // tooltip: on a touch screen there is no hover, and the meaning is
@@ -2164,34 +2182,48 @@ function renderLearn(){
   $("learn").dataset.done = "1";
   $("learn").innerHTML = `
 <h3>The alphabet</h3>
-<p>Khasi is written in a Roman-based orthography with two extra letters,
-<b>ï</b> and <b>ñ</b>, and an apostrophe for the glottal stop, which is a
-consonant. The lexicon records <b>27 consonants</b> and <b>30 valid
-characters</b>.</p>
+<p>Khasi is written in a Roman-based alphabet of <b>23 letters</b>, including
+two extra letters, <b>ï</b> and <b>ñ</b>:</p>
+<ul>
+<li><b>7 vowels:</b> <code>a e i ï o u y</code></li>
+<li><b>16 consonants:</b> <code>b d g h j k l m n ng ñ p r s t w</code></li>
+</ul>
+<p>The lexicon's phonology lists the same 16 consonants, and <b>30 valid
+characters</b>, counting the accented vowels, the hyphen and the apostrophe,
+which are marks rather than letters.</p>
 <ul>
 <li><b>c f q v x z are not Khasi letters.</b> The checker rejects any suggestion
 containing one, and does not let lexicon attestation override that &mdash; English
 gloss text leaked into some surface fields during scanning.</li>
+<li><b>sh and the aspirates are written with h.</b>
+<code>sh ph th kh bh dh jh lh rh</code> are a consonant letter followed by h, not
+letters of their own. The h still tells words apart: <b>pah</b> is an animal's
+cry, <b>phah</b> is "send".</li>
 <li><b>g appears only in ng.</b> A stray g is a rejection.</li>
-<li><b>y is a vowel</b>, not a glide.</li>
+<li><b>y is a vowel</b>, as in <b>pyn</b> and <b>kynthei</b>, but no word ends in
+y. A word may end in <b>j</b>, <b>h</b> or <b>w</b>: <b>siej</b>, <b>soh</b>,
+<b>ksew</b>.</li>
 </ul>
 
 <h3>Digraphs</h3>
-<p>Ten spellings count as a single sound: <code>ng sh ph th kh bh dh jh lh rh</code>.
-This matters for correction, because <code>dieg</code> for <code>dieng</code> is one
-sound wrong, not one letter wrong.</p>
+<p>Ten spellings are read as one unit: the letter <code>ng</code>, and
+<code>sh ph th kh bh dh jh lh rh</code>, each a consonant letter followed by h.
+This matters for correction, because <code>dieg</code> for <code>dieng</code> is
+one sound wrong, not one letter wrong.</p>
 
 <h3>Word formation</h3>
 <p>Khasi builds words productively, which is why a dictionary alone cannot
-decide what is a word. Six prefixes are marked productive in the lexicon:</p>
+decide what is a word. Five prefixes are marked productive in the lexicon:</p>
 <ul>
 <li><code>jing-</code> makes an abstract noun from a verb or adjective</li>
 <li><code>pyn-</code> makes a causative verb</li>
 <li><code>nong-</code> makes an agent noun, "one who does X"</li>
-<li><code>ïa-</code> marks a reciprocal or plural subject</li>
+<li><code>ïa-</code> marks a reciprocal or plural subject (also accepted as
+<code>ia-</code>)</li>
 <li><code>sngew-</code> derives a feeling or experiential state</li>
-<li><code>shi-</code> is a unit counter</li>
 </ul>
+<p>Others, such as the unit counter <code>shi-</code>, occur in lexicalised
+words but are not used to derive new ones.</p>
 <p>So <b>jingpynïaid</b> is built from <b>ïaid</b> "walk" and is a perfectly good
 word even though no dictionary lists it. This checker accepts it on those
 grounds.</p>
@@ -2204,10 +2236,11 @@ reconstructs the underlying root instead.</p>
 
 <h3>Diacritics</h3>
 <p>Writers routinely drop <b>ï</b> and <b>ñ</b>. The corpus behind this project
-&mdash; 6.67 million words &mdash; contains <b>zero</b> of either. Both spellings
-are therefore treated as valid, and the alternative is offered rather than
-imposed: <code>ia-</code> beside <code>ïa-</code>, <code>-ain</code> beside
-<code>-aiñ</code>.</p>`;
+&mdash; 6.67 million words &mdash; contains <b>zero</b> of either. A word typed
+without them is therefore accepted, and the standard spelling is offered
+rather than imposed: <code>iaid</code> is shown <code>ïaid</code>,
+<code>ain</code> is shown <code>aiñ</code>. The reverse is never suggested: the
+spelling with the diacritic is the standard one.</p>`;
 }
 
 function renderAbout(){
@@ -2226,10 +2259,16 @@ when a weighted vote over four kinds of evidence reaches a threshold of 3:</p>
 <p>So a lexicon hit alone is sufficient, and so is a productive derivation on a
 known root. A bare-root parse earns nothing, because almost any syllable
 sequence satisfies one.</p>
+<p>Two rules overrule the vote. A word ending in <b>y</b> is never accepted, and
+neither is an <b>English word</b> the lexicon does not record, however often
+Khasi writers use it (<b>hospital</b>, <b>state</b>, <b>party</b>). English words
+are flagged without a suggestion, since no Khasi spelling is a correction of
+them.</p>
 
 <h3>How corrections are ranked</h3>
-<p>Candidates come from a symmetric-delete index over the lexicon, plus an
-on-demand morphological generator that builds forms from real roots. They are
+<p>Candidates come from a symmetric-delete index over the lexicon and over
+frequent words from Khasi newspaper text, plus an on-demand morphological
+generator that builds forms from real roots. They are
 ordered by a blended distance &mdash; a phoneme-aware weighted edit distance in
 which confusable Khasi sounds cost less than a full edit, combined with a
 character-level Damerau distance &mdash; and ties are broken by corpus frequency

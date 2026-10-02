@@ -10,15 +10,16 @@ candidate belongs in the slot.
 Deletions show the cost most clearly. Dropping a letter destroys more
 string evidence than any other single edit, and several lexicon entries end
 up equidistant from the wreckage — string distance alone cannot separate
-them. Measured on the frozen sentence benchmark, deletions were the weakest
-class at 75.6% top-1; with context they reach 90.2%.
+them. Measured on the frozen sentence benchmark, deletions are the weakest
+class at 75.6% top-1; with context they reach 92.7%.
 
 How it works
 ------------
 For each correction, the trigram model scores every candidate as an
-occupant of the slot it would fill, given up to two words either side
-(`NgramLM.slot_score`). That score is blended with the engine's own
-ordering rather than replacing it:
+occupant of the slot it would fill, given up to two words either side IN THE
+SAME SENTENCE (`NgramLM.slot_score`) — the model was built sentence by
+sentence, so words across a boundary are not context. That score is blended
+with the engine's own ordering rather than replacing it:
 
     combined = slot_score(candidate) + ALPHA * (-original_rank)
 
@@ -51,21 +52,23 @@ are injected one per sentence.
 
 Measurement
 -----------
-250 frozen corpus sentences, one injected single-edit error each, split in
-half: ALPHA chosen on one half, reported on the other.
+250 frozen corpus sentences, one injected single-edit error each. ALPHA was
+chosen on one half and confirmed on the other (held-out top-1 86.4% ->
+89.6% when it was chosen). Current full-set figures, 30 Sept 2026:
 
-    held-out top-1   86.4% -> 89.6%
-    full set         fixes 20, breaks 7   (sign test p = 0.019)
+    top-1            87.1% -> 94.4%
+    full set         fixes 24, breaks 6   (sign test p = 0.0014)
 
-Insertions are the one class that does not benefit (97.1% -> 95.7%): string
+Insertions are the one class that does not benefit (95.7% -> 92.8%): string
 evidence there is already near-perfect, so context can only add noise. The
 net across all four classes is positive, so no per-class gating is applied
 — that would be four more parameters fitted to 250 items.
 """
 from __future__ import annotations
 
-import re
 from typing import Any, Optional, Sequence
+
+from khasi_engine import tokens as _tokens
 
 # Exchange rate between context and string evidence, in log units per rank
 # position. Chosen on a held-out half of the sentence benchmark; the
@@ -76,13 +79,17 @@ ALPHA = 1.0
 # trigrams containing the slot, so it cannot use more than two.
 CONTEXT_WINDOW = 2
 
-# Matches the tokenisation used elsewhere in the package: letters plus the
-# two Khasi diacritics, with internal apostrophes and hyphens kept.
-_TOKEN = re.compile(r"[A-Za-zÏïÑñ]+(?:['\-][A-Za-zÏïÑñ]+)*")
+# The tokenisation every component shares (khasi_engine.tokens), so a
+# correction's offset always lands on a token here.
+_TOKEN = _tokens.WORD_PATTERN
 
 
 def _score(lm, cand, left, right):
     """Context score for one candidate, which may be more than one word.
+
+    Scored in the corpus's spelling (khasi_engine.tokens.corpus_form): the
+    model has never seen ï, ñ or an apostrophe, so `ïaid` is looked up as
+    `iaid`, the way the corpus writes it.
 
     A split suggestion like `jong ngi` is a single candidate string holding
     two tokens. Passed to slot_score() whole it is looked up as if it were
@@ -94,9 +101,9 @@ def _score(lm, cand, left, right):
     candidate competes on the same scale as a one-word one rather than
     carrying twice the (negative) log score.
     """
-    parts = cand.split()
+    parts = [_tokens.corpus_form(p) for p in cand.split()]
     if len(parts) < 2:
-        return lm.slot_score(cand, left, right)
+        return lm.slot_score(parts[0] if parts else cand, left, right)
     total = 0.0
     for i, part in enumerate(parts):
         total += lm.slot_score(part, list(left) + parts[:i],
@@ -130,7 +137,15 @@ def rerank(
     if not corrections or lm is None:
         return 0
 
-    tokens = [(m.group(0).lower(), m.start()) for m in _TOKEN.finditer(text)]
+    matches = list(_TOKEN.finditer(text))
+    # In the corpus's spelling (no ï, ñ or apostrophe), the only one the
+    # model knows: otherwise a candidate or a neighbour carrying a diacritic
+    # is "unseen" and every diacritic candidate loses to a plain one.
+    tokens = [(_tokens.corpus_form(m.group(0)).lower(), m.start()) for m in matches]
+    # Context stops at the sentence boundary. The model was trained sentence
+    # by sentence with <s> markers, so the last words of the previous
+    # sentence are not evidence about the first word of this one.
+    sent = _tokens.sentence_index(text, [(m.start(), m.end()) for m in matches])
     by_offset = {start: i for i, (_, start) in enumerate(tokens)}
     changed = 0
 
@@ -141,16 +156,25 @@ def rerank(
 
         idx = by_offset.get(corr.start)
         if idx is None:
-            # Hyphenated parts are corrected at an offset inside a token,
-            # so they will not be found. Fall back to the nearest token
-            # starting at or before the correction.
+            # A correction that spans two tokens (a spaced prefix, a
+            # line-break hyphen) starts on a token; anything else falls back
+            # to the nearest token starting at or before it.
             idx = next((i for i in range(len(tokens) - 1, -1, -1)
                         if tokens[i][1] <= corr.start), None)
             if idx is None:
                 continue
 
-        left = [w for w, _ in tokens[max(0, idx - CONTEXT_WINDOW):idx]]
-        right = [w for w, _ in tokens[idx + 1:idx + 1 + CONTEXT_WINDOW]]
+        # The slot's last token, so a two-token correction's right context
+        # begins after it rather than on its own second word.
+        last = idx
+        while last + 1 < len(tokens) and tokens[last + 1][1] < corr.end:
+            last += 1
+        left = [w for j, (w, _) in enumerate(tokens[max(0, idx - CONTEXT_WINDOW):idx],
+                                             start=max(0, idx - CONTEXT_WINDOW))
+                if sent[j] == sent[idx]]
+        right = [w for j, (w, _) in enumerate(tokens[last + 1:last + 1 + CONTEXT_WINDOW],
+                                              start=last + 1)
+                 if sent[j] == sent[last]]
 
         scored = sorted(
             range(len(cands)),

@@ -7,61 +7,58 @@ The engine already tolerates this — `database.py` folds diacritics at lookup,
 so the word is understood and accepted — but tolerance is not guidance. A
 writer who wants the standard spelling is never told what it is.
 
-This module closes that gap. It answers "what other spellings of this word
-exist?" and returns them as *alternatives*, never as errors. Whichever form
-the writer typed stays valid; `canonical` marks the one the lexicon records,
-so a caller can show which is the standard form without forcing it.
+This module closes that gap. It answers "is there a standard spelling of
+this word with its diacritics?" and returns it as an *alternative*, never as
+an error. The plain spelling the writer typed stays valid; `canonical` marks
+the one the lexicon records, so a caller can show the standard form without
+forcing it.
 
-Both directions are offered. The lexicon itself records 107 words twice,
-once with the diacritic and once without (khwain/khwaiñ, luin/luiñ,
-niang/ñiang khriat), so neither spelling can be called wrong.
+ONE direction only: plain -> diacritic. Offering the plain spelling to a
+writer who typed the diacritic one was withdrawn (see route 1b in `find`):
+in formal Khasi the diacritic spelling is the correct one, and the doubled
+lexicon entries record a typing habit, not free variation.
 
-Three routes, because the diacritic can sit in different places:
+Routes, numbered as in `find()`:
 
   1. The whole word. `database.py` maintains a folded index mapping a
-     diacritic-free key to the lexicon entries that do carry diacritics, so
-     `iathuh` -> `ïathuh` is a single lookup.
+     diacritic-free key to the lexicon entries that carry diacritics, so
+     `iathuh` -> `ïathuh` is a single lookup. Generated diacritic spellings
+     that are lexicon entries are added too, which is how `ain` -> `aiñ` is
+     found.
 
-  2. The plain spelling, for input that already carries a diacritic —
-     `aiñ` -> `ain`. This is the reverse of route 1.
+  2. The root of a derived form. `jingïathuh` is not a lexicon entry — it is
+     `jing-` + `ïathuh`. The prefix is stripped, the root's variants looked
+     up, and the variant substituted back into the surface.
 
-  3. The root of a derived form. `jingïathuh` is not a lexicon entry — it is
-     `jing-` + `ïathuh`, assembled by the morphology. Route 1 finds nothing.
-     So the word is parsed, the root's variants are looked up, and the
-     variant is substituted back into the surface.
+  4. A morphological rule for the reciprocal prefix: `ia-` is written `ïa-`,
+     also behind the outer prefixes the lexicon's `affix_order` allows
+     (`jingpynialehkai` -> `jingpynïalehkai`). Since the 2026-08-26 lexicon
+     pass there are no plain `ia-` headwords left, so lookup cannot find
+     these and the rule supplies them.
 
-  5. A rule for the -ain / -aiñ root, wherever it falls.
+  5. The -ain / -aiñ ending, by rule, wherever the root falls: a headword
+     recorded only plain (`spain` -> `spaiñ`), a compound's final element
+     (`saitjain` -> `saitjaiñ`) or an element that opens a part
+     (`jainsem` -> `jaiñsem`). Guarded by case — `Spain` the country and
+     `Hussain` the name stay plain — and by requiring curated headwords.
 
-  6. A rule for a short spelling whose `ï`-form is recorded under an
-     `i`-form root: `ing` is `ïing`, `oh` is `ïoh`. The folded index cannot
-     see these, because it strips the diaeresis and so links `ïing` only to
-     `iing`, leaving `ing` stranded.
+  6. A short spelling whose ï-form cannot be typed plainly: `ïing` 'house'
+     would be `iing`, which breaks the ii rule, so writers type `ing`. Only
+     roots whose plain i-form is illegal qualify. The rule used to accept
+     any i-initial root and so linked DIFFERENT words: `um` 'he not' was
+     offered `ïum` 'a little water', `ew` 'Ah!' was offered `ïew` 'market',
+     `oh` 'cut' was offered `ïoh` 'get'. The plain typing of `ïum` is `ium`,
+     which route 1 already handles.
 
   7. A spelling the dictionary records in its own gloss — "Same as byniej",
-     "Abbrev. of shnong", "Also spelt as kyieng". Khasi writes several words
-     two ways, a glottal-stop form beside a fuller one: `k'ing` and `kyieng`
-     'a wasp', `'nong` and `shnong` 'village', `'lap` and `slap` 'rain'.
-     Extracted by `scripts/build_spelling_links.py`. The lexicon records many of these
-     only in the plain spelling — `spain` is an entry glossed "Bandage; To
-     swathe" and there is no `spaiñ` headword — so no lookup route can
-     offer the standard form. Guarded by case, because -ain is also a
-     common English and Indic ending: `Spain` the country and `Hussain` the
-     name must be left alone, and the corpus shows capitalisation separates
-     them reliably (`Hussain` is capitalised in 53 of 53 uses, `spain`
-     splits 34 capitalised against 8 lowercase). See `foreign.is_proper_case`.
+     "Also spelt as kyieng". Extracted by `scripts/build_spelling_links.py`.
+     Abbreviations and elided short forms are excluded: a clipped form with
+     its own entry is a different word, not another spelling of this one.
 
-  4. A morphological rule, for the reciprocal prefix. Lookup routes can only
-     offer a spelling the lexicon happens to record, and for this prefix it
-     records both inconsistently: 196 `ia-` entries against 148 `ïa-`, 68
-     `jingia-` against 24 `jingïa-`, and only 26 words appear both ways. So
-     `ïabeit` cannot be offered for `iabeit` by lookup — it is simply not
-     listed. The rule supplies it.
+  8. A corpus word the pool admitted with its diacritics restored:
+     `iatreilang` -> `ïatreilang`.
 
-     `morphology.prefixes.ia` records the prefix as productive with 664
-     entries (`reciprocal_plural_subject`), and `morphology.affix_order`
-     gives the stacking order ["jing-", "nong-", "pyn-", "sngew-", "ia-",
-     ROOT] — which is where the jing+ia and pyn+ia patterns come from. War
-     (2001) writes this prefix `ïa-`.
+(Route 3 no longer exists; route 1b, the reverse direction, was withdrawn.)
 
 Which spelling is standard?
 ---------------------------
@@ -72,8 +69,7 @@ form, which is evidence about typing habits, not about orthography.
 
 The lexicon is used as the authority instead: it is curated and page-cited
 to published grammars and dictionaries. A variant it records exactly is
-flagged `canonical`; one reconstructed from a root, or folded from the
-input, is not.
+flagged `canonical`; one reconstructed from a root or a rule is not.
 """
 from __future__ import annotations
 
@@ -188,8 +184,9 @@ class SpellingVariant:
     """An alternative spelling of an accepted word."""
 
     variant: str
-    source: str          # "lexicon" (whole word) | "root" (derived form)
-                         # | "folded" (the diacritic-free spelling)
+    source: str          # "lexicon" (whole word)  | "root" (derived form)
+                         # | "rule" (ïa- prefix, -aiñ, short ï-form)
+                         # | "gloss" (recorded in the dictionary's gloss)
                          # | "corpus" (a corpus word in lexicon orthography)
     canonical: bool = False   # is this the spelling the lexicon records?
     root: Optional[str] = None
@@ -495,15 +492,20 @@ def _short_form_map(db: Any) -> dict:
     That is the whole rule, and it is deliberately narrow. Sharing a root is
     far too weak on its own: 975 pairs satisfy it, linking `ar` 'two' to
     `khát-ar` and `bakla` to `jingïai-bakla`, which are derivations rather
-    than spellings of the same word. Requiring the root to be the `i`-form
-    whose tail is the short spelling reduces that to seven:
+    than spellings of the same word.
 
-        eng ew ing oh op or um   ->   ïeng ïew ïing ïoh ïop ïor ïum
+    Only a root whose PLAIN i-form is illegal qualifies — `ïing`, whose
+    plain spelling `iing` breaks the ii rule, so writers type `ing`. An
+    earlier version also took every root spelled `i` + short form, which
+    produced seven links, and five of them joined different words: `um` 'he
+    not' to `ïum` 'a little water', `ew` 'Ah!' to `ïew` 'market', `oh` 'cut'
+    to `ïoh` 'get', `eng` to `ïeng` 'stand'. The plain typing of those
+    ï-words is `ium`, `iew`, `ioh`, `ieng`, which route 1 already covers.
 
-    The corpus supports the reading. `ing` occurs 3,167 times in contexts
-    that can only be the noun — `sha ing lajong` 'to his own house',
-    `hapoh ing` 'inside the house' — even though the lexicon also carries a
-    rare verb sense of the same spelling, glossed "to be burnt".
+    The corpus supports the reading that remains. `ing` occurs 3,167 times
+    in contexts that can only be the noun — `sha ing lajong` 'to his own
+    house', `hapoh ing` 'inside the house' — even though the lexicon also
+    carries a rare verb sense of the same spelling, glossed "to be burnt".
     """
     global _SHORT_TO_DIACRITIC
     if _SHORT_TO_DIACRITIC is None:
@@ -516,7 +518,8 @@ def _short_form_map(db: Any) -> dict:
             root = (entry.get("root_lemma") or "").lower()
             if not surface.startswith("ï") or " " in surface or len(root) < 3:
                 continue
-            if root.startswith("i"):
+            if root.startswith("ii"):
+                # Recorded under the (illegal) plain root itself.
                 short = root[1:]
             elif root.startswith("ï") and root[1] == "i":
                 # `ïing` is the one member of this set whose i-form root
@@ -552,14 +555,16 @@ def _short_i_form(word: str, db: Any) -> Optional[str]:
 _SPELLING_LINKS: Optional[dict] = None
 
 
-def _corpus_fold_map(db: Any) -> dict:
+def _corpus_fold_map(checker: Any) -> dict:
     """{reduced spelling: admitted corpus form}, for corpus words the pool
     admitted with diacritics restored (`iatreilang` -> `ïatreilang`).
 
-    Rebuilt only when the set changes size, which it does once, at start-up.
+    Read from the speller's own checker: the corpus pool is per-speller
+    state, not a property of the shared lexicon. Rebuilt only when the set
+    changes size, which it does once, at start-up.
     """
-    forms = getattr(db, "_corpus_forms", None) or ()
-    cache = getattr(db, "_corpus_fold_cache", None)
+    forms = getattr(checker, "_corpus_forms", None) or ()
+    cache = getattr(checker, "_corpus_fold_cache", None)
     if cache is None or cache[0] != len(forms):
         m = {}
         for f in forms:
@@ -568,7 +573,7 @@ def _corpus_fold_map(db: Any) -> dict:
                 m.setdefault(plain, []).append(f)
         cache = (len(forms), m)
         try:
-            db._corpus_fold_cache = cache
+            checker._corpus_fold_cache = cache
         except Exception:
             pass
     return cache[1]
@@ -589,9 +594,9 @@ def _spelling_links() -> dict:
     global _SPELLING_LINKS
     if _SPELLING_LINKS is None:
         import json
-        from pathlib import Path
+        from khasi_engine import paths as _paths
 
-        path = Path(__file__).resolve().parent.parent / "data" / "spelling_links.json"
+        path = _paths.data_file("spelling_links.json")
         try:
             _SPELLING_LINKS = json.loads(path.read_text(encoding="utf-8"))["links"]
         except Exception:
@@ -682,7 +687,7 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
     Returns an empty list when the word already carries its diacritics, or
     when no attested alternative exists. Never reports the input itself.
     """
-    w = unicodedata.normalize("NFC", word).lower()
+    w = unicodedata.normalize("NFC", word).lower().replace("\u2019", "'").replace("\u02bc", "'")
     if not w:
         return []
     db = analyser.db
@@ -807,7 +812,7 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
     # The reduced spelling is accepted, so — exactly as for a lexicon word
     # typed without its ï — the diacritic spelling is offered alongside
     # rather than as a correction.
-    for cand in _corpus_fold_map(db).get(w, ()):
+    for cand in _corpus_fold_map(getattr(analyser, "spell", None)).get(w, ()):
         if cand != w and cand not in found:
             found[cand] = SpellingVariant(cand, "corpus")
 
@@ -821,6 +826,6 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
                 break
 
     # Canonical spellings first, then whole-word evidence over reconstruction.
-    order = {"lexicon": 0, "gloss": 1, "root": 2, "folded": 3, "corpus": 4}
+    order = {"lexicon": 0, "gloss": 1, "root": 2, "rule": 3, "corpus": 4}
     return sorted(found.values(),
                   key=lambda v: (not v.canonical, order.get(v.source, 9), v.variant))

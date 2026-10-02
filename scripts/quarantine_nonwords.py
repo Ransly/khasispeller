@@ -111,6 +111,34 @@ NOT_WORDS = {
         "are deliberately NOT withdrawn — the maintainer is unsure whether "
         "jk is a real onset missing from valid_initial_clusters, and jkap, "
         "jkeng, jking, jkup and the rest carry distinct sensible glosses"),
+
+    # Scan damage at the END of the headword, maintainer rulings 2026-10-01.
+    # The 1906 dictionary prints "Balang, ka, n."; the comma after the
+    # headword was read as j and the clitic came into the surface with it.
+    # Again the correct spelling is already its own entry with the same
+    # gloss. They surfaced when final -j stopped being a loan signal.
+    "kh_DB_024743": (
+        "balangj ka",
+        "not a Khasi word (maintainer ruling 2026-10-01): scan damage for "
+        "balang (kh_DB_001061), same gloss 'the church; a society "
+        "(religious)'. The comma in the 1906 dictionary's 'Balang, ka, n.' "
+        "was read as j"),
+    "kh_DB_025671": (
+        "dohtdongj ka",
+        "not a Khasi word (maintainer ruling 2026-10-01): scan damage for "
+        "dohtdong (kh_DB_028830), same gloss 'the hump'. The comma after "
+        "the headword was read as j, as in balangj"),
+    "kh_DB_025583": (
+        "diengddwj ka",
+        "not a Khasi word (maintainer ruling 2026-10-01): scan damage for "
+        "diengdaw (kh_DB_028808), same gloss 'a hard dried wood'. The record "
+        "also swallowed the next dictionary entry, diengdoh, which the "
+        "lexicon holds on its own (kh_DB_028809)"),
+    "kh_DB_027185": (
+        "eaj",
+        "not a Khasi word (maintainer ruling 2026-10-01): scan damage for "
+        "raj (kh_DB_021400), same gloss 'jurisdiction'. The 1906 "
+        "dictionary's 'Raj' was read as 'Eaj'"),
 }
 
 

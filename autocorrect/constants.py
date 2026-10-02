@@ -8,8 +8,12 @@
 #   ï / Ï  — diaeresis-i, represents a distinct back unrounded vowel
 #   ñ / Ñ  — tilde-n, represents the palatal nasal sound
 #
-# Digraphs (multi-character sequences that represent a SINGLE phoneme):
-#   ng, sh, kh, ph, th, bh, dh, jh, ie
+# Digraphs (multi-character sequences treated as one unit):
+#   ng      — a letter of the alphabet (/ŋ/)
+#   sh      — s + h (/ʃ/), not a letter of the alphabet
+#   kh, ph, th, bh, dh, jh — aspirated: a consonant letter followed by h,
+#             not letters of their own
+#   ie      — a vowel
 # These are treated as atomic units during all edit-distance operations so
 # that the spell checker never generates phonemically invalid fragments.
 
@@ -31,21 +35,20 @@ word_regexes = {
 # ---------------------------------------------------------------------------
 # Single-character alphabets used for single-char edit operations
 # ---------------------------------------------------------------------------
-# Core Khasi letters (lowercase listed first; uppercase added for casing support):
-#   Vowels     : a  e  i  ï  o  u
-#   Nasals     : m  n  ñ  (ng is a digraph, handled separately)
-#   Stops      : b  d  g  k  p  t
-#   Aspirated  : bh dh jh kh ph th  (all digraphs, handled separately)
-#   Fricatives : s  h
-#   Affricates : j
-#   Liquids    : l  r
-#   Glides     : w  y
-# Loanword letters (c, f, q, v, x, z) included for robustness.
+# The Khasi alphabet: 23 letters, 7 vowels and 16 consonants
+# (lowercase listed first; uppercase added for casing support):
+#   Vowels     : a  e  i  ï  o  u  y
+#   Consonants : b  d  g  h  j  k  l  m  n  ng  ñ  p  r  s  t  w
+#                (ng is a digraph, handled separately; g occurs in native
+#                words only in ng)
+# sh and the aspirated bh dh jh kh ph th are a consonant + h, handled as
+# digraphs. c, f, q, v, x and z are not Khasi letters, so no edit
+# introduces one.
 alphabets = {
     "en": "abcdefghijklmnopqrstuvwxyz",
     "kh": (
-        "abdeghi\u00efjklmn\u00f1oprstuwycfqvxz"
-        "ABDEGHI\u00cfJKLMN\u00d1OPRSTUWYCFQVXZ"
+        "abdeghi\u00efjklmn\u00f1oprstuwy"
+        "ABDEGHI\u00cfJKLMN\u00d1OPRSTUWY"
     ),
 }
 

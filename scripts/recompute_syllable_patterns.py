@@ -13,8 +13,9 @@ Why it was wrong
 ----------------
 C/V classification is phonological, not character-based. A digraph is a fact
 about spelling; `sh` is a single phoneme /ʃ/ and so is `ng` /ŋ/ — the
-lexicon's own `phonology.consonant_chart` lists both, in an inventory it
-totals at 27 consonants. Two letters is not two consonants.
+lexicon's own `phonology` block gives each one IPA symbol (`ng` in
+`consonant_chart`, `sh` in `consonant_plus_h`; when this was written the
+chart listed both). Two letters is not two consonants.
 
 The stored IPA agrees all the way down:
 

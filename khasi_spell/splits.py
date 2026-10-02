@@ -42,8 +42,9 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 
-DEFAULT_PATH = (Path(__file__).parent.parent / "data"
-                / "runtogether_candidates_review.csv")
+from khasi_engine import paths as _paths
+
+DEFAULT_PATH = _paths.data_file("runtogether_candidates_review.csv")
 
 # Spaced-to-solid ratio at which a row is read as a run-together. Measured
 # against the 53 rows in the file: the solid words sit at 0.16-0.98 and the
@@ -60,7 +61,7 @@ def load(path: Optional[Path] = None, ratio: float = DEFAULT_RATIO) -> dict:
     Missing file is not an error — the feature simply does not fire, which
     is the behaviour a deployment without the review data should have.
     """
-    p = Path(path) if path else DEFAULT_PATH
+    p = Path(path) if path else _paths.data_file("runtogether_candidates_review.csv")
     if not p.is_file():
         return {}
     out: dict = {}
@@ -90,6 +91,6 @@ def load(path: Optional[Path] = None, ratio: float = DEFAULT_RATIO) -> dict:
 
 
 def summary(table: dict, path: Optional[Path] = None) -> dict:
-    p = Path(path) if path else DEFAULT_PATH
+    p = Path(path) if path else _paths.data_file("runtogether_candidates_review.csv")
     return {"source": str(p), "available": p.is_file(),
             "ratio": DEFAULT_RATIO, "entries": len(table)}

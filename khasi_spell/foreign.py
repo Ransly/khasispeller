@@ -28,6 +28,12 @@ project's own proper-noun lists (see `scripts/build_gazetteer.py`):
     It accounts for 9.1% of the flags that survive the capitalisation rule
     and suppresses **none** of the 558 frozen benchmark errors.
 
+    The name must be CAPITALISED. Matched case-insensitively, the list hid
+    lower-case typos that happened to spell a name: about one sampled
+    gazetteer token in six is a string the checker would otherwise flag
+    (`sokda`, `mingkrak`, `new`), and each was withheld as a "name" even
+    mid-sentence in lower case.
+
     The list is consulted only for words the gate has *already* rejected,
     which makes its 312 collisions with ordinary Khasi words (`bah`, `bat`,
     `blei`, `dawa`) inert: those are accepted by the lexicon first and never
@@ -36,7 +42,10 @@ project's own proper-noun lists (see `scripts/build_gazetteer.py`):
 
   * **capitalised mid-sentence** — `Meghalaya`, `Cherra`, `Conrad`. A
     capital that is not sentence-initial is the orthographic marker for a
-    proper noun. 42% of all flags.
+    proper noun. 42% of all flags. "Sentence-initial" covers the start of a
+    line (headings, list items) and the word after `:` or an opening quote,
+    as well as after `. ! ?` — a misspelling there used to be withheld as a
+    presumed name.
   * **acronyms** — `MDA`, `AIS`, `HS`, `NDA`. All-caps, length > 1. 15%.
 
 Together they account for 57% of the noise, and on the 558 errors in the
@@ -94,16 +103,19 @@ Khasi words that happen to spell English ones. Coverage scales with list
 size (len<=4: 3,974 words, 32% of flags; full list: 55%), so there is no
 cheap abridged version. Bundling it is a licensing and size decision for
 the project to make, not one to slip in.
+
+Since 2026-10-01 an English list IS used, for the opposite purpose. By
+maintainer ruling English words in Khasi text are rejected, so the English
+words of the corpus — data/english_in_corpus.json, built by
+scripts/build_english_list.py; only the corpus intersection is stored, not
+the dictionary — are kept from being accepted on corpus frequency. See
+khasi_engine.spell_checker._english_words. Nothing here suppresses them.
 """
 from __future__ import annotations
 
-import re
 from typing import Optional
 
-# A capital opening a sentence carries no information about word class, so
-# the rule needs to know where sentences begin. Anything after one of these
-# (plus optional closing quotes/brackets and whitespace) starts a sentence.
-_SENTENCE_END = re.compile(r"[.!?][\"')\]]*\s+$")
+from khasi_engine import tokens as _tokens
 
 # Minimum length for an all-caps token to read as an acronym rather than a
 # shouted word or a stray initial.
@@ -126,9 +138,9 @@ def gazetteer() -> frozenset:
     global _GAZETTEER
     if _GAZETTEER is None:
         import json
-        from pathlib import Path
+        from khasi_engine import paths as _paths
 
-        path = Path(__file__).resolve().parent.parent / "data" / "gazetteer.json"
+        path = _paths.data_file("gazetteer.json")
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             _GAZETTEER = frozenset(data.get("tokens") or ())
@@ -138,9 +150,14 @@ def gazetteer() -> frozenset:
 
 
 def is_sentence_initial(text: str, start: int) -> bool:
-    """True when the token at *start* opens a sentence (or the text)."""
-    before = text[:start]
-    return not before.strip() or bool(_SENTENCE_END.search(before))
+    """True when the token at *start* opens a sentence, a line or the text.
+
+    After `. ! ? :`, at the start of the text or of a line, allowing opening
+    quotes, brackets, bullets and dashes in between. The start of a line
+    used to count only after a full stop, so a heading, a list item or a
+    new paragraph opened on a presumed name. See tokens.starts_sentence.
+    """
+    return _tokens.starts_sentence(text, start)
 
 
 def is_proper_case(token: str, sentence_initial: bool) -> bool:
@@ -171,13 +188,15 @@ def classify(token: str, sentence_initial: bool) -> Optional[str]:
     """
     Why *token* should not be corrected, or None to check it normally.
 
-    Returns `ACRONYM`, `CAPITALISED`, or None.
+    Returns `KNOWN_NAME`, `ACRONYM`, `CAPITALISED`, or None.
     """
     if not token:
         return None
     # Positive recognition first: a name is a name wherever it stands, and
-    # this is the only rule that works sentence-initially.
-    if token.lower() in gazetteer():
+    # this is the only rule that works sentence-initially. It must be
+    # written as a name, though — a lower-case token is checked like any
+    # other word, or a typo that happens to spell a place name is hidden.
+    if token[:1].isupper() and token.lower() in gazetteer():
         return KNOWN_NAME
     if token.isupper() and len(token) >= MIN_ACRONYM_LENGTH:
         return ACRONYM

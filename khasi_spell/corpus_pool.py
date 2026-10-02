@@ -23,11 +23,15 @@ The vote's frequency signal reads the lexicon's frequency table, so no
 corpus word could ever earn it.
 
 `apply(accept=True)`, the default, closes that: every admitted word, and
-the reduced spelling the corpus writes it in, is registered with
-`db.register_corpus_acceptance()` and earns the frequency signal in the
-vote. `is_known()` is still untouched — it answers "is this in the
-lexicon", and screening the candidate pool by it previously cost about 4
-points of top-1. Measured on 200 clean corpus sentences, see the README.
+the reduced spelling the corpus writes it in, is registered with the
+checker's `register_corpus_acceptance()` and earns the frequency signal in
+the vote. `KhasiDB.is_known()` is still untouched — it answers "is this in
+the lexicon", and screening the candidate pool by it previously cost about
+4 points of top-1. Measured on 200 clean corpus sentences, see the README.
+
+Everything admitted here belongs to ONE checker. It used to be written into
+the shared lexicon object, so a `use_corpus_pool=False` speller built later
+in the same process still offered the pool.
 
 Run-together spellings are refused outright. `jongki` is `jong ki` written
 solid; `khasi_spell.splits` corrects it to the spaced form, so admitting it
@@ -65,7 +69,9 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-DEFAULT_PATH = Path(__file__).parent.parent / "data" / "corpus_freq.json"
+from khasi_engine import paths as _paths
+
+DEFAULT_PATH = _paths.data_file("corpus_freq.json")
 
 # Occurrences required before a corpus type may be offered as a correction.
 #
@@ -97,10 +103,20 @@ DOMINANCE_RATIO = 5
 # Letters Khasi does not use. Their presence marks English or scan damage.
 BANNED_LETTERS = frozenset("fvzcxq")
 
-ALPHABET = frozenset("abcdefghijklmnopqrstuvwxyzïñ'-")
+# Every character a corpus token may be written in: the Latin letters, ï, ñ,
+# the apostrophe and the hyphen. NOT the Khasi alphabet — c, f, q, v, x and z
+# are in it so that the tally can tell a token outside the Latin script
+# (`non_khasi_char`) from one that holds a letter Khasi does not use
+# (`banned_letter`).
+LATIN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzïñ'-")
 
-# Characters an edit may introduce when looking for a dominant neighbour.
-_EDIT_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+# Letters an edit may introduce when looking for a dominant neighbour. The
+# corpus is Khasi with English in it, and the neighbour searched for is a
+# corpus spelling, so this is the whole Latin alphabet, not the Khasi one: a
+# commoner English neighbour is what shows a Khasi-looking token to be
+# foreign. Measured 2026-10-01: restricted to the Khasi letters, two more
+# forms are admitted, both names — `justine` and `marius`.
+_LATIN_EDIT_LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 _FOLD = str.maketrans({"ï": "i", "ñ": "n"})
 
@@ -165,7 +181,7 @@ def _ain_confirmed(word: str, db: Any) -> bool:
 
 
 def _load_counts(path: Optional[Path] = None) -> dict:
-    p = Path(path) if path else DEFAULT_PATH
+    p = Path(path) if path else _paths.data_file("corpus_freq.json")
     if not p.exists():
         raise FileNotFoundError(
             f"no corpus frequency list at {p}. Build one:  "
@@ -229,7 +245,7 @@ def _dominant_neighbour(word: str, counts: dict, ratio: int) -> Optional[str]:
         if c > best_c:
             best, best_c = cand, c
     for i in range(len(word)):
-        for ch in _EDIT_ALPHABET:
+        for ch in _LATIN_EDIT_LETTERS:
             if ch == word[i]:
                 continue
             cand = word[:i] + ch + word[i + 1:]             # substitution
@@ -237,7 +253,7 @@ def _dominant_neighbour(word: str, counts: dict, ratio: int) -> Optional[str]:
             if c > best_c:
                 best, best_c = cand, c
     for i in range(len(word) + 1):
-        for ch in _EDIT_ALPHABET:
+        for ch in _LATIN_EDIT_LETTERS:
             cand = word[:i] + ch + word[i:]                 # insertion
             c = counts.get(cand, 0)
             if c > best_c:
@@ -257,7 +273,7 @@ def select(
     *runtogether* is the set of solid spellings the split table corrects to
     two words; None loads it from ``khasi_spell.splits``.
     """
-    from khasi_engine.spell_checker import _phonotactically_ok
+    from khasi_engine.spell_checker import _phonotactically_ok, _english_words
 
     counts = counts if counts is not None else _load_counts()
     if runtogether is None:
@@ -271,8 +287,9 @@ def select(
     quarantine = _quarantined(db)
 
     admitted: set = set()
+    english = _english_words()
     tally = {"quarantine_entries": len(quarantine), "below_floor": 0, "in_lexicon": 0, "non_khasi_char": 0,
-             "banned_letter": 0, "quarantined": 0, "folds_onto_headword": 0,
+             "banned_letter": 0, "english": 0, "quarantined": 0, "folds_onto_headword": 0,
              "phonotactic": 0, "dominated": 0, "runtogether": 0,
              "ain_kept_plain": 0,
              "diacritic_restored": 0, "restored_onto_headword": 0,
@@ -292,11 +309,17 @@ def select(
         if w in known or db.is_known(w):
             tally["in_lexicon"] += 1
             continue
-        if not set(w) <= ALPHABET:
+        if not set(w) <= LATIN_CHARS:
             tally["non_khasi_char"] += 1
             continue
         if BANNED_LETTERS & set(w):
             tally["banned_letter"] += 1
+            continue
+        # English words are not Khasi, however common in Khasi writing
+        # (maintainer ruling 2026-10-01). Admitted, `hospital` and `state`
+        # were accepted on corpus frequency and offered as corrections.
+        if w in english:
+            tally["english"] += 1
             continue
         if w in quarantine:
             tally["quarantined"] += 1
@@ -352,37 +375,27 @@ def apply(
 ) -> dict:
     """Admit qualifying corpus types to *checker*'s candidate pool.
 
-    Registers them with the database as attested-but-not-known, and inserts
-    them into the already-built delete index — the index is constructed
-    during KhasiSpellChecker.__init__, well before this runs, so it is
-    extended in place rather than rebuilt.
-
-    With *accept* (the default) they are also made acceptable: the vote
-    credits them with corpus frequency, both in the lexicon's orthography
-    (`ïatreilang`, the form offered) and in the reduced one the corpus
-    writes (`iatreilang`, accepted but never offered).
+    Registers them with the checker as attested-but-not-known candidates and
+    indexes them in the checker's own delete index. With *accept* (the
+    default) they are also made acceptable: the vote credits them with
+    corpus frequency, both in the lexicon's orthography (`ïatreilang`, the
+    form offered) and in the reduced one the corpus writes (`iatreilang`,
+    accepted but never offered).
     """
     db = checker._db
     counts = _load_counts(path)
     admitted, tally = select(db, counts, floor=floor, ratio=ratio)
 
-    register = getattr(db, "register_corpus_forms", None)
+    register = getattr(checker, "register_corpus_forms", None)
     if register is None:                       # engine too old; do nothing
-        return {"admitted": 0, "reason": "db has no register_corpus_forms"}
-    register(admitted)
+        return {"admitted": 0, "reason": "checker has no register_corpus_forms"}
+    indexed = register(admitted)
 
-    indexed = 0
-    for w in admitted:
-        if checker.teach_word(w):
-            indexed += 1
-
-    # The accepted set is data and may be shared (KhasiDB is memoised per
-    # data source); whether THIS checker consults it is a per-checker flag.
+    checker._corpus_accept_on = bool(accept)
     accepted = 0
-    accept_fn = getattr(db, "register_corpus_acceptance", None)
-    checker._corpus_accept_on = bool(accept and accept_fn is not None)
-    if checker._corpus_accept_on:
-        accepted = accept_fn(admitted | {_fold(w) for w in admitted})
+    if accept:
+        accepted = checker.register_corpus_acceptance(
+            admitted | {_fold(w) for w in admitted})
 
     return {
         "floor": floor,

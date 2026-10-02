@@ -8,7 +8,7 @@ from khasi_spell import KhasiSpeller
 
 sp = KhasiSpeller()
 sp.is_correct("nongsngew")              # True — derived, in no word list
-sp.suggest("lyngdo")                    # ['lyngdoh', 'lyngdop', 'lyngtong', ...]
+sp.suggest("lyngdo")                    # ['lyngdoh', 'lyngdop', 'lyngba', ...]
 sp.correct_text("Ka shnng ka bha")      # 'Ka shnong ka bha'
 ```
 
@@ -42,21 +42,27 @@ correction. A newly coined but well-formed derivative is never flagged.
 ## How a word is decided
 
 ```
-word
+word  (Unicode NFC; the typographic apostrophe ’ read as ')
  │
- ├─ Gate 0  sub-phonemic token?         → reject outright
- ├─ Gate 1  phonotactically legal?      → if not, widen the search and flag
+ ├─ taught with add_word()?             → accept
+ ├─ Gate 0  sub-phonemic token (ng)?    → reject, and suggest (nga, ngi …)
  ├─ Gate 2  confidence vote             → if it clears the threshold, accept
- │            lexicon hit          +3
- │            morphology w/ affix  +2
- │            phonotactically ok   +1
- │            frequent             +2      threshold: 3
+ │            lexicon hit            +3     …unless it is an unrecorded
+ │            morphology w/ affix    +2      hyphenated compound with a
+ │              (+1 if the root is not a word)  misspelled part (man-miay)
+ │            phonotactically ok     +1
+ │            frequent in the corpus +2    threshold: 3
+ ├─ Gate 1  below it and phonotactically illegal → widen the search, flag
  │
  └─ Gate 3  generate and rank candidates
-              phoneme-level weighted Levenshtein (digraphs are one unit)
-              40-pair Khasi confusion matrix (ng↔g, ie↔i, accents, voicing)
+              symmetric-delete index over the lexicon and frequent corpus words
+              on-demand morphological generator (prefix + root, compounds)
+              phoneme-level weighted Levenshtein (digraphs are one unit),
+                blended with a character-level Damerau distance
+              14-pair Khasi confusion matrix (ng↔g/n, dropped ï ñ and accents,
+                voicing, n↔m); 7 two-phoneme pairs (ie↔i, nk↔ng) are opt-in
               5 orthographic normalisation rules
-              Norvig-style generator over 304,958 expanded forms
+              a run-together word is split first (jongki → jong ki)
               optional FastText semantic re-ranking
 ```
 
@@ -80,7 +86,8 @@ Corrected: katba u bynriew u dang iaid hok, im hok katkum ka ain u Blei,
 
 alternative spellings (both accepted):
   iaid -> ïaid (in lexicon)
-  ain  -> aiñ  (in lexicon)
+  ain -> aiñ (in lexicon)
+  suk-u-sain -> suk-u-saiñ
 ```
 
 Three different mechanisms are at work, and each needed its own fix:
@@ -91,15 +98,27 @@ Three different mechanisms are at work, and each needed its own fix:
 | `man-miay` → `man-miat` | Phase 4 accepts any hyphenated token as a compound *without checking its parts*, so the bad half was invisible. Parts are now verified. |
 | `iaid` → `ïaid`, `ain` → `aiñ` | Not errors. Both spellings are valid; the lexicon records the diacritic form, so it is offered and never applied automatically. |
 
-`sain` → `saiñ` is **not** offered: the lexicon records `sain` and not `saiñ`, so
-there is no evidence for the suggestion. A lexicon gap, not a ranking failure.
+`suk-u-sain` is offered `suk-u-saiñ` as well: the lexicon records the headword
+`sain` only plain, and the `-aiñ` rule supplies the standard spelling of the
+ending (see *`-ain` is written `-aiñ`* below).
 
 ---
 
 ## Running it
 
-Requires **Python 3.9+**. The core library has **no third-party dependencies**,
-so the quickest path is to run it in place — no install step at all:
+Requires **Python 3.9+**. The core library has **no third-party dependencies**.
+
+**The lexicon is not in this repository.** It is licensed separately (see
+`LICENSE-DATA`), so a fresh clone has code but no dictionary. Provide one of:
+
+- `DATABASE_URL` pointing at a PostgreSQL database loaded with
+  `scripts/migrate_json_to_pg.py` (the production setup; see *PostgreSQL*), or
+- the file itself at `data/khasi_db.json`, or anywhere with
+  `KHASI_DATA_DIR` pointing at its directory, or passed as `db_path`.
+
+Without either, the checker stops with an error that says so, and the test
+suite skips the tests that need the lexicon. With it, the quickest path is to
+run in place — no install step at all:
 
 ```bash
 cd khasi-spellchecker
@@ -113,7 +132,10 @@ and `autocorrect/` sit at the root.
 
 ### Installing (optional)
 
-Installing buys you the `khasi-spell` command from any directory.
+Installing buys you the `khasi-spell` command from any directory. Use an
+editable install (`-e`): a regular `pip install .` does not copy the `data/`
+folder, so set `KHASI_DATA_DIR` to it if you install that way. `/health`
+lists which data files the service found.
 
 ```bash
 python3 -m pip install -U pip setuptools     # see the note below
@@ -167,26 +189,29 @@ generated API documentation.
 ### Web interface
 
 A single self-contained HTML page served at `/` — no build step, no CDN, no
-JavaScript dependencies, works offline. Four views, each linkable:
+JavaScript dependencies, works offline. Three views, each linkable:
 
 | Route | View |
 |---|---|
-| `/` or `/#!check` | Check text — results summary, per-word table, sidebar detail |
-| `/#!word` | Single word — the confidence vote, signal by signal |
+| `/` or `/#!check` | Check text — results summary, marked-up text, word panel |
+| `/#!word=<word>` | The check view with the word panel open on `<word>` |
 | `/#!learn` | Khasi orthography and word formation, from the lexicon's own inventories |
 | `/#!about` | How the decision works, and what the checker cannot tell you |
 | `/#!example` | Loads and checks the sample sentence — a shareable demo link |
 
 Paste Khasi text, hit **Check**, and misspellings are underlined in place.
-Errors, unrecognised words, alternative spellings and withheld proper nouns are
-distinguished by colour and listed separately, because they mean different
-things: an alternative spelling is *already valid* and is offered, never
-applied. Click a suggestion to apply it; nothing is applied automatically.
+Invalid spellings, unknown words, words written apart, word-choice flags,
+alternative spellings and withheld proper nouns are distinguished by colour,
+because they mean different things: an alternative spelling is *already
+valid* and is offered, never applied. Click a flagged word for its
+suggestions; nothing is applied automatically.
 
-The single-word view is the interesting one for a morphology-gated checker —
-`nongsngew` comes back accepted with the vote shown: not in the lexicon, but
-the analyser parsed it, so morphology 2 plus phonotactics 1 clears the
-threshold of 3.
+Click any word — flagged or not — to open the word panel: its meaning, its
+structure and, for a flagged word, the ranked corrections with the edits that
+separate each from what was typed. It is the interesting view for a
+morphology-gated checker: `nongsngew` comes back accepted although it is not
+in the lexicon, because the analyser parsed it (morphology 2 plus
+phonotactics 1 clears the threshold of 3).
 
 **On the "match" percentage.** `/word` and `/check` return, per suggestion, the
 blended phoneme/Damerau distance the engine actually ranked on. The percentage
@@ -202,6 +227,7 @@ rather than a made-up number.
 |---|---|
 | `GET  /health` | Readiness, vocabulary, corpus-frequency and language-model state |
 | `POST /word` | Check one word; returns gate, method, suggestions |
+| `POST /analyse` | Phonology, morphology and assimilation of one word, plus the checker's decision |
 | `POST /check` | Check text; returns spans and a corrected string |
 | `POST /correct` | Corrected text only |
 | `POST /realword` | Contextually wrong real words |
@@ -211,6 +237,23 @@ rather than a made-up number.
 | `GET  /api` | This table, as JSON |
 
 The lexicon loads at start-up, so no request pays the load cost.
+
+**`/analyse` shows a word's own analysis, or none.** The panel for `katkum`
+'according to' used to show `kat·ba`, `CVC.CV` and root `katba`: at import,
+words the parser did not take for new headwords inherited the analysis of the
+headword above them (`ben` had `bel`'s, `braw` had `brap`'s).
+`scripts/fix_inherited_analyses.py` checked the 11,890 single-word entries:
+**104** bare roots that named another word now root themselves, and **529**
+syllabifications that spelled another word were re-cut (16), de-doubled (31),
+rebuilt from the lexicon's own syllabifications of the word's parts (387), or
+withdrawn where the evidence was ambiguous (95). Nothing is syllabified by
+rule. The route itself now refuses any stored syllabification that does not
+spell the word, so a phrase's partial list cannot reach the panel either.
+
+```bash
+python3 scripts/fix_inherited_analyses.py --dry-run
+python3 scripts/fix_inherited_analyses.py
+```
 
 ## Library
 
@@ -232,12 +275,16 @@ t.corrections[0].start, .end      # exact offsets into the input
 t.corrected                       # 'u dang iaid hok bad u man-bha man-miat'
 t.variants                        # iaid -> ïaid   (accepted, never auto-applied)
 
-sp.add_word("Meghalaya")          # session-only; not persisted
+sp.add_word("Meghalaya")          # this speller only, not persisted — accepted
+                                  # although a bare g breaks Khasi phonotactics
 sp.analyser                       # escape hatch to the full engine
 ```
 
-`KhasiSpeller` loads ~80 MB of lexicon in about 16 seconds, so **build one and
-keep it**. Construction is lazy unless you pass `eager=True`.
+`KhasiSpeller` loads the 64 MB lexicon in roughly 15–25 seconds, so **build
+one and keep it**. Construction is lazy unless you pass `eager=True`. Every
+switch (`use_corpus_freq`, `use_corpus_pool`, `corpus_pool_accept`) and every
+`add_word()` is per speller: the lexicon object is shared by all spellers in a
+process, and nothing a speller adds is written into it.
 
 ### Morphological generation — on by default
 
@@ -361,27 +408,23 @@ python3 scripts/build_db_extras.py         # the sidecar — see below
 ```
 
 `migrate_json_to_pg.py` creates the tables if absent and upserts on
-`entry_id`, so re-running after a JSON edit is safe and resumable. `--reset`
-drops and recreates everything and is the only destructive option.
+`entry_id`, so re-running after a JSON edit is safe and resumable. Two options
+delete: `--reset` drops and recreates everything, and `--prune` deletes rows
+whose `entry_id` is no longer in the JSON.
 
-**Re-run both scripts after editing `khasi_db.json`.** The database does not
-notice the file changing.
+**Re-run the migration after editing `khasi_db.json` — with `--prune` if you
+withdrew entries.** The database does not notice the file changing, and an
+upsert cannot remove a row: an entry moved to `quarantine` stays live in
+PostgreSQL, and is still accepted and offered, until it is pruned.
 
-### The sidecar is not optional
+### Every served block is in PostgreSQL
 
-PostgreSQL carries only `meta`, `phonology`, `morphology` and `lexicon`. Four
-other top-level blocks live in `data/khasi_db_extras.json`, which
-`build_db_extras.py` writes:
-
-| Block | Size | Why it matters |
-|---|---|---|
-| `quarantine` | 834 records | the audit trail for every entry withdrawn during the OCR repair — what makes those withdrawals reversible |
-| `grammar_schema` | 7 keys | |
-| `production_readiness` | 9 keys | |
-| `demo_examples` | UI samples | |
-
-Without it the engine still starts and still checks spelling, but those blocks
-are **silently absent**. Look for `merged sidecar extras` in the start-up log.
+The migration writes `meta`, `phonology`, `morphology` and the lexicon, and
+the four blocks that used to live only in a sidecar file — `quarantine`,
+`grammar_schema`, `production_readiness` and `demo_examples` — into their own
+`*_meta` tables. `data/khasi_db_extras.json`, written by
+`scripts/build_db_extras.py`, is now only a fallback for a database created
+before those tables existed; the start-up log says when it fills a gap.
 
 ### Why your local run said "loading from JSON file"
 
@@ -396,10 +439,11 @@ export DATABASE_URL="postgresql:///khasi_spell?host=/var/run/postgresql&port=543
 python3 -m uvicorn khasi_spell.api:app --port 8000
 ```
 
-or put it in a **`.env`** beside `pyproject.toml`, which the service reads at
-start-up (twelve lines of stdlib, no dependency). Anything already in the
-environment wins, so an explicit export still overrides the file. `.env` is
-gitignored.
+or put it in a **`.env`** beside `pyproject.toml`, which the service and the
+CLI both read before the engine loads (a few lines of stdlib, no dependency).
+Anything already in the environment wins, so an explicit export still
+overrides the file. `.env` is gitignored. The test suite ignores it
+(`KHASI_SPELL_NO_DOTENV=1`); export `DATABASE_URL` to test against a database.
 
 The start-up log now names the source either way:
 
@@ -415,7 +459,8 @@ difference.
 
 ### Measured, JSON against PostgreSQL
 
-Same 29,694 entries, same engine, same frozen benchmark:
+Measured when the lexicon held 29,694 entries (it now holds 29,540); same
+engine, same frozen benchmark:
 
 | | JSON | PostgreSQL |
 |---|---:|---:|
@@ -474,7 +519,22 @@ does not fold onto a lexicon headword, is not one edit from a type 5× commoner
 `splits.py` corrects (`jongki` → `jong ki`). It is admitted in the lexicon's
 orthography: `iatreilang` enters as `ïatreilang`, and `-ain` becomes `-aiñ`
 only where the lexicon's own `-aiñ` rule agrees — the name `hussain` and the
-loans `risain`, `pilain` stay plain. 2,192 forms are admitted.
+loans `risain`, `pilain` stay plain. 2,192 forms were admitted; 1,816 since
+1 Oct 2026, when words ending in y and English words were excluded (below).
+
+**English words are not admitted** (maintainer ruling, 1 Oct 2026). Nothing
+in the screen above asked whether a type is English, so `hospital`, `the`,
+`state` and `member` entered the pool and were accepted on corpus frequency
+— 355 English types, 0.77% of corpus tokens. `data/english_in_corpus.json`
+lists the corpus types that are English dictionary words and not Khasi
+lexicon words (2,727, built by `scripts/build_english_list.py`; only that
+intersection is stored, not the dictionary). A listed word is not admitted,
+never accepted unless the lexicon records it, never offered, and is flagged
+in text with no suggestion (method `english_word`), so auto-correction
+leaves it alone. Held back from the list: names, i.e. words the corpus almost
+never writes in lower case (`Blah`, `Hoping`, `Smit`); Khasi derivations
+(`jingle` = jing- + le); and `longing`, the Khasi "household". Running-text
+flags rose from 3.43% to 3.70% of tokens; detection and top-1 were unchanged.
 
 **Acceptance.** The vote's frequency signal reads a table built from the
 lexicon, so no corpus word could earn it: `jylla` scored 1 of the 3 needed.
@@ -508,19 +568,23 @@ or twice, one edit from a type seen 1,000+ times); see
 `docs/IMPROVEMENT_ANALYSIS.md`.
 
 Switches: `KhasiSpeller(corpus_pool_accept=False)` keeps supply without
-acceptance; `use_corpus_pool=False` turns both off. **Caveat:** `KhasiDB` is
-memoised per data source, so every speller in one process shares the pool —
-a `use_corpus_pool=False` speller created after a pooled one still offers pool
-words (pinned by a `WEAK` test). Compare pool on and off in separate
-processes. The acceptance switch is per-checker and does not leak.
+acceptance; `use_corpus_pool=False` turns both off. Both are per speller, so
+pool on and pool off can be compared in one process. (Until 2026-09-30 the pool
+and the corpus frequencies were written into the memoised `KhasiDB`, which
+every speller in a process shares, so a `use_corpus_pool=False` speller built
+after a pooled one still offered pool words, and a second speller re-squashed
+the first one's frequencies. They now live on each speller's checker.)
 
 ### Alternative spellings (ï and ñ)
 
 Khasi writes **ï** and **ñ**, and both are awkward to type, so writers drop
-them. **Neither spelling is treated as an error** — the lexicon itself records
-107 words both ways (`khwain`/`khwaiñ`, `luin`/`luiñ`, `niang`/`ñiang khriat`),
-so calling either one wrong would contradict the lexicon. Both are accepted,
-and each offers the other as a choice.
+them. **The plain spelling is not treated as an error**: it is accepted, and
+the spelling with the diacritic is offered alongside — never applied, and
+never the other way round. In formal Khasi the diacritic spelling is the
+standard one; the 107 words the lexicon records both ways (`khwain`/`khwaiñ`,
+`luin`/`luiñ`) record the typing habit, not free variation, and offering the
+plain form to someone who had typed the diacritic invited them to undo a
+correct spelling.
 
 ```bash
 $ khasi-spell word ain
@@ -529,7 +593,6 @@ OK  ain  (morphologically valid)
 
 $ khasi-spell word aiñ
 OK  aiñ  (in lexicon)
-  also spelled: ain
 ```
 
 ```python
@@ -541,11 +604,13 @@ r.variants     # [{'variant': 'jingïathuh', 'source': 'root', 'canonical': Fals
 `canonical` marks the spelling the lexicon records exactly, so an interface can
 show which is standard without forcing it — the web UI ticks it (✓).
 
-Four routes find them: a folded-index lookup for whole words
-(`iathuh` → `ïathuh`), the reverse direction for diacritic input
-(`aiñ` → `ain`), root substitution for derived forms, since `jingïathuh` is
-not a lexicon entry but `jing-` + `ïathuh`, and a **morphological rule** for
-the reciprocal prefix.
+The routes that find them: a folded-index lookup for whole words
+(`iathuh` → `ïathuh`), root substitution for derived forms, since
+`jingïathuh` is not a lexicon entry but `jing-` + `ïathuh`, **rules** for the
+reciprocal prefix, the `-aiñ` ending and the one short form whose plain
+spelling is illegal (`ing` → `ïing`), spellings the dictionary records in its
+own glosses, and corpus words admitted with their diacritics restored.
+`khasi_spell/variants.py` numbers and documents each route.
 
 #### The reciprocal prefix — corrected in the lexicon
 
@@ -621,33 +686,66 @@ model with Stupid Backoff, and flags it when a one-edit lexicon neighbour
 fits the slot substantially better.
 
 ```python
-sp.check_realword("Ka sorkar ki la pynkiew ia ka tulop jong ki MLA")
-# ki -> ka  (margin 5.06)   — and leaves the legitimate 'ki' in 'jong ki MLA'
+sp.check_realword("Hap ban pynkynmaw ia kine ka rangbah, ba kumba 38 snem "
+                  "ka sorkar Congress ka la pyniaid ia ka jylla Meghalaya.")
+# ka -> ki  (margin 12.8)  — `kine ki rangbah`; the other three `ka` stay
+
+sp.check_realword("Ka sorkar ki la pynkiew ia ka tulop jong ki MLA", min_margin=5)
+# ki -> ka  (margin 5.06)  — and leaves the legitimate 'ki' in 'jong ki MLA'
 ```
 
-In the web interface this is the **word choice** checkbox on the Text tab, on
-by default. Wrong-word flags are underlined in dashed amber, distinct from the
-solid red of a misspelling, because they are a weaker claim: one says "this is
-not a Khasi word", the other says "this may be the wrong Khasi word". They are
-never applied automatically.
+`min_margin` applies to that call only. (It used to be stored on the shared
+detector, so in the HTTP service one request's sensitivity became every
+later request's default.)
+
+Words are scored **as the corpus writes them**. The corpus has no ï, ñ or
+apostrophe, so in the lexicon's own spelling every such word was "unseen":
+`ïaid` was flagged with `iaid` at margin 17.8, `ïing` with the illegal
+`iing`, and `nga'm` with `ngam`. The detector was telling writers to drop
+their diacritics. Both the word and its alternatives are now looked up in
+the corpus's spelling, and an alternative that differs only by a diacritic
+or an apostrophe is never proposed. Context re-ranking scores candidates the
+same way.
+
+In the web interface this is the **Check word choice** checkbox on the check
+view, on by default. Wrong-word flags are underlined with a dashed amber line,
+distinct from the solid marks of a misspelling, because they are a weaker
+claim: one says "this is not a Khasi word", the other says "this may be the
+wrong Khasi word". They are never applied automatically.
 
 Khasi's noun-class clitics (`ka` fem, `ki` pl, `u` masc, `i` dim) are short,
 extremely frequent, and almost certainly the commonest real-word error in the
 language, so they are included deliberately — a three-character minimum would
 exclude every one of them.
 
-| min_margin | false-pos | recall (clitics) |
-|---|---|---|
-| 6.0 | 4.0% | 41.2% |
-| 7.0 | 2.7% | 30.0% |
-| **8.0** (default) | **0.0%** | **25.0%** |
+Measured with `scripts/eval_realword.py` (seeded; 150 untouched corpus
+sentences for false positives, 80 sentences with one word swapped for a
+lexicon neighbour, and 40 ka/ki swaps in each direction):
+
+| min_margin | clean tokens flagged | swap recall | swap precision | typed `ki` for `ka` | typed `ka` for `ki` |
+|---|---|---|---|---|---|
+| 6.0 | 0.57% | 90.0% | 88.9% | 62.5% | 35.0% |
+| 7.0 | 0.41% | 86.2% | 97.2% | 50.0% | 32.5% |
+| **8.0** (default) | **0.20%** | **77.5%** | **98.4%** | **42.5%** | **22.5%** |
+| 10.0 | 0.04% | 67.5% | 100% | 30.0% | 17.5% |
+
+The last column was **0% at every margin** until 2026-09-30. A frequency rule
+hidden in a default of `freq_ratio=1.0` — documented as "no constraint" —
+required every alternative to be at least as common as the typed word, and
+`ka` is the commonest word in the corpus, so `ka` could never be flagged. The
+trigram scorer also dropped a lone left neighbour, scoring the second word of
+every sentence as if it opened the sentence. With those two fixes and the
+corpus-spelling fix above, recall at the default rose from 73.8% to 77.5% and
+the right suggestion from 71.2% to 73.8%, with precision unchanged (98.3% →
+98.4%). The cost is one more flagged token in 2,446 of clean text.
 
 Defaults sit at the precision end: wrongly "correcting" a word the writer got
 right costs more trust than a missed error is worth. Lower `min_margin` for
 more recall.
 
 > **Why a trigram model and not the embeddings.** Both were built and measured
-> on the same 150 clean / 80 injected sentences. At an identical 0.7%
+> on the same 150 clean / 80 injected sentences, when the detector was first
+> built (before `eval_realword.py` existed). At an identical 0.7%
 > false-positive rate the n-gram scorer reached **33.8% recall against the
 > embedding's 3.8%** — nine times better. Cosine-to-centroid asks "is this word
 > roughly on topic"; the question is "does this word belong in this slot".
@@ -676,36 +774,44 @@ valid trigram, so on unseen context every candidate floors to the same score,
 the term becomes constant, and the engine's ordering stands automatically.
 
 Measured on `tests/sentence_benchmark.json` — 250 real corpus sentences, one
-injected single-edit error each:
+injected single-edit error each (249 valid, 248 located), 30 Sept 2026:
 
 | | top-1 | top-5 | ms/sentence |
 |---|---|---|---|
-| isolated (previous behaviour) | 89.6% | 99.2% | 43 |
-| **+ context** | **92.4%** | 99.2% | 46 |
+| isolated | 87.1% | 98.4% | 68 |
+| **+ context** | **94.4%** | 98.4% | 76 |
 
 Top-5 is unchanged by construction: re-ordering five candidates cannot change
 whether the answer is among them. It is top-1 — the suggestion actually
 offered — that moves.
 
 `ALPHA` was chosen on one half of the benchmark and the gain confirmed on the
-other (86.4% → 89.6%), so it is not fitted to the numbers reported above. On
-the full set context fixes 20 items and breaks 13 — a net gain of 7 in 249,
-which a two-sided sign test does **not** distinguish from chance
-(*p* = 0.30) — and
-the 0.5–3.0 plateau all scores within a point of the chosen value.
+other, so it is not fitted to the numbers reported above; the 0.5–3.0 plateau
+all scores within a point of the chosen value. On the full set context fixes
+24 items and breaks 6, which a two-sided sign test puts at *p* = 0.0014.
 
-**Deletions gain most** — 78.0% → 90.2%, the weakest error class in this
+Three fixes on 2026-09-30 took top-1 with context from 91.6% to 94.4%.
+Context is taken from the same sentence only, with the sentence markers the
+model was built with; a single word to the left is used as context (it was
+replaced by the sentence-start marker); and candidates are scored as the
+corpus writes them. The corpus has no ï, ñ or apostrophe, so a candidate
+carrying one — most `ïa-` words — used to score as an unseen word and lose to
+any plain candidate. The last fix is most of the gain.
+
+**Deletions gain most** — 75.6% → 92.7%, the weakest error class in this
 project. Dropping a letter destroys more string evidence than any other single
 edit, leaving several lexicon entries equidistant from the wreckage; context is
 the only thing left that can separate them. Insertions are the one class that
-does not benefit (97.1% → 94.2%), string evidence there being already
+does not benefit (95.7% → 92.8%), string evidence there being already
 near-perfect. No per-class gating is applied — that would be four more
 parameters fitted to 250 items.
 
 Two costs, both real:
 
-- **Memory.** The model adds **~170 MB** to a speller instance (475 → 646 MB),
-  now paid on the first `check_text()` rather than only by `check_realword()`.
+- **Memory.** The file model adds **~170 MB** to a speller instance (475 →
+  646 MB), paid on the first `check_text()`. Context re-ranking and real-word
+  detection share that one copy (they used to load one each), and the
+  PostgreSQL backend keeps the counts in the database instead.
 - **Corrected neighbours.** Candidates are scored against the words *as typed*.
   Where two errors sit close together each is ranked against the other's
   misspelling, which the model has never seen, so it floors and contributes
@@ -723,36 +829,49 @@ carry no signal.
 ## What is in here
 
 ```
-khasi_engine/       the engine, copied unmodified from the parent platform
-  spell_checker.py    938  the morphology-gated checker
-  morphology.py     1,377  Phase 2 — affix cascade, the validity oracle
-  database.py       1,385  lexicon store, word-list source
-  analyser.py         895  orchestrator; injects the morphology gate
-  phonology.py        539  Phase 1 — phonotactic validation
-  complex.py          484  Phase 4 — reduplication, compounds, loans
-  assimilation.py     246  Phase 3 — surface/underlying reconstruction
-  w2v_client.py        79  optional FastText proxy
-autocorrect/        Khasi-adapted Norvig speller (digraph-aware edits)
-khasi_spell/        this project's own public surface — facade, CLI, API
+khasi_engine/       the engine — extracted from the parent platform and changed
+                    here since (see "Relationship to the parent project")
+  tokens.py           word tokenisation, normalisation and case, shared by all
+  paths.py            where the data files live (KHASI_DATA_DIR)
+  spell_checker.py    the morphology-gated checker: the vote, the search, ranking
+  morphology.py       Phase 2 — affix cascade, the validity oracle
+  database.py         lexicon store (JSON or PostgreSQL), word-list source
+  analyser.py         orchestrator; injects the morphology gate; joins
+  phonology.py        Phase 1 — phonotactic validation
+  complex.py          Phase 4 — reduplication, compounds, loans
+  assimilation.py     Phase 3 — surface/underlying reconstruction
+  generate.py         on-demand morphological candidate generation
+  g2p.py              rule-based pronunciation, for the /analyse panel
+  w2v_client.py       optional FastText re-ranking, local model or remote Space
+autocorrect/        vendored Norvig speller; only its frequency table is used
+khasi_spell/        this project's public surface
   speller.py          the facade: check / suggest / check_text / variants
+  api.py, cli.py      HTTP service and command line; env.py reads .env for both
   context.py          trigram re-ranking of candidates in sentence context
-  foreign.py          withholds proper nouns, acronyms and known names
   realword.py         correctly spelled, wrongly chosen words
-  variants.py         alternative diacritic spellings (i vs ï, n vs ñ)
-  ngram.py            Stupid Backoff trigram model over the corpus
+  foreign.py          withholds proper nouns, acronyms and known names
+  variants.py         alternative diacritic spellings (i -> ï, n -> ñ)
   corpus_freq.py      log-scaled corpus frequencies
+  corpus_pool.py      frequent corpus words as candidates and as words
+  splits.py           run-together words (jongki -> jong ki)
+  ngram.py, ngram_pg.py   the trigram model, from a file or PostgreSQL
   static/index.html   the web interface, single file, no build step
-data/               khasi_db.json (lexicon) · corpus_freq.json · ngrams.json.gz · gazetteer.json
-scripts/            corpus frequency, n-gram and gazetteer builders,
-                    benchmark runners, lexicon quarantine
+data/               corpus_freq.json · ngrams.json.gz · gazetteer.json ·
+                    spelling_links.json · runtogether_candidates_review.csv ·
+                    khasi_g2p_length_lexicon.json — and, locally only, the
+                    lexicon khasi_db.json (not in the repository; LICENSE-DATA)
+scripts/            builders, benchmark runners (run_benchmark, run_sentence_
+                    benchmark, evaluate, eval_realword, ablate) and the lexicon
+                    repair passes
 models/fasttext/    cbow_100 FastText model, 786 MB, gitignored
 tests/              the test suite
 ```
 
 Deliberately **not** carried over from the parent: named-entity recognition,
 relation extraction, the curation and governance system, CLDF/LIFT export,
-grapheme-to-phoneme conversion, text-to-speech, the React frontend (replaced
-here by a single static page), and the v1/v2 REST surface.
+text-to-speech, the React frontend (replaced here by a single static page),
+and the v1/v2 REST surface. Grapheme-to-phoneme conversion *was* carried over
+later, in `khasi_engine/g2p.py`, to give the word panel a pronunciation.
 
 `autocorrect/Speller_top5.py` was also left out — it was the only importer of
 `gensim`, and nothing imported it.
@@ -760,31 +879,34 @@ here by a single static page), and the v1/v2 REST surface.
 ## Tests
 
 ```bash
-python3 -m pytest tests -q               # whole suite, ~2 min
-python3 -m pytest tests/test_spellchecker.py -q   # spelling only, ~40 s
+python3 -m pytest tests -q               # whole suite, ~3 min
+python3 -m pytest tests/test_spellchecker.py -q   # spelling only
 python3 -m pytest tests -q -k "derived"  # just the morphology gate
 ```
 
 `pytest` is the only test dependency. If it is not installed:
 `python3 -m pip install pytest`.
 
-**135 tests.** 27 are inherited from the parent (ranking and compounds 10,
-phonology rules 7, lookup and root gate 5, morphology 3, golden corpus 2).
-The other 118 are new (48 spellchecker, 29 embeddings/n-gram, 35 diacritics, 6 coda): the parent had **no** tests on the spelling path at
-all, so any change to it was unguarded.
+The suite needs the lexicon; without it (no `data/khasi_db.json`, no
+`DATABASE_URL`) the tests that load it are skipped with that reason and the
+rest still run. It ignores `.env`, so run it against PostgreSQL by exporting
+`DATABASE_URL`, which also enables the PostgreSQL-only tests.
 
-Most of the runtime is the one-off lexicon load; the fixture is module-scoped
-so the whole file costs roughly one construction.
+Most of the runtime is the one-off lexicon load; fixtures are module-scoped
+so each file costs roughly one construction.
 
 Tests in `test_spellchecker.py` assert observed behaviour including its
 weaknesses. Where the checker generates the right answer but ranks it below a
 competitor, the test asserts top-5 membership and is marked `WEAK` — those
 are the cases to tighten when the ranking model is improved.
+`test_audit_regressions.py` pins every defect fixed after the 2026-09-30
+audit; `test_tokens.py` covers the shared tokeniser and runs without the
+lexicon.
 
 ## Benchmark
 
 ```bash
-python3 scripts/run_benchmark.py          # ~13 min, 308 items
+python3 scripts/run_benchmark.py          # ~1 min incl. loading, 308 items
 python3 scripts/run_benchmark.py --limit 50   # quick check
 ```
 
@@ -804,23 +926,35 @@ It is still synthetic and drawn from the lexicon, so it measures recovery of
 known words, not performance on running text. A benchmark built from
 authentic Khasi misspellings remains the real goal.
 
-**Current figures** (23 Sept 2026, `scripts/evaluate.py` and the two
-benchmark runners):
+**Current figures** (30 Sept 2026, `scripts/evaluate.py`, the two benchmark
+runners and `scripts/eval_realword.py`):
 
 | | |
 |---|---|
 | detection | **98.0%** (288 of 294), precision 1.000 — none of 294 correct control words flagged |
 | top-1 / top-5 / MRR | **73.5%** (216) / **91.5%** (269) / 0.808 |
-| sentence benchmark, top-1 isolated → with context | 87.1% → **91.6%** (21 fixed, 10 broken, sign test p = 0.071) |
-| flagged on 200 untouched corpus sentences | **3.19%** (105 of 3,294 tokens) |
-| rejected with no suggestion | 0.30% (10 tokens) |
-| targets of `khasi_test_pairs_v2.csv` reachable as candidates | 41.5% of 23,254 (35.7% from lexicon forms alone) |
-| latency | 47–51 ms per word |
+| sentence benchmark, top-1 isolated → with context | 87.1% → **94.4%** (24 fixed, 6 broken, sign test p = 0.0014) |
+| flagged on 200 untouched corpus sentences | **3.40%** (112 of 3,294 tokens) |
+| underlined with no suggestion | 0.24% (8 tokens) |
+| real-word detection at the default margin | 77.5% recall, 98.4% precision on word swaps |
+| latency | 32 ms per word; 76 ms per sentence with context |
+| targets of `khasi_test_pairs_v2.csv` reachable as candidates | 41.5% of 23,254 (35.7% from lexicon forms alone) — 23 Sept, not re-measured |
+
+The flag rate rose from 3.19% on 23 Sept for one reason: seven lower-case
+English words — `hills`, `wage` twice, `council`, `university`, `centre` — and
+one capital after a colon are now checked. They were withheld only because
+the name lists happen to contain them and the list was matched
+case-insensitively, which also hid lower-case typos that spell a name. English
+inside Khasi text is flagged like any other unknown word (see *Proper nouns
+and acronyms*). Word-benchmark accuracy is unchanged, sentence top-1 with
+context rose from 91.6% to 94.4%, and the checker is faster: 46 → 32 ms per
+word, 166 → 76 ms per sentence, from caching the word tables the search used
+to rebuild on every lookup.
 
 ### Sentence benchmark
 
 ```bash
-python3 scripts/run_sentence_benchmark.py         # ~25 min, A/B with and without context
+python3 scripts/run_sentence_benchmark.py         # ~1 min, A/B with and without context
 python3 scripts/run_sentence_benchmark.py --limit 50 --no-compare   # quick check
 ```
 
@@ -843,6 +977,10 @@ real sentences, though the errors in it are still injected rather than
 authentic.
 
 ### Fragments are not words
+
+> The subsections from here to *Sentence latency* record individual changes,
+> each with the figures measured when it was made. They are a log, not the
+> current state: the current figures are in *Current figures* above.
 
 `ng` was accepted as correctly spelled. It is a digraph — one phoneme — and
 the lexicon's own `phonology` block lists it under
@@ -1288,7 +1426,7 @@ and `kñ` are judged on the DB's own consonant inventory plus the number of
 distinct lexicon entries using them (17 for `s'`, 10 for `l'`).
 
 **Deliberately excluded.** Digraphs (`sh`, `kh`, `th`, `ph`, `ng`) are
-single phonemes, not clusters — they appeared in the failure list only
+read as one unit, not as clusters — they appeared in the failure list only
 because the words carrying them fail for a different reason, a vowel
 misread as `d` (`shabdr`, `thaldb`), and adding them would have papered over
 that damage. Markup artefacts (`*d`, `*kh`) and onsets with no evidence at
@@ -1544,9 +1682,9 @@ and truncate after filtering.
 **A correction must share material with the input.** Even after the two
 fixes above, `ph` was answered with `['u', 'phi', 'a', 'i', 'ï']`. Only
 `phi` ('you' pl.) is a correction of `ph`; the others share nothing with it
-at all. The cause is again the digraph: `ph` is a single phoneme, so
-`ph -> u` is one substitution and scores 1.0 — identical to `ph -> phi` —
-and the one-letter clitics then win the tie on raw frequency.
+at all. The cause is again the digraph: `ph` is one unit to the distance
+measure, so `ph -> u` is one substitution and scores 1.0 — identical to
+`ph -> phi` — and the one-letter clitics then win the tie on raw frequency.
 
 `_offerable()` therefore takes the input word as well, and requires the
 candidate to share at least one character with it. It is a weak test, but it
@@ -1593,7 +1731,15 @@ where capitalisation carries no information at all: `Sohra ka dei…` is now
 recognised instead of flagged. Its 312 collisions with ordinary Khasi words
 (`bah`, `bat`, `blei`, `dawa`) are inert — the list is consulted only for
 words the gate has already rejected, and those are accepted by the lexicon
-first.
+first. A name must be **written as a name**, with a capital: matched
+case-insensitively, the list also hid lower-case typos that happen to spell a
+name (`sokda` for `sohra`) and lower-case English words it happens to contain
+(`council`, `university`).
+
+"Sentence-initial" means the start of the text or of a line, and the word
+after `. ! ? :`, with any opening quotes, brackets, bullets or dashes in
+between. A capital after a line break, a colon or a list dash used to be
+taken for a name, so a misspelling there was never checked.
 
 Measured effect on untouched corpus text:
 
@@ -1700,51 +1846,48 @@ unchanged (250/250 errors still located).
 
 ## Known limitations
 
-Measured on the parent implementation, which this reproduces exactly:
+Current figures are in *Benchmark* above. What still limits the checker:
 
-| | |
-|---|---|
-| Detection | **84.4%** |
-| Top-1 | **67.2%** |
-| Top-5 | **80.5%** |
-| Latency | **22 ms/word** (was 2,525 ms) |
+- **No authentic error data.** Every figure is measured on injected errors;
+  there is no annotated corpus of real Khasi misspellings to test against.
+- **Lexical coverage.** The lexicon derives from a scanned 1906/1973
+  dictionary. Most unreachable corrections are words it does not hold, which
+  no ranking can offer; the corpus pool and the morphological generator
+  recover only part of that gap.
+- **Phase 4 over-accepts solid compounds.** The splitter can accept a string
+  that merely divides into two lexicon words (`waleng`). The attested-word
+  veto removes the cases one edit from a real word, not all of them.
+- **Unknown words with nothing to offer are silent in running text.** A word
+  the vote rejects but for which no candidate exists is reported by `check()`
+  and not underlined by `check_text()` (a product decision; see *A
+  hyphenated compound is a word* below). Phonotactically impossible words are
+  underlined either way.
+- **Names are withheld, not checked.** A misspelled proper noun is never
+  corrected; see *Proper nouns and acronyms*.
+- **Long texts are slow when they are mostly not Khasi.** Each unknown word
+  costs tens of milliseconds, and English-heavy input is almost all unknown
+  words. `/check` caps input at 50,000 characters.
 
-All figures on the 308-item frozen benchmark. Earlier numbers in this file
-came from a sample that moved with the lexicon and are not comparable.
+The ~~struck-through~~ items below were limitations earlier and are fixed:
 
-Structural causes, in rough order of impact:
-
-- **No corpus.** Frequencies are assigned from lexicon structure, not observed
-  usage — only **11 distinct values** across 34,224 forms. Ranking depends on
-  this signal.
-- ~~**No transposition.**~~ **Fixed.** The phoneme recurrence still has only
-  three operations, but distance is now the smaller of the phoneme distance
-  and a character-level *Damerau* distance, which supplies transposition and
-  stops digraph tokenisation inflating typographic slips. Worth +5.2 points
-  of top-1 and +6.5 of top-5 — the largest single ranking gain here.
-- **No context.** Tokens are checked independently, so real-word errors — a
-  correctly spelled word in the wrong place — are undetectable by design.
-- **No index.** Candidate generation scans all 34,224 forms in Python.
-- ~~**Proper nouns are weak.** `shilong` ranks `shilot` above `shillong`.~~
-  **No longer reproduces** (23 Sept 2026): `shillong` is first.
-- ~~**No word-final coda validation.**~~ **Fixed 2026-08-26.**
-  `ALLOWED_FINAL_CONSONANTS`, `_DIGRAPHS` and `_SPECIAL` were loaded from the
-  data and never consulted, so no coda check ran and `bamsh` validated. Now
-  enforced, rejecting 0.24% of lexicon entries (20 of 8,277) — all of which
-  are OCR artefacts or banned letters (`liihv`, `kwiiig`, `sarasg`).
-  Driven by the ALLOWED lists, not `forbidden_final`, which named `h` and `w`
-  as forbidden while 1,216 entries end that way; those two were removed from
-  the data. `VALID_INITIALS` and `DIPHTHONGS` stay unconsumed on purpose —
-  the first excludes `ï` and would reject every `ïa-` word. Reasons are
-  recorded in `phonology.py`.
-- **Phase 4 over-accepts.** The solid-compound splitter reports `waleng` as a
-  `compound_fusion` and accepts it. Same class of problem as the assimilation
-  bug fixed below, different phase; not yet addressed.
+- ~~**No corpus.** Frequencies were assigned from lexicon structure.~~ Corpus
+  frequencies are on by default.
+- ~~**No transposition.**~~ The distance blends in a character-level Damerau
+  distance.
+- ~~**No context.**~~ Candidates are re-ranked with a trigram model, and
+  real-word errors are detected (`check_realword`).
+- ~~**No index.**~~ Candidate generation uses a symmetric-delete index.
+- ~~**Proper nouns are weak.** `shilong` ranked `shilot` above `shillong`.~~
+- ~~**No word-final coda validation.**~~ Enforced since 2026-08-26 from the
+  data's ALLOWED lists; `VALID_INITIALS` and `DIPHTHONGS` stay unconsumed on
+  purpose, for the reasons recorded in `phonology.py`.
 
 ### Fixed here, not in the parent
 
-Two bugs were found and fixed in this copy after extraction. **Neither is
-fixed upstream** — port them deliberately if you want them there.
+The first two bugs found in this copy after extraction are described below.
+Many more engine changes followed — the sections above and the git history
+record them — and **none is ported upstream**; port them deliberately if you
+want them there.
 
 1. **Reverse assimilation ignored gemination** (`assimilation.py`). `pyn-` +
    l-initial root geminates (`pyn-` + `lait` → `pyl|lait`), but the reverse
@@ -1766,8 +1909,8 @@ a concrete argument for a benchmark built from authentic errors.
 ## Relationship to the parent project
 
 Extracted from `project/khasi_nlp_v12_affix_complete/`. The parent is
-**unmodified** — this is an independent copy, not a move, and it has its own
-copy of the lexicon.
+**unmodified** by this project — this is an independent copy, not a move —
+and the engine here has since been changed substantially.
 
 The two will drift. If you fix something in `khasi_engine/` here that also
 matters there, port it deliberately; nothing keeps them in sync.
@@ -1781,14 +1924,17 @@ Dual, inherited from the parent:
   Required**. See `LICENSE-DATA`. Redistribution, ML training, bulk extraction
   and commercial integration need prior written permission.
 
-**Redistributing this repository means redistributing the lexicon.** Settle
-that with the rights holders before publishing it. Contact
-`ranslyh@gmail.com`.
+The lexicon itself is **not** in this repository. The data files that are —
+the gazetteer, the spelling links, the run-together table, the frozen
+benchmarks — are derived from the project's own resources and the lexicon;
+settle their status with the rights holders before publishing the repository.
+Contact `ranslyh@gmail.com`.
 
 ## Linguistic sources
 
 The phonological and morphological rules are page-cited to primary grammars,
 chiefly Badaplin War (2001), *Ki Sawa Bad Ki Dur Kyntien Jong Ka Ktien Khasi*,
 with the lexicon deriving largely from E. Bars (1973), *Khasi–English
-Dictionary*. Rules live in `data/khasi_db.json`, not in Python, so a linguist
-can correct the grammar without touching code.
+Dictionary*. Rules live in the lexicon's `phonology` and `morphology` blocks
+(the JSON file, or the `*_meta` tables in PostgreSQL), not in Python, so a
+linguist can correct the grammar without touching code.

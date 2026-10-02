@@ -45,7 +45,8 @@ VERSION = "g2p_v2.1"
 # without touching this module.
 
 def _load_length_lexicon() -> dict:
-    path = _Path(__file__).parent.parent / "data" / "khasi_g2p_length_lexicon.json"
+    from khasi_engine import paths as _paths
+    path = _paths.data_file("khasi_g2p_length_lexicon.json")
     try:
         raw = _json.loads(path.read_text(encoding="utf-8"))
         return {k.lower(): v for k, v in (raw.get("entries") or {}).items()}
@@ -66,7 +67,9 @@ _CONS_DIGRAPHS = {
 _CONS_SINGLE = {
     "p": "p", "b": "b", "t": "t", "d": "d", "k": "k", "g": "g",
     "m": "m", "n": "n", "ñ": "ɲ", "l": "l", "r": "r",
-    "s": "s", "h": "h", "w": "w", "j": "dz", "c": "c",
+    "s": "s", "h": "h", "w": "w", "j": "dz",
+    # No "c": it is not a Khasi letter. The palatal stop /c/ is produced
+    # only by the final -it/-id rule below, never read from the spelling.
     # The apostrophe is an ELISION MARK, not a glottal stop (War p.84):
     # 'tikmie < kti+kmie, ar'ti < ar+kti. It stands for a deleted segment,
     # so it contributes no phoneme of its own — but it is still kind 'C',

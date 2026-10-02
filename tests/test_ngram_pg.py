@@ -113,3 +113,28 @@ def test_missing_gram_is_cached_not_requeried(pair):
     q = p.queries
     p.prefetch(["deliberately-absent-gram"])
     assert p.queries == q
+
+
+def test_a_dropped_connection_is_reopened(pair):
+    """A managed database closes idle connections and restarts. Without a
+    reconnect every later call raised InterfaceError, and context
+    re-ranking — so /check — failed until the process restarted."""
+    f, p = pair
+    expected = f.slot_score("briew", ["ka", "sorkar"], ["ka", "la"])
+    p._cache.clear()
+    p._conn.close()
+    assert p.slot_score("briew", ["ka", "sorkar"], ["ka", "la"]) == expected
+
+
+def test_scores_are_safe_under_threads(pair):
+    """The service calls slot_score() from several request threads; the
+    LRU cache and the single connection are guarded by one lock."""
+    from concurrent.futures import ThreadPoolExecutor
+    f, p = pair
+    p._cache_size = 50          # force constant eviction
+    try:
+        with ThreadPoolExecutor(8) as ex:
+            got = list(ex.map(lambda s: p.slot_score(*s), SLOTS * 20))
+        assert got == [f.slot_score(*s) for s in SLOTS * 20]
+    finally:
+        p._cache_size = 50_000

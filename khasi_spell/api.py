@@ -32,9 +32,18 @@ except ImportError as exc:  # pragma: no cover
         "Install them with:  pip install -r requirements-api.txt"
     ) from exc
 
-from khasi_engine import morphology
-from khasi_engine.database import canonical_pos
-from khasi_spell.speller import KhasiSpeller
+# `.env` first, before any engine module is imported: phonology, morphology
+# and assimilation decide at import time whether to read the JSON lexicon,
+# and a DATABASE_URL loaded later (it used to be read in the lifespan hook)
+# arrived after they had already parsed the 64 MB file.
+from khasi_spell.env import load_dotenv as _load_env_file
+
+_DOTENV_NOTE = _load_env_file()
+
+from khasi_engine import morphology                     # noqa: E402
+from khasi_engine import tokens as _tokens              # noqa: E402
+from khasi_engine.database import canonical_pos         # noqa: E402
+from khasi_spell.speller import KhasiSpeller            # noqa: E402
 
 
 _speller: Optional[KhasiSpeller] = None
@@ -46,45 +55,10 @@ def get_speller() -> KhasiSpeller:
     return _speller
 
 
-def _load_dotenv() -> Optional[str]:
-    """
-    Read `.env` beside the project root into os.environ, if it exists.
-
-    Twelve lines of stdlib rather than a dependency, because the package has
-    no mandatory third-party requirement and this is not worth breaking that
-    for. Values already present in the environment always win, so an explicit
-    `DATABASE_URL=... uvicorn ...` still overrides the file.
-
-    This exists because `export DATABASE_URL=...` lives and dies with one
-    shell: run uvicorn from a second terminal and the service silently loads
-    the JSON lexicon instead, which looks identical until you notice the
-    startup line.
-    """
-    path = Path(__file__).resolve().parent.parent / ".env"
-    if not path.is_file():
-        return None
-    loaded = []
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key, value = key.strip(), value.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = value
-                loaded.append(key)
-    except OSError as e:
-        print(f"[khasi-spell] could not read {path}: {e}")
-        return None
-    return f"{path.name}: {', '.join(loaded)}" if loaded else None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    note = _load_dotenv()
-    if note:
-        print(f"[khasi-spell] loaded {note}")
+    if _DOTENV_NOTE:
+        print(f"[khasi-spell] loaded {_DOTENV_NOTE}")
     print("[khasi-spell] lexicon source: "
           + ("PostgreSQL" if os.environ.get("DATABASE_URL") else "JSON file"))
     # Load the lexicon once at start-up rather than on the first request,
@@ -158,8 +132,16 @@ class WordRequest(BaseModel):
     n: int = Field(default=5, ge=1, le=20)
 
 
+# Upper bound on /check, /correct and /realword input. Checking is
+# synchronous and costs tens of milliseconds per unknown word, so a large,
+# mostly non-Khasi document held a worker for minutes (20,000 characters of
+# English-heavy text took 162 s before the 2026-09-30 speed-ups). 50,000
+# characters is a long article; send longer documents in parts.
+MAX_TEXT_CHARS = 50_000
+
+
 class TextRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=100000)
+    text: str = Field(..., min_length=1, max_length=MAX_TEXT_CHARS)
     # Context re-ranking is on by default; exposed so a caller checking
     # word lists or fragments — where neighbours carry no signal — can
     # turn it off.
@@ -170,7 +152,7 @@ class TextRequest(BaseModel):
 
 
 class RealWordRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=100000)
+    text: str = Field(..., min_length=1, max_length=MAX_TEXT_CHARS)
     min_margin: Optional[float] = Field(default=None, ge=0.0, le=50.0)
 
 
@@ -231,6 +213,7 @@ def service_info() -> dict:
         "endpoints": {
             "GET  /health": "readiness and vocabulary size",
             "POST /word": '{"word": "lyngdo"} -> gate, method, suggestions',
+            "POST /analyse": '{"word": "..."} -> phonology, morphology, assimilation',
             "POST /check": '{"text": "..."} -> spans + corrected string',
             "POST /correct": '{"text": "..."} -> corrected string only',
             "POST /realword": '{"text": "..."} -> contextually wrong real words',
@@ -266,7 +249,22 @@ def health():
                 if _speller.corpus_frequencies else {})}
             if ready else {"applied": False}),
         "language_model": _speller.language_model if ready else {"available": False},
+        # The optional resources that switch features off when missing. A
+        # non-editable install without KHASI_DATA_DIR used to lose all of
+        # them without a word; say which are present.
+        "resources": _resources() if ready else {},
     }
+
+
+def _resources() -> dict:
+    from khasi_engine import paths
+    names = {"corpus_frequencies": "corpus_freq.json",
+             "ngram_file": "ngrams.json.gz",
+             "gazetteer": "gazetteer.json",
+             "runtogether_splits": "runtogether_candidates_review.csv",
+             "gloss_spelling_links": "spelling_links.json"}
+    return {"data_dir": str(paths.data_dir()),
+            **{k: paths.data_file(v).is_file() for k, v in names.items()}}
 
 
 @app.post("/v1/spellcheck")
@@ -286,24 +284,11 @@ def spellcheck_v1(req: SpellCheckRequest):
 @app.post("/word")
 def check_word(req: WordRequest):
     """Check one word. Returns the outcome and why it was reached."""
-    sp = get_speller()
-    payload = sp.check(req.word).to_dict()
-    if req.n != 5:
-        # `glosses` and `distances` are documented as parallel to
-        # `suggestions`. Replacing only the word list left a shorter list of
-        # words beside a five-long list of meanings, and any difference in
-        # order between suggest() and check() would then print one word's
-        # meaning under another. Rebuild all three together, keyed by word.
-        words = sp.suggest(req.word, n=req.n)
-        at = {w: i for i, w in enumerate(payload.get("suggestions") or [])}
-        for key, blank in (("glosses", ""), ("distances", None)):
-            prev = payload.get(key) or []
-            payload[key] = [
-                prev[at[w]] if w in at and at[w] < len(prev) else blank
-                for w in words
-            ]
-        payload["suggestions"] = words
-    return payload
+    # One search for any n: check() takes n directly, so `suggestions`,
+    # `distances` and `glosses` come out of the same ranking and stay
+    # parallel. This used to run check() and then suggest() again for any
+    # n other than 5, and re-align the three lists by hand.
+    return get_speller().check(req.word, n=req.n).to_dict()
 
 
 @app.post("/check")
@@ -539,6 +524,39 @@ def _split_senses(gloss_list, pos: str, clitic: str) -> dict:
     return out
 
 
+_SYL_MARKS = str.maketrans("ïñáéíóúý", "inaeiouy")
+
+
+def _syl_letters(s: str) -> str:
+    return re.sub(r"[\s\-'’]", "", _tokens.nfc(s or "").lower())
+
+
+def _own_syllables(word: str, syllables):
+    """*syllables* in *word*'s own letters, or None if they spell another word.
+
+    A stored syllabification is shown only when it spells the word it is shown
+    for. `katkum` 'according to' carried `katba`'s kat·ba — 529 single-word
+    entries held another word's syllables, an import error repaired by
+    scripts/fix_inherited_analyses.py — and nothing checked before display.
+    Syllables that differ from the word only by a dropped ï, ñ or accent are
+    re-cut from the word itself, so `ia·shong` shows as `ïa·shong`.
+    """
+    if not syllables:
+        return None
+    letters = _syl_letters(word)
+    joined = "".join(_syl_letters(s) for s in syllables)
+    if joined == letters:
+        return list(syllables)
+    if joined.translate(_SYL_MARKS) != letters.translate(_SYL_MARKS):
+        return None
+    out, i = [], 0
+    for s in syllables:
+        n = len(_syl_letters(s))
+        out.append(letters[i:i + n])
+        i += n
+    return out
+
+
 def _syllables_of(db, word: str):
     """(syllables, pattern) from *word*'s own lexicon entry, else (None, None)."""
     rows = db.lookup(word) or []
@@ -547,7 +565,8 @@ def _syllables_of(db, word: str):
     rich = (getattr(db, "_enriched_by_id", None) or {}).get(
         rows[0].get("entry_id")) or {}
     derived = (rich.get("phonology") or {}).get("derived") or {}
-    return derived.get("syllables"), derived.get("pattern")
+    syl = _own_syllables(word, derived.get("syllables"))
+    return (syl, derived.get("pattern")) if syl else (None, None)
 
 
 def _stitch_derived_phonology(db, word: str, layers: dict):
@@ -632,8 +651,16 @@ def _stored_phonology(sp, word: str) -> dict:
         # PostgreSQL loader populates from the phon_derived/phon_flags columns.
         rich = (getattr(db, "_enriched_by_id", None) or {}).get(entry.get("entry_id")) or {}
         phon = rich.get("phonology") or {}
-        derived = phon.get("derived") or {}
+        derived = dict(phon.get("derived") or {})
         flags = phon.get("flags") or {}
+        own = _own_syllables(word, derived.get("syllables"))
+        if derived.get("syllables") and not own:
+            # The stored analysis spells another word (katkum held katba's
+            # kat·ba). Its syllables, pattern and the traits read off them
+            # describe that word, so none of them is shown.
+            derived = {}
+        elif own:
+            derived["syllables"] = own
         if not derived.get("syllables"):
             # The entry exists but was never syllabified — 885 records are in
             # that state. Assemble it the same way rather than showing a
@@ -721,6 +748,10 @@ def analyse_word(req: WordRequest):
     return {
         "word": a.get("input"),
         "verdict": a.get("verdict"),
+        # The spell checker's decision, the same one /word reports. The
+        # verdict above is the analyser's reading of the form; when they
+        # differ the summary says why.
+        "accepted": a.get("accepted"),
         "summary": a.get("verdict_desc"),
         "phonology": {
             # Pronunciation, computed live rather than read from the entry.
@@ -801,11 +832,19 @@ def realword(req: RealWordRequest):
     Needs data/ngrams.json.gz; returns 503 with build instructions if absent.
     """
     sp = get_speller()
+    # The offsets index the NFC-normalised text, so that is the text
+    # returned — /check and /correct already did this; /realword echoed the
+    # raw input, which differs for decomposed ï/ñ.
+    text = _tokens.nfc(req.text)
     try:
-        flags = sp.check_realword(req.text, min_margin=req.min_margin)
+        # min_margin applies to this request only; it used to be stored on
+        # the shared detector and became every later request's default.
+        flags = sp.check_realword(text, min_margin=req.min_margin)
     except FileNotFoundError as exc:
         raise HTTPException(503, str(exc)) from exc
-    return {"text": req.text,
+    except Exception as exc:                  # e.g. the n-gram database is down
+        raise HTTPException(503, f"language model unavailable: {exc}") from exc
+    return {"text": text,
             "flags": [f.to_dict() for f in flags],
             "count": len(flags)}
 
@@ -821,11 +860,11 @@ def batch(req: BatchRequest):
     sp = get_speller()
     results = []
     for word in req.words:
-        r = sp.check(word)
+        r = sp.check(word, n=req.n)
         results.append({
             "word": word,
             "is_correct": r.is_correct,
-            "suggestions": r.suggestions if req.n == 5 else sp.suggest(word, n=req.n),
+            "suggestions": r.suggestions,
             "gate": r.gate_name,
         })
     return {"results": results, "count": len(results)}

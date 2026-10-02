@@ -24,10 +24,17 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from types import MappingProxyType
+from typing import Mapping, Optional
+
+from khasi_engine import paths as _paths
+from khasi_engine.tokens import canonical as _canonical
 
 
-_DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "khasi_db.json"
+# Resolved at construction time rather than import time, so KHASI_DATA_DIR
+# set after import is still honoured. Kept as a module name for callers that
+# imported it.
+_DEFAULT_DB_PATH = _paths.default_db_path()
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +899,7 @@ class KhasiDB:
 
     @staticmethod
     def _cache_key(db_path: Optional[str | Path]) -> tuple:
-        path = Path(db_path) if db_path else _DEFAULT_DB_PATH
+        path = Path(db_path) if db_path else _paths.default_db_path()
         return (str(path), os.environ.get("DATABASE_URL") or "")
 
     @classmethod
@@ -925,7 +932,7 @@ class KhasiDB:
         # rewrites it. Both paths feed the in-memory engine the SAME flat
         # v2.0 shape via _enriched_to_flat().
         self._database_url: Optional[str] = os.environ.get("DATABASE_URL") or None
-        path = Path(db_path) if db_path else _DEFAULT_DB_PATH
+        path = Path(db_path) if db_path else _paths.default_db_path()
         self._json_path: Path = path
 
         if self._database_url:
@@ -983,8 +990,22 @@ class KhasiDB:
             print("[khasi-nlp] KhasiDB: DATABASE_URL is not set in this "
                   "process, so PostgreSQL is not being used. Export it, or "
                   "put it in a .env file beside pyproject.toml.")
-            with open(path, encoding="utf-8") as f:
-                raw = json.load(f)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    raw = json.load(f)
+            except FileNotFoundError as exc:
+                # The lexicon is licensed separately (LICENSE-DATA) and is
+                # not in the repository, so a fresh clone lands here. Say
+                # what to do instead of printing a bare path.
+                raise FileNotFoundError(
+                    f"Khasi lexicon not found at {path}.\n"
+                    "The lexicon is not distributed with this repository "
+                    "(see LICENSE-DATA). Either set DATABASE_URL to a "
+                    "PostgreSQL database loaded with "
+                    "scripts/migrate_json_to_pg.py, place the file at that "
+                    "path, point KHASI_DATA_DIR at a directory holding it, or "
+                    "pass db_path explicitly."
+                ) from exc
 
         self._meta: dict       = raw.get("meta", {})
         self._phonology: dict  = raw.get("phonology", {})
@@ -1053,17 +1074,20 @@ class KhasiDB:
         self._freq_dict:     dict[str, int]        = {}
         self._compound_tokens: dict[str, int]      = {}  # tokens from multi-word entries
         self._compound_known: set                  = set()  # ...that could be words
-        # Frequent corpus types admitted as CANDIDATES — offerable as
-        # corrections. Empty unless khasi_spell.corpus_pool registers into
-        # it. See is_attested().
-        self._corpus_forms: set                    = set()
-        # The same admitted words, plus the reduced spelling the corpus
-        # writes them in, as ACCEPTABLE: the confidence vote credits them
-        # with corpus frequency. Kept apart from _corpus_forms because the
-        # two sets differ — `iatreilang` is acceptable (it is how the word
-        # is typed) but is never offered; `ïatreilang` is offered. See
-        # is_corpus_accepted().
-        self._corpus_accept: set                   = set()
+        # Corpus-derived candidates and runtime-taught words used to live
+        # here. They are per-checker state now (KhasiSpellChecker): this
+        # object is memoised and shared by every speller in the process, so
+        # anything stored on it leaked from one speller into the next —
+        # `use_corpus_pool=False` still offered pool words, and add_word()
+        # taught every speller at once. The lexicon object holds the lexicon.
+        #
+        # Derived views, rebuilt lazily after any change to the indexes.
+        # to_freq_dict() and all_surface_forms() were rebuilt on EVERY
+        # suggestion lookup — a 33k-entry dict copy and a 17k-string sort,
+        # about 34 ms of a 58 ms lookup.
+        self._freq_view: Optional[Mapping[str, int]] = None
+        self._surface_forms_cache: Optional[list] = None
+        self._surface_set_cache: Optional[frozenset] = None
         # Maps each compound token → list of multi-word surface_forms it appears in.
         # Lets us answer "which phrase entries contain this token?" without
         # scanning the lexicon every time. Used by the verdict explainer to
@@ -1099,9 +1123,16 @@ class KhasiDB:
 
     @classmethod
     def _fold_key(cls, word: str) -> str:
-        return word.lower().translate(cls._FOLD_MAP).replace("'", "")
+        return _canonical(word).lower().translate(cls._FOLD_MAP).replace("'", "")
+
+    def _invalidate_views(self) -> None:
+        """Drop the cached derived views; the next read rebuilds them."""
+        self._freq_view = None
+        self._surface_forms_cache = None
+        self._surface_set_cache = None
 
     def _rebuild_indexes(self) -> None:
+        self._invalidate_views()
         self._surface_index.clear()
         self._folded_index.clear()
         self._root_index.clear()
@@ -1114,6 +1145,7 @@ class KhasiDB:
             self._index_entry(entry)
 
     def _index_entry(self, entry: dict) -> None:
+        self._invalidate_views()
         # `.get(k, "")` returns the explicit None when the key exists but
         # is null (Phase 8 kh_KK_ stubs carry `lemma: null` which becomes
         # `root_lemma: None` after _enriched_to_flat). Use `or ""` to
@@ -1136,8 +1168,11 @@ class KhasiDB:
         import re as _re
         if sf and " " in sf:
             for tok in _re.split(r"[\s\-,!]+", sf):
-                # Preserve leading apostrophe — marks Khasi glottal stop
-                # e.g. "'riewbha" must NOT become "riewbha" (different word)
+                # Keep a leading apostrophe: it is part of the spelling
+                # ("'riewbha"), and the index records spellings as written.
+                # Lookups separately TOLERATE a dropped apostrophe through
+                # the folded index (`iuh` finds `'iuh`), which is leniency
+                # about input, not a claim that the two are one word.
                 tok = tok.rstrip("()!,.'\"")
                 tok = tok.lstrip("()!,\"")
                 if len(tok) >= 2 and " " not in tok:
@@ -1228,8 +1263,11 @@ class KhasiDB:
     def lookup(self, word: str) -> list[dict]:
         """Look up by surface_form, then root_lemma, then accent/apostrophe-
         folded surface (so diacritic-free input still finds canonical entries).
-        Exact matches always take priority over folded ones."""
-        w = word.lower()
+        Exact matches always take priority over folded ones.
+
+        The typographic apostrophe (’) is read as the ASCII one, so text from
+        a phone or a word processor finds the same entries."""
+        w = _canonical(word).lower()
         results = self._surface_index.get(w, [])
         if results:
             return results
@@ -1286,7 +1324,7 @@ class KhasiDB:
         check. The unscreened dict is still what feeds candidate
         generation; see `_phonotactic_ok`.
         """
-        w = word.lower()
+        w = _canonical(word).lower()
         if w in self._surface_index or w in self._compound_known:
             return True
         # Fall back to the accent/apostrophe-folded index, exactly as
@@ -1307,7 +1345,7 @@ class KhasiDB:
         "u sohmon mynta u dang im pleiñ-pleiñ" — can see that host phrase
         rather than the bare "found in a compound" note. Lookup is O(1).
         """
-        return list(self._compound_entry_index.get(token.lower(), []))
+        return list(self._compound_entry_index.get(_canonical(token).lower(), []))
 
     def is_attested(self, word: str) -> bool:
         """
@@ -1318,75 +1356,21 @@ class KhasiDB:
         so applies the phonotactic screen; this answers "did the lexicon
         ever write this down", which is what candidate filtering needs.
 
-        The distinction has teeth. `shafon` is a real word that appears only
-        inside a phrasal entry, and `validate()` rejects it — the validator's
-        rules do not cover every place name, loan or reduplication. Filtering
-        candidates by `is_known()` therefore dropped it from the suggestions
-        for `shafan`, costing ~4 points of top-1 on the word benchmark. It is
-        still not accepted as a word on its own; it is merely offerable.
+        The distinction has teeth. `validate()` rejects some genuine entries
+        — place names, loans and reduplications its rules do not cover — and
+        filtering candidates by `is_known()` dropped those from the
+        suggestions. Such a form is offerable without being accepted as a
+        word on its own.
+
+        Lexicon only. Corpus-derived and runtime-taught words are per-checker
+        state; `KhasiSpellChecker.is_attested` adds them.
         """
-        w = word.lower()
+        w = _canonical(word).lower()
         return (w in self._surface_index or w in self._compound_tokens
-                or w in self._root_index or w in self._corpus_forms)
-
-    # ------------------------------------------------------------------
-    # Corpus-derived candidate supply
-    # ------------------------------------------------------------------
-
-    def register_corpus_forms(self, forms) -> int:
-        """Admit *forms* as attested-but-not-known candidate material.
-
-        These are frequent corpus types the lexicon does not record. They
-        become offerable as corrections — without them a word like
-        `pyntreikam`, 1,940 occurrences and not a headword, is not in the
-        list to be ranked and no typo of it can be corrected.
-
-        They deliberately do NOT become known words: `is_known()` does not
-        consult this set, so the confidence vote is unchanged and a corpus
-        type still has to earn acceptance on its own signals. Candidate
-        supply and acceptance are separate questions, which is why they
-        have separate predicates.
-
-        Returns the number newly registered.
-        """
-        before = len(self._corpus_forms)
-        self._corpus_forms.update(
-            w.lower() for w in forms if w and " " not in w
-        )
-        return len(self._corpus_forms) - before
-
-    def register_corpus_acceptance(self, forms) -> int:
-        """Let *forms* earn the frequency signal in the confidence vote.
-
-        For corpus words `corpus_pool` has already admitted as candidates.
-        Without it the pool offered words the checker then rejected: `jyla`
-        was answered with `jylla`, and `jylla` — 24,252 corpus occurrences —
-        was flagged the moment the writer accepted it. `is_known()` is still
-        untouched; the vote reads this set, nothing else does.
-
-        Returns the number newly registered.
-        """
-        before = len(self._corpus_accept)
-        self._corpus_accept.update(
-            w.lower() for w in forms if w and " " not in w
-        )
-        return len(self._corpus_accept) - before
-
-    def is_corpus_accepted(self, word: str) -> bool:
-        """True when the corpus attests *word* often enough to accept it."""
-        return word.lower() in self._corpus_accept
-
-    def is_corpus_form(self, word: str) -> bool:
-        """True when *word* is offerable only because the corpus attests it.
-
-        Provenance: the lexicon did not write this down, people did. Callers
-        that show a suggestion to a human should say which of the two they
-        are looking at.
-        """
-        return word.lower() in self._corpus_forms
+                or w in self._root_index)
 
     def is_known_root(self, root: str) -> bool:
-        return root.lower() in self._root_index
+        return _canonical(root).lower() in self._root_index
 
     def all_surface_forms(self) -> list[str]:
         """
@@ -1402,24 +1386,31 @@ class KhasiDB:
         compound or phrasal entries are still reachable by the Levenshtein
         scanner — fixing the class of bugs where a common word like "shnong"
         was never suggested because it had no standalone lexicon entry.
+
+        Lexicon forms only; a checker adds its corpus and taught words on
+        top. Cached until the indexes change — callers must not mutate it.
         """
-        combined: set[str] = set(self._surface_index.keys())
-        combined.update(self._root_index.keys())
-        # Harvested phrase tokens, minus the English ones. A token that is
-        # ALSO a headword or a root stays regardless: the filter exists to
-        # stop English entering the pool through phrase-splitting, not to
-        # remove a word the lexicon records in its own right.
-        combined.update(t for t in self._compound_tokens
-                        if t not in _ENGLISH_IN_PHRASES
-                        or t in self._surface_index or t in self._root_index)
-        # Corpus-derived candidates. This method defines the candidate pool
-        # — it is what the delete index and the fallback scan are built from
-        # — so admitting them here is what makes them reachable at all.
-        # `is_known()` still refuses them, so nothing here becomes a word.
-        combined.update(self._corpus_forms)
-        # Exclude multi-word keys (safety net — surface_index shouldn't have them
-        # but compound_tokens definitely might if the regex split was incomplete)
-        return sorted(w for w in combined if " " not in w)
+        if self._surface_forms_cache is None:
+            combined: set[str] = set(self._surface_index.keys())
+            combined.update(self._root_index.keys())
+            # Harvested phrase tokens, minus the English ones. A token that
+            # is ALSO a headword or a root stays regardless: the filter
+            # exists to stop English entering the pool through
+            # phrase-splitting, not to remove a word the lexicon records in
+            # its own right.
+            combined.update(t for t in self._compound_tokens
+                            if t not in _ENGLISH_IN_PHRASES
+                            or t in self._surface_index or t in self._root_index)
+            # Exclude multi-word keys (safety net — surface_index shouldn't
+            # have them but compound_tokens might if the split was incomplete)
+            self._surface_forms_cache = sorted(w for w in combined if " " not in w)
+        return self._surface_forms_cache
+
+    def surface_form_set(self) -> frozenset:
+        """`all_surface_forms()` as a set, for membership tests. Cached."""
+        if self._surface_set_cache is None:
+            self._surface_set_cache = frozenset(self.all_surface_forms())
+        return self._surface_set_cache
 
     def all_entries(self) -> list[dict]:
         return self._lexicon
@@ -1440,10 +1431,19 @@ class KhasiDB:
         because the indexes this consults are built one entry at a time and a
         token that is also a standalone headword may not have been indexed yet
         while `_index_entry` is running. See `_ENGLISH_IN_PHRASES`.
+
+        Returns a READ-ONLY view, cached until the indexes change. It used to
+        be rebuilt on every suggestion lookup. Nothing may write through it:
+        corpus frequencies are per-checker (see khasi_spell.corpus_freq), and
+        writing them here is what let one speller change another's ranking.
+        Copy it with dict() if you need a mutable table.
         """
-        return {w: n for w, n in self._freq_dict.items()
+        if self._freq_view is None:
+            self._freq_view = MappingProxyType({
+                w: n for w, n in self._freq_dict.items()
                 if w not in _ENGLISH_IN_PHRASES
-                or w in self._surface_index or w in self._root_index}
+                or w in self._surface_index or w in self._root_index})
+        return self._freq_view
 
     # ------------------------------------------------------------------
     # Enriched-companion access
@@ -1626,7 +1626,6 @@ class KhasiDB:
         entry = self._id_index.get(entry_id)
         if not entry:
             return None
-        self._unindex_entry(entry)
         self._lexicon = [e for e in self._lexicon if e.get("entry_id") != entry_id]
         merged_flat = {**entry, **updates, "entry_id": entry_id}
         enriched = _flat_to_enriched(
@@ -1634,7 +1633,12 @@ class KhasiDB:
         )
         self._enriched_by_id[entry_id] = enriched
         self._lexicon.append(merged_flat)
-        self._index_entry(merged_flat)
+        # A full rebuild rather than _unindex_entry + _index_entry. The
+        # incremental path left the folded index, the phrase-token indexes
+        # and the frequency weights stale, so an edited or deleted spelling
+        # stayed "known" through the fold. Edits are rare administrative
+        # operations; correctness is worth the ~2 s.
+        self._rebuild_indexes()
         self._invalidate_stitch_cache()
         if self._database_url:
             _pg_upsert_entry(self._database_url, enriched)
@@ -1647,7 +1651,7 @@ class KhasiDB:
             return False
         self._lexicon = [e for e in self._lexicon if e.get("entry_id") != entry_id]
         self._enriched_by_id.pop(entry_id, None)
-        self._unindex_entry(entry)
+        self._rebuild_indexes()          # see update_entry for why not incremental
         self._invalidate_stitch_cache()
         if self._database_url:
             _pg_delete_entry(self._database_url, entry_id)
@@ -1697,17 +1701,34 @@ class KhasiDB:
         # Honest lexeme count (Phase A): single-word lexical items only.
         # `total_entries` counts every row, including multi-word phrases,
         # idioms and example sentences mis-filed in the lexicon.
-        lexeme_count = sum(1 for e in entries if e.get("kind") == "lexeme")
+        #
+        # The Phase A `kind` field is absent from the current data — no
+        # entry carries it, in the JSON or in PostgreSQL — so counting on it
+        # reported 0 lexemes. Where it is missing, a single-token surface is
+        # counted as a lexeme and anything with a space as a phrase, and
+        # `kind_source` says which rule produced the figures.
+        has_kind = any(e.get("kind") for e in entries)
+
+        def _kind(e: dict) -> str:
+            if has_kind:
+                return e.get("kind") or ""
+            return "phrase" if " " in (e.get("surface_form") or "").strip() else "lexeme"
+
+        kinds = [_kind(e) for e in entries]
+        lexeme_count = sum(1 for k in kinds if k == "lexeme")
         lexeme_glossed = sum(
-            1 for e in entries
-            if e.get("kind") == "lexeme" and (e.get("english_gloss") or "").strip()
+            1 for e, k in zip(entries, kinds)
+            if k == "lexeme" and (e.get("english_gloss") or "").strip()
         )
+        loans = sum(1 for e in entries
+                    if e.get("loan_origin", "none") not in ("none", None, ""))
         return {
             "total_entries":        len(entries),
             "lexeme_count":         lexeme_count,
             "lexeme_glossed_count": lexeme_glossed,
+            "kind_source":          "entry.kind" if has_kind else "derived: token count",
             "kind_counts": {
-                k: sum(1 for e in entries if e.get("kind") == k)
+                k: sum(1 for x in kinds if x == k)
                 for k in ("lexeme", "compound_or_collocation", "phrase", "example")
             },
             "unique_surface_forms": len(self._surface_index),
@@ -1722,10 +1743,7 @@ class KhasiDB:
             "compound_forms":       sum(
                 1 for e in entries if e.get("morphological_flags", {}).get("is_compound")
             ),
-            "loan_words":           sum(
-                1 for e in entries
-                if e.get("loan_origin", "none") not in ("none", None, "")
-            ),
+            "loan_words":           loans,
             "reduplication_forms":  sum(
                 1 for e in entries
                 if e.get("morphological_flags", {}).get("reduplication_type", "none") != "none"
@@ -1734,10 +1752,9 @@ class KhasiDB:
                 1 for e in entries
                 if e.get("morphological_flags", {}).get("is_tien_kynnoh")
             ),
-            "shim_kylliang_forms":  sum(
-                1 for e in entries
-                if e.get("loan_origin", "none") not in ("none", None, "")
-            ),
+            # Shim kylliang is Khasi for a borrowed word: the same count as
+            # loan_words, kept under both names for existing clients.
+            "shim_kylliang_forms":  loans,
         }
 
     @property
@@ -1757,10 +1774,28 @@ class KhasiDB:
         return self._demo_examples
 
     def next_entry_id(self) -> str:
-        nums = []
+        """The next free id in the lexicon's own scheme, `kh_DB_000123`.
+
+        This used to strip `kh_` and parse the rest as an integer, which
+        fails for every real id (`kh_DB_005909`), so it returned `kh_0001`
+        and could collide. The prefix and width now come from the ids that
+        exist, taking the most common scheme.
+        """
+        import re as _re
+        schemes: dict[str, list[int]] = {}
+        widths: dict[str, int] = {}
         for eid in (e.get("entry_id", "") for e in self._lexicon):
-            try:
-                nums.append(int(eid.replace("kh_", "")))
-            except ValueError:
-                pass
-        return f"kh_{max(nums, default=0) + 1:04d}"
+            m = _re.match(r"^(.*?)(\d+)$", eid or "")
+            if not m:
+                continue
+            prefix, digits = m.group(1), m.group(2)
+            schemes.setdefault(prefix, []).append(int(digits))
+            widths[prefix] = max(widths.get(prefix, 0), len(digits))
+        if not schemes:
+            return "kh_DB_000001"
+        prefix = max(schemes, key=lambda k: len(schemes[k]))
+        taken = set(self._id_index)
+        n = max(schemes[prefix]) + 1
+        while f"{prefix}{n:0{widths[prefix]}d}" in taken:
+            n += 1
+        return f"{prefix}{n:0{widths[prefix]}d}"

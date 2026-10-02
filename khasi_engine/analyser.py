@@ -37,8 +37,11 @@ import re
 from typing import Optional
 from pathlib import Path
 
+from collections import OrderedDict
+
 from khasi_engine.database import KhasiDB, OPEN_CLASSES, canonical_pos
 from khasi_engine import phonology, morphology, assimilation, complex as complex_words
+from khasi_engine import tokens as _tokens
 from khasi_engine.spell_checker import KhasiSpellChecker
 
 
@@ -49,7 +52,8 @@ _NOUN_CLASS_CLITICS = frozenset({"ka", "u", "ki", "i"})
 
 class KhasiAnalyser:
     """
-    Main analysis engine. Thread-safe after __init__.
+    Main analysis engine. Safe to share between request threads after
+    __init__: its caches are bounded and only ever hold derived values.
 
     Parameters
     ----------
@@ -190,7 +194,7 @@ class KhasiAnalyser:
         `spell.suggest()`, which would recurse: suggest() consults this very
         method through the morphology gate.
         """
-        cache = self.__dict__.setdefault("_closer_cache", {})
+        cache = self.__dict__.setdefault("_closer_cache", OrderedDict())
         if word in cache:
             return cache[word]
         index = getattr(self.db, "_delete_index", None)
@@ -207,7 +211,11 @@ class KhasiAnalyser:
             d = _levenshtein(word, cand)
             if d <= self._ATTESTED_VETO_DIST and (best_d is None or d < best_d):
                 best, best_d = cand, d
+        # Bounded: an unbounded dict grew with every unknown word a
+        # long-running service was ever asked about.
         cache[word] = best
+        while len(cache) > 20000:
+            cache.popitem(last=False)
         return best
 
     def _free_morpheme_plus_root(self, word: str):
@@ -450,9 +458,22 @@ class KhasiAnalyser:
         """
         Run all phases on *word* and return a unified result dict.
 
-        The spell checker is only invoked when phases 1-4 do not resolve
-        the word, so valid derived forms are never incorrectly suggested
-        for correction.
+        Two answers are returned, and they are kept apart on purpose:
+
+          verdict   what the ANALYSER makes of the form — "derived" means the
+                    phases decompose it (jing- over a root), whether or not
+                    the root is a known word. The golden-corpus rulings are
+                    about this reading.
+          accepted  what the SPELL CHECKER decides — the confidence vote,
+                    exactly as `KhasiSpeller.check()` runs it, including its
+                    vetoes, corpus acceptance, taught words and the
+                    hyphenated-part check.
+
+        When they differ, `verdict_desc` says so. Previously only the verdict
+        existed, and it was re-derived from the raw phases, so a word
+        check() rejected (`man-miay`) could come back as a valid compound
+        with nothing to reconcile the two, and a corpus word check() accepted
+        (`jylla`) was described as a "grammatical particle".
 
         Returns
         -------
@@ -460,17 +481,20 @@ class KhasiAnalyser:
             input        : str
             verdict      : str   — "valid" | "invalid" | "derived" | "unknown"
             verdict_desc : str   — human-readable explanation
+            accepted     : bool  — the spell checker's decision
             phase1       : dict  — phonological validation result
             phase2       : dict  — morphological parse result
             phase3       : dict  — assimilation detection result
             phase4       : dict  — complex word detection result
-            spell        : dict  — spell check result (empty when phases resolve)
+            spell        : dict  — the checker's decision and suggestions
         """
         import re as _re_a
+        # NFC and the typographic apostrophe, exactly as the checker reads
+        # them; /analyse used to skip both, so decomposed or ’-typed input
+        # was analysed as a different string from the one /word checked.
+        word = _tokens.canonical(word or "")
         # Strip surrounding punctuation EXCEPT apostrophe (') and hyphen (-),
         # which are valid Khasi word characters (glottal stop / compound marker).
-        # The original regex used the range '- (apostrophe to hyphen) in the
-        # negated class, which accidentally INCLUDED apostrophe in the stripped set.
         word = _re_a.sub(r"^[^\w\u00ef\u00f1\u00cf\u00d1'\-]+|[^\w\u00ef\u00f1\u00cf\u00d1'\-]+$", "", word.strip())
         if not word:
             return {"error": "Empty input"}
@@ -481,40 +505,24 @@ class KhasiAnalyser:
         p3 = assimilation.check(word, self.db.lookup)
         p4 = complex_words.detect(word, self.db.lookup)
 
-        # ── Spell checker: only when morphology doesn't resolve ──────
-        # For Phase 3 (assimilation), require root_confirmed=True to avoid
-        # false positives where the surface prefix pattern matches but the
-        # reconstructed root is not a real Khasi word in the lexicon.
-        # db.is_known() also catches compound_tokens (words that appear only
-        # inside multi-word entries, e.g. "sohmon" in a phrasal entry).
-        morph_resolved = (
+        # ── The checker's decision, shared with check() ──────────────
+        decision = self.spell.suggest(word, n=5)
+        accepted = bool(decision.get("is_known"))
+
+        # ── The analyser's reading of the form ───────────────────────
+        # Resolved by the phases, minus the words an attested word outranks
+        # — the same vetoes the gate applies to each route: the full one-edit
+        # veto for a fused compound, the transposition-only veto for an
+        # affixed parse. Phase order matches _is_morphologically_valid: it
+        # returns on p2 before it ever reaches p4, so a word both phases
+        # accept is on the affix path (`jingkynshaitum` keeps its ruling).
+        morph_resolved = bool(
             p2["pass"]
             or (p3.get("rule_detected") and p3.get("root_confirmed", False))
             or p4.get("detected")
             or (word.lower() in self._PROTECTED_WORDS)
             or self.db.is_known(word.lower())
         )
-
-        # …minus the words a real one outranks. This line is re-deriving the
-        # acceptance decision from the raw phase results, which meant it saw
-        # none of the vetoes the gate applies: `suroh`, `patbah` and `hook`
-        # are all refused by _is_morphologically_valid and flagged by
-        # check(), yet came back `derived` with no suggestions from THIS
-        # entry point, because `p4.get("detected")` is consulted directly.
-        # Both speculative routes are covered — the fused compound and the
-        # affixed parse (`nongihkai`) — so that analyse() and check() give
-        # the same answer for the same word.
-        # Each route asks the same question its own gate asks, so the two
-        # cannot drift apart again: the fused compound gets the full
-        # one-edit veto that _is_morphologically_valid applies, the affixed
-        # parse the transposition-only veto the confidence vote applies.
-        # Phase order matters and has to match _is_morphologically_valid's:
-        # it returns on p2 before it ever reaches p4, so a word both phases
-        # accept is on the affix path, not the fusion path, and gets the
-        # affix path's veto. Testing p4 first instead costs
-        # `jingkynshaitum` its golden-corpus ruling — it parses as jing- over
-        # an OOV remainder AND splits as a fused compound, and the wider
-        # fusion veto finds `jingkynshait-um` one edit away.
         if morph_resolved:
             _outranked = None
             if p2.get("pass"):
@@ -526,58 +534,26 @@ class KhasiAnalyser:
             if _outranked is not None:
                 morph_resolved = False
 
-        if not p1["pass"] and morph_resolved:
-            # Hyphenated/compound word fails phonotactics when split into
-            # segments but IS directly in the DB (e.g. "jingbym-kyrmen").
-            # The lexicon match is authoritative — accept as valid/derived.
-            sp = {
-                "is_known": True,
-                "morphologically_valid": True,
-                "phonotactically_valid": False,
-                "suggestions": [],
+        if morph_resolved:
+            reading = {
+                "is_known": True, "suggestions": [], "gate_reached": 2,
                 "method": "morphology_gate",
                 "in_lexicon": self.db.is_known(word.lower()),
-                "gate_reached": 2,
-            }
-        elif not p1["pass"]:
-            # Phonotactically invalid — delegate to the spell checker's
-            # Gate 1 which generates Levenshtein suggestions even for
-            # phonotactically invalid words (e.g. "bamm" → "bam").
-            # This ensures that a correctly identified phonological error
-            # is accompanied by actionable correction suggestions.
-            sp = self.spell.suggest(word, n=5)
-        elif morph_resolved:
-            # Word accepted by morphological pipeline — no spell check needed
-            sp = {
-                "is_known": True,
-                "morphologically_valid": True,
-                "phonotactically_valid": True,
-                "suggestions": [],
-                "method": "morphology_gate",
-                "in_lexicon": self.db.is_known(word.lower()),
-                "gate_reached": 2,
             }
         else:
-            # Unknown word — run full spell checker (gate 3)
-            sp = self.spell.suggest(word, n=5)
-
-        verdict, verdict_desc = self._compute_verdict(p1, p2, p3, p4, sp, word)
+            reading = decision
+        verdict, verdict_desc = self._compute_verdict(p1, p2, p3, p4, reading, word)
 
         # ── Meaning-licensing gate (Phase A) ─────────────────────────
-        # Selectional check: a single prefix must attach to a base whose PoS is
-        # in the prefix's applies_to. If not, the form is NOT a licensed
-        # derivation (e.g. prefixing a conjunction/adposition like jing+ban,
-        # pyn+da). Conservative — only downgrades a clear violation, and leaves
-        # the verdict untouched when it cannot decide (no affix data, base not
-        # attested, or a stacked/infixed form).
+        # Selectional check: a single prefix must attach to a base whose PoS
+        # is in the prefix's applies_to. HARD downgrade only for unambiguous
+        # violations (prefix on a function word); content-word mismatches
+        # stay 'derived' with a soft flag, since the base PoS tag may be wrong.
         licensed, lic_note, lic_hard = self._meaning_licensed(p2)
         if licensed is not None:
             p2["meaning_licensed"] = licensed
             if lic_note:
                 p2["meaning_note"] = lic_note
-            # HARD downgrade only for unambiguous violations (prefix on a
-            # function word). Content-word mismatches stay 'derived' with a soft
-            # flag, since the base PoS tag may be wrong / a sense unrecorded.
             if licensed is False and lic_hard and verdict == "derived":
                 verdict = "unknown"
                 verdict_desc = (
@@ -585,19 +561,12 @@ class KhasiAnalyser:
                     + ". The prefix does not attach to this base's part of speech."
                 )
 
-        # ── The gate's answer wins over the parse's ──────────────────
-        # _compute_verdict reads p2["pass"] and reports "derived" without
-        # ever consulting `sp`, so a word the checker has just refused still
-        # came back as a derivation. The two disagreeing is worse than either
-        # answer alone: the UI showed `nongihkai` as a prefixed form of `ih`
-        # while the correction `nonghikai` sat unread in the same payload.
-        #
-        # Downgrade only — a parse is never promoted here, and a word the
-        # lexicon holds is never touched.
+        # An attested word outranks the parse: report it as unknown, with
+        # the word the writer more plausibly meant.
         if (verdict == "derived"
                 and not self.db.is_known(word.lower())
-                and sp.get("is_known") is False):
-            suggs = sp.get("suggestions") or []
+                and reading.get("is_known") is False):
+            suggs = decision.get("suggestions") or []
             verdict = "unknown"
             verdict_desc = (
                 "Parses as " + verdict_desc[0].lower() + verdict_desc[1:]
@@ -606,6 +575,20 @@ class KhasiAnalyser:
             verdict_desc += (
                 ", but is not attested and a known word is closer"
                 + (". Did you mean: " + ", ".join(suggs[:3]) + "?" if suggs else ".")
+            )
+
+        # ── Reconcile the reading with the decision, in words ────────
+        if accepted and verdict in ("invalid", "unknown"):
+            verdict, verdict_desc = "valid", self._accepted_desc(decision, word)
+        elif not accepted and verdict in ("valid", "derived"):
+            why = decision.get("reason") or (decision.get("confidence") or {}).get("veto")
+            suggs = decision.get("suggestions") or []
+            verdict_desc += (
+                " — not accepted by the spell checker"
+                + (": " + why if why else
+                   " (the root is not a known word)" if (p2.get("affix_info") or {})
+                   .get("root_in_lexicon") is False else "")
+                + (". Did you mean: " + ", ".join(suggs[:3]) + "?" if suggs else "")
             )
 
         # Compound/phrasal host entries — only populated when the word resolved
@@ -617,13 +600,36 @@ class KhasiAnalyser:
             "input":          word,
             "verdict":        verdict,
             "verdict_desc":   verdict_desc,
+            "accepted":       accepted,
             "phase1":         p1,
             "phase2":         p2,
             "phase3":         p3,
             "phase4":         p4,
-            "spell":          sp,
+            "spell":          decision,
             "compound_hosts": compound_hosts,
         }
+
+    def _accepted_desc(self, sp: dict, word: str) -> str:
+        """Why the checker accepted a word the phases could not describe."""
+        sig = (sp.get("confidence") or {}).get("signals") or {}
+        if sp.get("method") == "user_dictionary":
+            return "In your dictionary — taught with add_word() for this session"
+        if sp.get("in_lexicon"):
+            hosts = self.db.find_compound_entries(word.lower()) if word else []
+            if hosts:
+                sample = ", ".join(f'"{h}"' for h in hosts[:3])
+                more = f" (+{len(hosts) - 3} more)" if len(hosts) > 3 else ""
+                return ("Lexicon match — found as component of compound/phrasal "
+                        "entry: " + sample + more)
+            return "Lexicon match"
+        if word.lower() in self._PROTECTED_WORDS:
+            return "Grammatical particle / protected word"
+        if sig.get("frequent"):
+            return ("Not in the lexicon, but common in Khasi text — accepted "
+                    "on corpus frequency")
+        if sig.get("morphology"):
+            return "Morphologically well formed — accepted by the confidence vote"
+        return "Accepted by the confidence vote"
 
     def is_multi_word(self, text: str) -> bool:
         """Return True if the input contains multiple whitespace-separated tokens."""
@@ -712,7 +718,8 @@ class KhasiAnalyser:
     # ------------------------------------------------------------------
 
     # Letters a Khasi word may contain, for finding the token after a prefix.
-    _WORD_RE = r"[A-Za-zÀ-ÿïñÏÑ'’\-]+"
+    # The same letter and apostrophe inventory as khasi_engine.tokens.
+    _WORD_RE = rf"[{_tokens.LETTERS}{_tokens.APOSTROPHES}\-]+"
 
     def _bound_prefixes(self) -> tuple:
         """Productive prefixes that cannot stand alone as a word.
@@ -894,7 +901,8 @@ class KhasiAnalyser:
                 # spellings gives `jingïalehkai` directly, instead of
                 # offering the plain join and making the variants layer
                 # correct it afterwards.
-                best = self._canonical_spelling(joined)
+                best = _tokens.match_case(m.group(0),
+                                          self._canonical_spelling(joined))
                 out.append({
                     "original": m.group(0),
                     "suggestion": best,
@@ -904,7 +912,11 @@ class KhasiAnalyser:
                     "method": "bound_prefix_spaced",
                     "morphologically_valid": False,
                     "phonotactically_valid": True,
-                    "gate_reached": 2,
+                    # Gate 3, "checked; a correction was generated". This
+                    # reported gate 2 — ACCEPTED — for something it was
+                    # correcting, and the page then labelled it an unknown
+                    # word. The method names what kind of fix it is.
+                    "gate_reached": 3,
                 })
         return out
 
@@ -943,6 +955,7 @@ class KhasiAnalyser:
                     best = sugg[0]
             if not best or best == m.group(0).lower():
                 continue
+            best = _tokens.match_case(m.group(0), best)
             out.append({
                 "original": m.group(0),
                 "suggestion": best,
@@ -952,7 +965,7 @@ class KhasiAnalyser:
                 "method": "hyphen_line_break",
                 "morphologically_valid": False,
                 "phonotactically_valid": True,
-                "gate_reached": 2,
+                "gate_reached": 3,          # see _split_prefix_corrections
             })
         return out
 
@@ -963,6 +976,10 @@ class KhasiAnalyser:
         Tokens that are morphologically valid are silently skipped.
         Only genuinely unknown words surface as correction suggestions.
 
+        The text is NFC-normalised first and `input` returns that string,
+        since the offsets index it. Suggestions keep the capitalisation of
+        the words they replace.
+
         Returns
         -------
         dict with keys:
@@ -972,6 +989,7 @@ class KhasiAnalyser:
                                           morphologically_valid}
             corrected   : str         — auto-corrected version of input
         """
+        text = _tokens.nfc(text)
         corrections = self.spell.check_sentence(text)
         # A bound prefix written with a space after it spans TWO tokens, so it
         # is found on the raw text and then any single-token correction inside
@@ -987,6 +1005,7 @@ class KhasiAnalyser:
             corrections = sorted(corrections + joins, key=lambda c: c["start"])
         corrected   = text
         offset      = 0
+        last_end    = 0
         for c in corrections:
             # A correction with no suggestion is a word we know is wrong but
             # cannot fix — `sbngaifi` has an `f` in it. It is reported so the
@@ -994,10 +1013,15 @@ class KhasiAnalyser:
             # alternative is substituting None into their text.
             if not c.get("suggestion"):
                 continue
+            # Never apply two edits to the same characters; the offsets
+            # would slide and the text would be corrupted.
+            if c["start"] < last_end:
+                continue
             start = c["start"] + offset
             end   = c["end"]   + offset
             corrected = corrected[:start] + c["suggestion"] + corrected[end:]
             offset   += len(c["suggestion"]) - (c["end"] - c["start"])
+            last_end  = c["end"]
         return {
             "input":       text,
             "corrections": corrections,
@@ -1414,38 +1438,12 @@ class KhasiAnalyser:
                 f"Complex form — {p4_desc}: {' + '.join(components)}",
             )
 
-        # Spell gate 2 = morphologically valid — could be a protected grammatical
-        # particle, a compound-token (word found inside a multi-word DB entry),
-        # or a morph parse resolved outside Phase 2/3/4.
-        if sp.get("gate_reached") == 2:
-            in_lex = sp.get("in_lexicon", False)
-            if in_lex:
-                # If the word appears as a token inside multi-word entries,
-                # surface those phrases so the user sees the actual lexicon
-                # entry — not just an abstract "found in a compound" note.
-                # Multiple host entries are joined by ", " (up to 3 shown).
-                hosts: list[str] = []
-                try:
-                    if word:
-                        hosts = self.db.find_compound_entries(word.lower())
-                except Exception:
-                    hosts = []
-                if hosts:
-                    sample = ", ".join(f'"{h}"' for h in hosts[:3])
-                    more = f" (+{len(hosts) - 3} more)" if len(hosts) > 3 else ""
-                    return (
-                        "valid",
-                        "Lexicon match — found as component of compound/phrasal entry: "
-                        + sample + more,
-                    )
-                return (
-                    "valid",
-                    "Lexicon match — found as component of a compound/phrasal entry",
-                )
-            return (
-                "valid",
-                "Grammatical particle / protected word — phonotactically valid",
-            )
+        # Accepted by the checker with no phase able to describe it: a lexicon
+        # phrase token, a protected particle, a corpus-frequent word, or a
+        # taught word. This branch used to call every one of them a
+        # "grammatical particle", corpus words such as `jylla` included.
+        if sp.get("gate_reached") == 2 and sp.get("is_known"):
+            return ("valid", self._accepted_desc(sp, word))
 
         # Nothing found — word is genuinely unknown
         suggs = sp.get("suggestions", [])

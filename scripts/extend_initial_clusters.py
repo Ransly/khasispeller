@@ -25,7 +25,7 @@ the number of distinct lexicon entries using them.
 
 Deliberately excluded
 ---------------------
-* **digraphs** (`sh`, `kh`, `th`, `ph`, `ng`) — single phonemes, not
+* **digraphs** (`sh`, `kh`, `th`, `ph`, `ng`) — read as one unit, not as
   clusters. They surface in the failure list only because the words carrying
   them (`shabdr`, `thaldb`) fail for a different reason: a vowel misread as
   `d`. Adding them would paper over that damage.

@@ -159,10 +159,14 @@ def test_reranking_keeps_glosses_on_their_own_words(sp, text):
 
 
 def test_context_actually_reorders_that_example(sp):
-    """Guards the test above: it is only meaningful when the order moves."""
+    """Guards the test above: it is only meaningful when the order moves.
+
+    Checks the list, not just the top choice. Since the trigram scorer stopped
+    discarding a lone left neighbour (2026-09-30), `ka` is real context for
+    `slpa` and the reordering happens below the first place."""
     plain = sp.check_text("ka slpa ka la wan", context=False).corrections[0]
     ctx = sp.check_text("ka slpa ka la wan", context=True).corrections[0]
-    assert plain.suggestion != ctx.suggestion
+    assert plain.suggestions != ctx.suggestions
 
 
 # ----------------------------------------------------------------------
@@ -278,10 +282,16 @@ def test_lazy_loading_defers_construction():
 
 
 def test_add_word_teaches_the_session(sp):
-    """A word added at runtime stops being flagged."""
+    """A word added at runtime stops being flagged — even one Khasi
+    phonotactics rejects, which is what a user adds (names, loans). This
+    test used to check only the frequency table, and its own word, which
+    contains a `z`, was in fact still rejected."""
     invented = "zzyrkhang"
+    assert not sp.is_correct(invented)
     sp.add_word(invented)
     assert invented in sp.analyser.spell._speller.nlp_data
+    assert sp.is_correct(invented)
+    assert "zzyrkhang" in sp.suggest("zzyrkhan", n=5)
 
 
 def test_result_objects_serialise(sp):
@@ -307,8 +317,12 @@ def test_result_objects_serialise(sp):
 
 GEMINATE_MISSPELLINGS = ["pyleng", "pyleit"]
 
-# Real assimilated forms — must keep passing.
-GEMINATE_VALID = ["pylleng", "pyllait", "pyllam", "wallam", "pyllong"]
+# Real assimilated forms — must keep passing. `pyllong` was listed here too,
+# but `pynlong` is one of the three exceptions below: pyn- + long does NOT
+# assimilate (War 2001 p.58), and the corpus agrees, 8,453 `pynlong` to 287
+# `pyllong`. It was accepted only because the reverse rule compared the
+# surface word against a list of underlying forms, which never matched.
+GEMINATE_VALID = ["pylleng", "pyllait", "pyllam", "wallam"]
 
 # War (2001) p.58 lists three roots that resist assimilation.
 ASSIMILATION_EXCEPTIONS = ["pynleh", "pynloit", "pynlong"]
@@ -332,6 +346,14 @@ def test_geminate_forms_still_accepted(sp, word):
 def test_assimilation_exceptions_still_accepted(sp, word):
     """pynleh / pynloit / pynlong resist assimilation and stay unassimilated."""
     assert sp.is_correct(word)
+
+
+def test_an_exception_is_not_derived_by_the_assimilation_rule(sp):
+    """`pyllong` is the assimilated spelling of an exception, so it is a
+    misspelling of `pynlong`, not a second valid form."""
+    r = sp.check("pyllong")
+    assert not r.is_correct
+    assert "pynlong" in r.suggestions
 
 
 def test_pyleng_suggests_the_geminate_first(sp):
@@ -981,7 +1003,12 @@ class TestLexiconCleaned:
         #        `kram-kram / krum-krum` and `pang-mat / pang-sh'ing`.
         #        The 31 entries joined by an EN DASH are NOT withdrawn:
         #        those are paired expressions, a legitimate entry type.
-        assert len(moved) == 590
+        #     4  scan damage at the END of the headword (maintainer ruling
+        #        2026-10-01): `balangj ka`, `dohtdongj ka` and
+        #        `diengddwj ka`, where the dictionary's comma was read as j,
+        #        and `eaj` for `raj`. Each correct spelling is already its
+        #        own entry. See scripts/quarantine_nonwords.py.
+        assert len(moved) == 594
         stray = [e for e in moved
                  if "not preceded by 'n'" in e["quarantine_reason"]]
         assert len(stray) == 116

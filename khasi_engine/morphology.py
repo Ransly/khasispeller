@@ -40,16 +40,10 @@ def _load_morphology() -> dict:
     Short-circuits to {} on Render so KhasiDB's PG-loaded data is the
     single source of truth instead of triggering a redundant 77 MB parse
     at import time (which was a ~300 MB transient OOM trigger)."""
-    if os.environ.get("DATABASE_URL"):
-        return {}
-    db_path = Path(__file__).parent.parent / "data" / "khasi_db.json"
-    try:
-        with open(db_path, encoding="utf-8") as f:
-            raw = json.load(f)
-        return raw.get("morphology", {})
-    except Exception as e:
-        print(f"[khasi-nlp] Warning: could not load morphology from JSON — {e}")
-        return {}
+    # One shared parse with phonology and assimilation; empty under
+    # DATABASE_URL, where KhasiDB injects the block after its PG load.
+    from khasi_engine import paths as _paths
+    return dict(_paths.lexicon_blocks().get("morphology") or {})
 
 
 def set_morphology_cache(morph: dict) -> None:
@@ -1175,7 +1169,7 @@ def _gen_prefix_candidates(stripped: str, lexicon_lookup) -> list[dict]:
 # Digraphs count as one consonant. Used only if the phonology module hands
 # back an empty set, which happens when the database has not been loaded.
 _FALLBACK_DIGRAPHS = frozenset(
-    ["ng", "sh", "ph", "th", "kh", "bh", "dh", "lh", "rh", "dz"])
+    ["ng", "sh", "ph", "th", "kh", "bh", "dh", "jh", "lh", "rh"])
 
 
 def _first_consonant_unit(word: str) -> str:

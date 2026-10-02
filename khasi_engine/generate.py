@@ -8,8 +8,8 @@ whether what you *typed* is valid it asks the grammar: the confidence vote in
 spell_checker.py gives an affixed parse 2 of the 3 points needed, so a word
 the lexicon has never seen is accepted when morphology derives it. To decide
 what you *meant*, candidate generation iterates `db.all_surface_forms()` — a
-fixed list of 15,174 strings read out of the lexicon. A word must be in that
-list to be offered.
+fixed list of strings read out of the lexicon (15,174 when this was
+written). A word must be in that list to be offered.
 
 The two definitions disagree, and the disagreement was measured on 6 September
 2026 against a 23,254-word target vocabulary: 64.1% of the targets are outside
@@ -71,7 +71,8 @@ inventing rubbish that competes for suggestion slots:
     adds to the pool.
   * **the caller's `_offerable` still applies** — vowel present, legal
     letters, shares material with the input.
-  * **a distance penalty** (default 0.5, half an edit) so a real headword
+  * **a distance penalty** — 0.25 for a prefix derivation, 0.4 for a
+    compound (GENERATED_PENALTY, COMPOUND_PENALTY) — so a real headword
     always outranks a generated form at the same distance.
 
 Part-of-speech is deliberately NOT a gate. The prefix table records
@@ -417,9 +418,9 @@ class MorphGenerator:
         # matter — `sngwdonkam` is a misspelt `sngew` beside an exact
         # `donkam` — while removing most of the noise.
         #
-        # The split rules now live in `_compound_parts`, shared with route 1b
-        # above, which passes a lower anchor floor because it has the prefix
-        # as evidence. Everything this route enforced it still enforces: the
+        # The split rules live in `_compound_parts`. A prefixed variant of
+        # this route ("route 1b") was tried and reverted — see that method's
+        # docstring. Everything this route enforced it still enforces: the
         # five-character anchor, both halves content words (`jingailehkai`,
         # `jingitlehkai`), and neither half a prefix derivation.
         if COMPOUND_MODE != "off":

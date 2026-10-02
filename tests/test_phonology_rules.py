@@ -57,7 +57,7 @@ class TestAspiratedSonorants(unittest.TestCase):
 
 class TestLoanFinals(unittest.TestCase):
     def test_loan_finals_warn_not_fail(self):
-        # Native Khasi has no final -l/-s/-j; loans do (bol, bus). These
+        # Native Khasi has no final -l/-s; loans do (bol, bus). These
         # should PASS (still valid words) but carry a loan-signal warning.
         for w in ["bol", "bus"]:
             with self.subTest(word=w):
@@ -67,6 +67,49 @@ class TestLoanFinals(unittest.TestCase):
                     any("loan" in warn.lower() for warn in res["warnings"]),
                     f"{w} should carry a loan-signal warning",
                 )
+
+    def test_final_j_is_native(self):
+        # Maintainer ruling 2026-10-01: Khasi words end in -j (siej 'bamboo',
+        # biej 'silly'). -j used to be a loan signal, so all 86 single-word
+        # lexicon forms ending in it were labelled loanwords.
+        self.assertNotIn("j", phonology.LOAN_FINAL_SIGNALS)
+        self.assertIn("j", phonology.ALLOWED_FINAL_CONSONANTS)
+        self.assertNotIn("j", phonology.FORBIDDEN_FINAL)
+        for w in ["siej", "biej"]:
+            with self.subTest(word=w):
+                res = phonology.validate(w)
+                self.assertTrue(res["pass"], f"{w} should be valid")
+                self.assertEqual(res["warnings"], [], f"{w} is native, not a loan")
+        # The aspirate jh still never ends a word.
+        self.assertFalse(phonology.validate("bajh")["pass"])
+
+
+class TestNoFinalY(unittest.TestCase):
+    """
+    Maintainer ruling 2026-10-01: Khasi words end in h and w but never in y.
+    y is a vowel letter, so the coda check did not catch it, and `party`,
+    `history` and `deputy` passed validation.
+    """
+
+    def test_word_final_y_is_rejected(self):
+        self.assertEqual(phonology.NO_FINAL_VOWELS, frozenset({"y"}))
+        for w in ("party", "kynthy", "bodily", "sý"):
+            with self.subTest(word=w):
+                res = phonology.validate(w)
+                self.assertFalse(res["pass"], f"{w} ends in y")
+                self.assertTrue(any("do not end in y" in e for e in res["errors"]))
+
+    def test_y_inside_a_word_is_fine(self):
+        # The rule is about the end of the WHOLE word: a hyphenated part may
+        # end in y, and an affix written with its hyphen is not a word.
+        for w in ("pyn", "kynthei", "bak-ly-bak", "ïarly-ïar", "ly-ngang", "ly-"):
+            with self.subTest(word=w):
+                self.assertTrue(phonology.validate(w)["pass"], f"{w} wrongly rejected")
+
+    def test_h_and_w_end_words(self):
+        for w in ("soh", "lyngdoh", "ksew", "briew"):
+            with self.subTest(word=w):
+                self.assertTrue(phonology.validate(w)["pass"], w)
 
 
 if __name__ == "__main__":
@@ -89,9 +132,9 @@ class TestFinalCoda(unittest.TestCase):
                         f"expected a coda error, got {result['errors']}")
 
     def test_permitted_codas_pass(self):
-        # p b d t k ' m n r, plus ng, ñ, a vowel, -h and -w
+        # p b d t k ' m n r j, plus ng, ñ, a vowel, -h and -w
         for word in ("shnong", "briew", "ksew", "soh", "lyngdoh",
-                     "bam", "kynthup", "ïathuh"):
+                     "bam", "kynthup", "ïathuh", "siej"):
             with self.subTest(word=word):
                 self.assertTrue(phonology.validate(word)["pass"],
                                 f"{word} wrongly rejected")
@@ -110,13 +153,15 @@ class TestFinalCoda(unittest.TestCase):
 
     def test_loans_warn_rather_than_fail(self):
         """
-        148 entries end in -l/-s/-j and every one inspected is a borrowing,
-        so these are marked, not rejected.
+        Entries ending in -l/-s are borrowings, so they are marked, not
+        rejected. (-j was on this list until 2026-10-01; native words end
+        in it.)
         """
-        for word in ("angel", "baptis", "awaj"):
+        for word in ("angel", "baptis"):
             with self.subTest(word=word):
                 r = phonology.validate(word)
                 self.assertTrue(r["pass"], f"{word} should pass with a warning")
+                self.assertTrue(r["warnings"], f"{word} should carry a warning")
 
     def test_stale_constants_are_not_applied(self):
         """

@@ -2,55 +2,66 @@
 spell_checker.py — Morphology-Gated Spell Checker
 Khasi NLP Engine
 
-The spell checker now treats the morphological engine as its primary
-validity oracle. Before generating any edit-distance candidates it asks:
-"Does the morphological pipeline already accept this word?" If yes, the
-word is correct and spell checking is skipped entirely.
+The spell checker treats the morphological engine as its primary validity
+oracle. Before generating any edit-distance candidates it asks: "Does the
+confidence vote accept this word?" If yes, the word is correct and spell
+checking is skipped entirely.
 
 Decision pipeline for a single word
 ────────────────────────────────────
-Input word
+Input word  (NFC; the typographic apostrophe read as ASCII)
     │
     ▼
-[Gate 0] Semantically-invalid standalone token (a bare digraph)
-    │  HIT  → method="semantically_invalid_standalone", no suggestions
+[Taught] a word added with KhasiSpeller.add_word → accepted, "user_dictionary"
+    │
+    ▼
+[Gate 0] Semantically-invalid standalone token (`ng`, `e`)
+    │  HIT  → method="semantically_invalid_standalone", is_known=False,
+    │         suggestions from a narrow distance-first search
     │  PASS ↓
     ▼
-[Gate 1] Phase 1 — Phonotactic check
-    │  FAIL → method="levenshtein_phonotactic"
-    │         Suggestions ARE returned, from a widened search (max_dist=3).
-    │         Ranked inside _levenshtein_suggestions, which reads
-    │         db.to_freq_dict() — NOT the Speller's nlp_data, so anything
-    │         that adjusts frequencies must patch both stores.
-    │  PASS ↓
+[Gate 1+2] Confidence vote — lexicon 3, affixed morphology 2 (1 when the
+    │  root is not a word), corpus frequency 2, phonotactics 1; threshold 3
+    │  CLEARS → is_known=True, method="confidence_gate", gate 2
+    │           …unless an unrecorded hyphenated compound has a misspelled
+    │           part → rejected, method="hyphenated_part", gate 3.
+    │           A word ending in y never clears: no Khasi word ends in y.
+    │           Nor does an English word the lexicon does not record
+    │           (data/english_in_corpus.json): `hospital`, `state`.
+    │  BELOW and phonotactically invalid → method="levenshtein_phonotactic",
+    │           gate 1, suggestions from a widened search (max_dist=3) plus
+    │           banned-letter repair, and the validator's `reason`.
+    │           Ranked inside _levenshtein_suggestions on the checker's own
+    │           frequency table (corpus counts when applied).
+    │  BELOW ↓
     ▼
-[Gate 2] Confidence vote — lexicon 3, affixed morphology 2, phonotactics 1,
-    │  frequency 2; threshold 3
-    │  CLEARS → is_known=True, suggestions=[], method="confidence_gate"
-    │  BELOW  ↓
-    ▼
-[Gate 3] Spell checker — edit-distance candidates
-    │  _levenshtein_suggestions runs first and sets the primary order;
-    │  autocorrect.Speller extends the pool but cannot displace it.
-    │  Filter: drop candidates that fail Phase 1 unless the lexicon knows them
-    │  Rank:  (distance, -(frequency + morphology bonus + shared-onset bonus))
-    │         morphology bonus is _MORPHO_VALID_BONUS (3)
-    │  Optional: FastText semantic re-ranking on top — off by default, it
+[Gate 3] Edit-distance candidates
+    │  Pool: the symmetric-delete index over the lexicon, the checker's own
+    │        index of corpus-pool and taught words, and the morphological
+    │        generator (generate.py).
+    │  Filter: _offerable() — a vowel, legal letters, no final y, not an
+    │          English word, shares material with the input, and
+    │          phonotactically valid or attested.
+    │  Rank:  (distance, first-letter change, -(frequency + morphology bonus
+    │          + shared-onset bonus + attested bonus))
+    │  A run-together word gets its two-word split first ("runtogether_split").
+    │  Optional: FastText semantic re-ranking — off by default, it
     │            measured WORSE than rule-only ranking
     ▼
 Return ranked suggestions
 
-The `method` field takes exactly one of: "empty",
+The `method` field takes exactly one of: "empty", "user_dictionary",
 "semantically_invalid_standalone", "levenshtein_phonotactic",
-"confidence_gate", "levenshtein_primary", "levenshtein_speller_combined",
-"hybrid_fasttext". Earlier revisions of this docstring named
-"morphology_gate" and "phonotactically_invalid"; neither is ever returned.
+"confidence_gate", "hyphenated_part", "english_word", "levenshtein_primary",
+"levenshtein_speller_combined", "hybrid_fasttext", "runtogether_split",
+"none".
 
 Sentence checking
 ─────────────────
-check_sentence() tokenises the input and runs each token through the
-same gate pipeline. Words that parse morphologically are silently skipped.
-Only genuinely unknown words surface as correction suggestions.
+check_sentence() tokenises the input with khasi_engine.tokens and runs each
+distinct word through the same decision. Words that pass are silently
+skipped; only words the gate rejects surface as corrections, in the
+capitalisation of the word they replace.
 
 This ensures that productive morphological forms (pynbha, jingsniew,
 kynjat, etc.) are never flagged as misspellings even if they are not
@@ -62,36 +73,31 @@ from __future__ import annotations
 import inspect
 import math
 import os
-import re
-from typing import Optional, TYPE_CHECKING, Callable
+import threading
+from functools import lru_cache
+from typing import Mapping, Optional, TYPE_CHECKING, Callable
+
+from khasi_engine import tokens as _tokens
 
 if TYPE_CHECKING:
     from khasi_engine.database import KhasiDB
 
 # Characters that are never part of a Khasi word but DO appear inside one in
 # scanned or scraped text — the caret in `i^p` for `ïap`, and its relatives.
-# Measured before adding: zero lexicon headwords have one of these joining two
-# letters, and 40 corpus files yield three occurrences, all damage (`a[y`,
-# `d[P`, `g]K`).
-_NOISE_CHARS = "^~«»•|\\{}[]"
+# Defined with the rest of the tokenisation in khasi_engine.tokens.
+_NOISE_CHARS = _tokens.NOISE_CHARS
 
-# Word boundary pattern (matches Khasi orthography incl. ï, ñ, hyphens).
+# Word boundary pattern, shared with every other component (tokens.py).
 #
-# Noise characters bind letters together here exactly as `'` and `-` do, so a
-# damaged word is seen WHOLE. They are not part of the word — they are the
-# reason it needs correcting — but splitting on them was worse than useless:
-# `i^p` became the tokens `i` and `p`, `br^ew` became `br` and `ew`, and each
-# fragment was then "corrected" on its own. A sentence came back
-#
-#     u i^p ha ka br^ew bad u kh^nnah   ->   u i^pa ha ka ba^ew bad u ka^nah
-#
-# which is worse than the input: `p`->`pa`, `br`->`ba`, `kh`->`ka`. Single-word
-# checking never had the problem, because nothing split the input — it already
-# suggested `briew` for `br^ew`. This makes the sentence path agree with it.
-_WORD_PATTERN = re.compile(
-    r"[A-Za-z\u00cf\u00ef\u00d1\u00f1]+"
-    r"(?:['\-" + re.escape(_NOISE_CHARS) + r"][A-Za-z\u00cf\u00ef\u00d1\u00f1]+)*"
-)
+# Noise characters bind letters together exactly as `'` and `-` do, so a
+# damaged word is seen WHOLE. Splitting on them was worse than useless: `i^p`
+# became the tokens `i` and `p`, and each fragment was then "corrected" on its
+# own. The facade used to tokenise without them, and then corrected a
+# fragment inside a word this pattern had already flagged — two overlapping
+# edits to one word. Accented vowels and the typographic apostrophe are
+# letters and joiners here too; without them a dictionary word like
+# `sngewrém` was split and each piece "corrected".
+_WORD_PATTERN = _tokens.WORD_PATTERN
 
 # Score bonus for suggestions that parse morphologically
 # Kept small so morphological validity boosts ranking but cannot override
@@ -118,9 +124,10 @@ DELETE_INDEX_ENABLED = True
 
 # Whether the vendored autocorrect Speller still contributes candidates.
 #
-# It generates every edit of the word and intersects with a 302,695-form
-# dictionary — Norvig generate-and-filter, the very thing the delete index
-# replaces. Profiling put it at 95% of suggest()'s runtime once the index
+# It generates every edit of the word and intersects with the expanded
+# frequency table (302,695 forms when this was measured; about 194k now that
+# the expansion covers single-token roots only) — Norvig generate-and-filter,
+# the very thing the delete index replaces. Profiling put it at 95% of suggest()'s runtime once the index
 # was in, so it was A/B'd on the 308-item frozen benchmark:
 #
 #     config              detect   top-1   top-5   ms/word
@@ -228,8 +235,35 @@ def _is_morphologically_valid(word: str, morph_check: Callable[[str], bool]) -> 
 # Levenshtein fallback  (no external dependencies)
 # ---------------------------------------------------------------------------
 
-# Khasi digraphs that count as a single phoneme for edit-distance purposes
-_DIGRAPHS = ("sh", "ph", "th", "kh", "bh", "dh", "lh", "rh", "ng", "dz")
+# Khasi digraphs that count as a single phoneme for edit-distance purposes.
+#
+# Read from the lexicon's own `phonology.digraphs_as_single`, the list the
+# validator and the Learn page use. This tuple used to be hard-coded with
+# `dz` (which the data does not list) and without `jh` (which it does), so
+# the distance function and the phonology disagreed about what one sound is.
+# The literal below is only the fallback for a missing phonology block.
+_DIGRAPHS_FALLBACK = ("ng", "sh", "ph", "th", "kh", "bh", "dh", "jh", "lh", "rh")
+_DIGRAPH_STATE: dict = {"source": None, "digraphs": _DIGRAPHS_FALLBACK}
+
+
+def _digraphs() -> tuple:
+    """The current digraph inventory, longest first. Follows the data."""
+    try:
+        from khasi_engine import phonology as _p
+        src = _p.DIGRAPHS_AS_SINGLE
+    except Exception:                                   # pragma: no cover
+        src = None
+    if src is not _DIGRAPH_STATE["source"]:
+        seq = tuple(sorted(src, key=len, reverse=True)) if src else _DIGRAPHS_FALLBACK
+        _DIGRAPH_STATE["source"] = src
+        _DIGRAPH_STATE["digraphs"] = seq
+        _MULTI_STATE["digraphs"] = None                 # rules depend on units
+    return _DIGRAPH_STATE["digraphs"]
+
+
+# Kept for callers that read the old name; always the data-driven inventory.
+_DIGRAPHS = _DIGRAPHS_FALLBACK
+
 
 def _to_phonemes(word: str) -> list[str]:
     """
@@ -251,9 +285,10 @@ def _to_phonemes(word: str) -> list[str]:
     result: list[str] = []
     i = 0
     w = word.lower()
+    digraphs = _digraphs()
     while i < len(w):
         matched = False
-        for dg in _DIGRAPHS:
+        for dg in digraphs:
             if w[i:i+len(dg)] == dg:
                 result.append(dg)
                 i += len(dg)
@@ -290,40 +325,20 @@ def _shared_phoneme_prefix(a: str, b: str) -> int:
 # corrected word rank higher than a phonetically unrelated candidate at
 # the same integer distance.
 #
-# Sources for these confusion sets:
-#   • Nasal+stop ambiguity: 'ng' written as 'g', 'n', 'nk', 'gn'
-#     (dign → ding, dienk → dieng, dieg → dieng)
-#   • Vowel nucleus ambiguity: 'ie' / 'i' / 'e' / 'ei' / 'ia'
-#     (dien → dieng, tieng → dieng, diang → dieng)
-#   • Voiced/voiceless stop: d ↔ t, b ↔ p
-#     (tieng → dieng; less common but documented in learner errors)
-#   • Nasal variation: n ↔ ng at word boundary (ŋ normalisation)
+# Every pair here is between SINGLE phonemes, the only kind a substitution
+# can see. Pairs that span two phonemes on one side — the vowel nuclei ie/i,
+# ie/ei, ie/ia and the ng/nk, ng/gn nasals — are in
+# _MULTI_UNIT_CONFUSION_COST below and are opt-in.
 #
-# Cost 0.4 → very close (near-homophones in some dialects/registers)
-# Cost 0.6 → close (common orthographic confusion)
-# Cost 0.8 → related (voiced/voiceless, same place of articulation)
+# Cost 0.3 → dropped mark (accent, diaeresis, tilde)
+# Cost 0.4 → very close (ng written g or n)
+# Cost 0.7-0.8 → related (voiced/voiceless, nearby nasals)
 _CONFUSION_COST: dict[tuple[str, str], float] = {
-    # ng ↔ written as g / n / nk / gn  (nasal+velar stop)
+    # ng ↔ written as g / n  (nasal+velar stop): dieg → dieng, dien → dieng
     ("ng", "g"):  0.4,
     ("g",  "ng"): 0.4,
     ("ng", "n"):  0.4,
     ("n",  "ng"): 0.4,
-    ("ng", "nk"): 0.5,
-    ("nk", "ng"): 0.5,
-    ("ng", "gn"): 0.5,   # transposition-like (dign → ding)
-    ("gn", "ng"): 0.5,
-
-    # Vowel nucleus ambiguity: ie / i / e / ei / ia
-    ("ie", "i"):  0.4,
-    ("i",  "ie"): 0.4,
-    ("ie", "e"):  0.4,
-    ("e",  "ie"): 0.4,
-    ("ie", "ei"): 0.5,
-    ("ei", "ie"): 0.5,
-    ("ie", "ia"): 0.6,
-    ("ia", "ie"): 0.6,
-    ("ie", "io"): 0.7,
-    ("io", "ie"): 0.7,
 
     # Vowel length / accent confusion
     ("a",  "á"):  0.3,
@@ -337,7 +352,7 @@ _CONFUSION_COST: dict[tuple[str, str], float] = {
     ("u",  "ú"):  0.3,
     ("ú",  "u"):  0.3,
 
-    # Voiced ↔ voiceless stop (initial consonant drift)
+    # Voiced ↔ voiceless stop (initial consonant drift): tieng → dieng
     ("d",  "t"):  0.8,
     ("t",  "d"):  0.8,
     ("b",  "p"):  0.8,
@@ -360,8 +375,7 @@ _CONFUSION_COST: dict[tuple[str, str], float] = {
     # marks are phonemic, not decorative:
     #
     #   phonology.consonant_chart  ñ is /ɲ/, palatal, distinct from n
-    #                              (alveolar) and ng (velar); one of the 24
-    #                              consonants in `consonants`
+    #                              (alveolar) and ng (velar)
     #   phonology.minimal_pairs    nasals_final: tʰaɲ "weave" / tʰaŋ "burn"
     #   phonology.vowels_short     [a e i o u ï] — ï is a vowel in its own
     #                              right, and vowel_length_note records it as
@@ -374,13 +388,79 @@ _CONFUSION_COST: dict[tuple[str, str], float] = {
     # split needs.
     ("i",  "ï"):  0.3,
     ("ï",  "i"):  0.3,
-    ("ia", "ïa"): 0.3,
-    ("ïa", "ia"): 0.3,
     ("n",  "ñ"):  0.3,
     ("ñ",  "n"):  0.3,
     ("y",  "ý"):  0.3,
     ("ý",  "y"):  0.3,
 }
+
+# Confusions that span two phonemes on at least one side. `_to_phonemes`
+# splits vowel sequences into their letters, so a plain substitution table
+# never sees `ie` or `nk` as one unit: these 14 entries sat in the table
+# above and never fired (`dien` -> `din` cost a full edit, not 0.4, whatever
+# the comments said). They are now applied as multi-unit substitutions inside
+# the same recurrence — when switched on. (`ia`/`ïa` was dropped outright:
+# the single-phoneme `i`/`ï` pair already prices it identically.)
+#
+# OFF by default, on measurement (2026-09-30, all else equal):
+#
+#                          word benchmark        sentence benchmark
+#                          top-1    top-5        top-1 (context)
+#     off                  73.5%    91.5%        92.0%
+#     on                   72.4%    91.5%        92.0%
+#
+# Three word items lost and nothing gained: the vowel-nucleus pairs pull in
+# near-homographs that tie with the right answer and win the tie. Kept, and
+# measurable, rather than deleted: set KHASI_SPELL_MULTI_UNIT_CONFUSIONS=1.
+_MULTI_UNIT_CONFUSION_COST: dict[tuple[str, str], float] = {
+    # ng written as nk / gn:  dienk → dieng, dign → ding
+    ("ng", "nk"): 0.5,
+    ("nk", "ng"): 0.5,
+    ("ng", "gn"): 0.5,
+    ("gn", "ng"): 0.5,
+    # Vowel nucleus ambiguity: ie / i / e / ei / ia / io
+    ("ie", "i"):  0.4,
+    ("i",  "ie"): 0.4,
+    ("ie", "e"):  0.4,
+    ("e",  "ie"): 0.4,
+    ("ie", "ei"): 0.5,
+    ("ei", "ie"): 0.5,
+    ("ie", "ia"): 0.6,
+    ("ia", "ie"): 0.6,
+    ("ie", "io"): 0.7,
+    ("io", "ie"): 0.7,
+}
+
+
+# Rules built from _MULTI_UNIT_CONFUSION_COST, cached per digraph inventory.
+_MULTI_STATE: dict = {"digraphs": None, "by_end": {}, "longest": 1}
+
+# Off by default: see the measurement above _MULTI_UNIT_CONFUSION_COST.
+_MULTI_UNIT_CONFUSIONS = os.environ.get(
+    "KHASI_SPELL_MULTI_UNIT_CONFUSIONS", "0").lower() in ("1", "true", "yes", "on")
+
+
+def _multi_rules() -> tuple[dict, int]:
+    """Multi-phoneme confusion rules, indexed by their last units.
+
+    Returns ({(last_a, last_b): [(A, B, cost), ...]}, longest side).
+    Rebuilt when the digraph inventory changes, since that decides how a
+    pair splits into units.
+    """
+    if not _MULTI_UNIT_CONFUSIONS:
+        return {}, 1
+    digraphs = _digraphs()
+    if _MULTI_STATE["digraphs"] is not digraphs:
+        by_end: dict = {}
+        longest = 1
+        for (a, b), cost in _MULTI_UNIT_CONFUSION_COST.items():
+            A, B = tuple(_to_phonemes(a)), tuple(_to_phonemes(b))
+            if len(A) == 1 and len(B) == 1:
+                continue                           # handled by _sub_cost
+            by_end.setdefault((A[-1], B[-1]), []).append((A, B, cost))
+            longest = max(longest, len(A), len(B))
+        _MULTI_STATE.update(digraphs=digraphs, by_end=by_end, longest=longest)
+    return _MULTI_STATE["by_end"], _MULTI_STATE["longest"]
 
 
 def _sub_cost(pa: str, pb: str) -> float:
@@ -423,30 +503,52 @@ def _damerau_chars(a: str, b: str, cap: float = 4.0) -> float:
     return prev[lb]
 
 
+def _phoneme_table(pa: list, pb: list) -> list:
+    """Full DP table of the phoneme distance, multi-unit rules included.
+
+    One recurrence shared by `_levenshtein` and `explain_edit`, so the
+    explanation a reader sees is the arithmetic the ranking used.
+    """
+    rules, _ = _multi_rules()
+    la, lb = len(pa), len(pb)
+    D = [[0.0] * (lb + 1) for _ in range(la + 1)]
+    for i in range(la + 1):
+        D[i][0] = float(i)
+    for j in range(lb + 1):
+        D[0][j] = float(j)
+    for i in range(1, la + 1):
+        for j in range(1, lb + 1):
+            best = min(D[i-1][j] + 1.0, D[i][j-1] + 1.0,
+                       D[i-1][j-1] + _sub_cost(pa[i-1], pb[j-1]))
+            for A, B, cost in rules.get((pa[i-1], pb[j-1]), ()):
+                la_, lb_ = len(A), len(B)
+                if (i >= la_ and j >= lb_
+                        and tuple(pa[i-la_:i]) == A and tuple(pb[j-lb_:j]) == B):
+                    best = min(best, D[i-la_][j-lb_] + cost)
+            D[i][j] = best
+    return D
+
+
+def _phoneme_distance(a: str, b: str) -> float:
+    pa, pb = _to_phonemes(a), _to_phonemes(b)
+    return _phoneme_table(pa, pb)[len(pa)][len(pb)]
+
+
 def _levenshtein(a: str, b: str) -> float:
     """
     Phoneme-aware, confusion-weighted Levenshtein distance.
 
     Tokenises both words into phoneme sequences (digraphs as single units).
     Substitution costs are reduced for phonetically related pairs via
-    _CONFUSION_COST, so commonly confused phonemes (ng/g/n, ie/i/e, d/t)
-    produce lower distances and rank higher in suggestion lists.
+    _CONFUSION_COST (and, when switched on, the two-phoneme pairs in
+    _MULTI_UNIT_CONFUSION_COST), so commonly confused spellings produce lower
+    distances and rank higher in suggestion lists.
 
-    Returns a float in [0, max(len(a), len(b))].
+    Returns the smaller of that and the character-level Damerau distance.
     """
     if a == b:
         return 0.0
-    pa, pb = _to_phonemes(a), _to_phonemes(b)
-    la, lb = len(pa), len(pb)
-    # Use floats throughout so fractional substitution costs accumulate
-    dp: list[float] = [float(j) for j in range(lb + 1)]
-    for i in range(1, la + 1):
-        prev = dp[:]
-        dp[0] = float(i)
-        for j in range(1, lb + 1):
-            sub = prev[j - 1] + _sub_cost(pa[i - 1], pb[j - 1])
-            dp[j] = min(dp[j] + 1.0, dp[j - 1] + 1.0, sub)
-    phonemic = dp[lb]
+    phonemic = _phoneme_distance(a, b)
     # Take whichever view sees the smaller error. The phoneme distance
     # keeps its advantage on genuine phonemic confusions (ng/g, ie/i); the
     # character distance rescues typographic slips and transpositions that
@@ -456,10 +558,49 @@ def _levenshtein(a: str, b: str) -> float:
     return phonemic
 
 
+def _char_ops(a: str, b: str) -> list[dict]:
+    """Character-level Damerau operations turning *a* into *b*."""
+    la, lb = len(a), len(b)
+    D = [[0] * (lb + 1) for _ in range(la + 1)]
+    for i in range(la + 1):
+        D[i][0] = i
+    for j in range(lb + 1):
+        D[0][j] = j
+    for i in range(1, la + 1):
+        for j in range(1, lb + 1):
+            cost = 0 if a[i-1] == b[j-1] else 1
+            D[i][j] = min(D[i-1][j] + 1, D[i][j-1] + 1, D[i-1][j-1] + cost)
+            if i > 1 and j > 1 and a[i-1] == b[j-2] and a[i-2] == b[j-1]:
+                D[i][j] = min(D[i][j], D[i-2][j-2] + 1)
+    ops, i, j = [], la, lb
+    while i > 0 or j > 0:
+        if (i > 1 and j > 1 and a[i-1] == b[j-2] and a[i-2] == b[j-1]
+                and a[i-1] != a[i-2] and D[i][j] == D[i-2][j-2] + 1):
+            ops.append({"op": "swap", "from": a[i-2:i], "to": b[j-2:j],
+                        "cost": 1.0, "known": False})
+            i, j = i - 2, j - 2
+            continue
+        if i > 0 and j > 0 and D[i][j] == D[i-1][j-1] + (0 if a[i-1] == b[j-1] else 1):
+            if a[i-1] != b[j-1]:
+                ops.append({"op": "substitute", "from": a[i-1], "to": b[j-1],
+                            "cost": 1.0, "known": False})
+            i, j = i - 1, j - 1
+            continue
+        if i > 0 and D[i][j] == D[i-1][j] + 1:
+            ops.append({"op": "drop", "from": a[i-1], "to": "", "cost": 1.0,
+                        "known": False})
+            i -= 1
+            continue
+        ops.append({"op": "add", "from": "", "to": b[j-1], "cost": 1.0,
+                    "known": False})
+        j -= 1
+    return list(reversed(ops))
+
+
 def explain_edit(a: str, b: str) -> list[dict]:
     """
-    Which phoneme operations relate *a* to *b*, and were any of them a
-    confusion Khasi orthography actually makes?
+    Which operations relate *a* to *b*, and were any of them a confusion
+    Khasi orthography actually makes?
 
     The ranking already knows this — `_CONFUSION_COST` is why `dand` proposes
     `dang` ahead of a same-distance alternative — but nothing surfaced it, so
@@ -467,24 +608,39 @@ def explain_edit(a: str, b: str) -> list[dict]:
     the first differs by a nasal the language genuinely confuses while the
     others differ by an unrelated letter.
 
-    Walks the same recurrence `_levenshtein` uses, then follows the
-    backpointers to recover the operations. `known` marks a substitution the
-    confusion matrix prices below a full edit.
+    The operations come from whichever view produced the distance the
+    ranking used. `_levenshtein` takes the smaller of the phoneme distance
+    and the character Damerau distance; this used to walk the phoneme
+    recurrence only, so `dand` -> `dang` was explained as two operations
+    costing 1.4 while it had been ranked at 1.0 as one character change.
+    The costs of the returned operations now add up to `_levenshtein(a, b)`.
+    `known` marks an operation the confusion matrix prices below a full edit.
     """
-    pa, pb = _to_phonemes((a or "").lower()), _to_phonemes((b or "").lower())
-    la, lb = len(pa), len(pb)
-    D = [[0.0] * (lb + 1) for _ in range(la + 1)]
-    for i in range(la + 1):
-        D[i][0] = i
-    for j in range(lb + 1):
-        D[0][j] = j
-    for i in range(1, la + 1):
-        for j in range(1, lb + 1):
-            D[i][j] = min(D[i-1][j] + 1, D[i][j-1] + 1,
-                          D[i-1][j-1] + _sub_cost(pa[i-1], pb[j-1]))
-    ops, i, j = [], la, lb
+    a, b = (a or "").lower(), (b or "").lower()
+    if a == b:
+        return []
+    pa, pb = _to_phonemes(a), _to_phonemes(b)
+    D = _phoneme_table(pa, pb)
+    if _USE_CHAR_DISTANCE and _damerau_chars(a, b) < D[len(pa)][len(pb)] - 1e-9:
+        return _char_ops(a, b)
+    rules, _ = _multi_rules()
+    ops, i, j = [], len(pa), len(pb)
     while i > 0 or j > 0:
         if i > 0 and j > 0:
+            matched = False
+            for A, B, cost in rules.get((pa[i-1], pb[j-1]), ()):
+                la_, lb_ = len(A), len(B)
+                if (i >= la_ and j >= lb_ and tuple(pa[i-la_:i]) == A
+                        and tuple(pb[j-lb_:j]) == B
+                        and abs(D[i][j] - (D[i-la_][j-lb_] + cost)) < 1e-9):
+                    ops.append({"op": "substitute", "from": "".join(A),
+                                "to": "".join(B), "cost": round(cost, 2),
+                                "known": True})
+                    i, j = i - la_, j - lb_
+                    matched = True
+                    break
+            if matched:
+                continue
             cost = _sub_cost(pa[i-1], pb[j-1])
             if abs(D[i][j] - (D[i-1][j-1] + cost)) < 1e-9:
                 if pa[i-1] != pb[j-1]:
@@ -581,15 +737,48 @@ def _named_entities() -> frozenset:
     global _NAMED_ENTITIES
     if _NAMED_ENTITIES is None:
         import json as _json
-        from pathlib import Path as _Path
+        from khasi_engine import paths as _paths
 
-        path = _Path(__file__).resolve().parent.parent / "data" / "gazetteer.json"
+        path = _paths.data_file("gazetteer.json")
         try:
             _NAMED_ENTITIES = frozenset(
                 _json.loads(path.read_text(encoding="utf-8")).get("tokens") or ())
         except Exception:
             _NAMED_ENTITIES = frozenset()
     return _NAMED_ENTITIES
+
+
+_ENGLISH_WORDS: Optional[frozenset] = None
+
+
+def _english_words() -> frozenset:
+    """
+    English words found in the corpus, read from data/english_in_corpus.json.
+
+    Maintainer ruling 2026-10-01: English words in Khasi text are rejected,
+    however often Khasi writers use them. Before this list the corpus pool
+    admitted any frequent type spelled with Khasi letters, and the vote then
+    accepted it on corpus frequency + phonotactics: `hospital`, `the`,
+    `state`, `member` — 355 English types, 0.77% of corpus tokens. A word on
+    the list is never accepted unless the lexicon records it, never offered,
+    and never admitted to the pool. Built by scripts/build_english_list.py,
+    which holds back names and the few Khasi words that share an English
+    spelling (`longing`, "household").
+
+    Empty when the file is absent, in which case nothing changes.
+    """
+    global _ENGLISH_WORDS
+    if _ENGLISH_WORDS is None:
+        import json as _json
+        from khasi_engine import paths as _paths
+
+        path = _paths.data_file("english_in_corpus.json")
+        try:
+            _ENGLISH_WORDS = frozenset(
+                _json.loads(path.read_text(encoding="utf-8")).get("words") or ())
+        except Exception:
+            _ENGLISH_WORDS = frozenset()
+    return _ENGLISH_WORDS
 
 
 class _DeleteIndex:
@@ -701,20 +890,20 @@ _BANNED_REPAIR_PENALTY = 0.6
 # small enough that it still appears when it is the only answer.
 _INVALID_SHAPE_PENALTY = 0.75
 
-_SHAPE_CACHE: dict = {}
-
-
+@lru_cache(maxsize=65536)
 def _phonotactically_ok(word: str) -> bool:
-    """phonology.validate() with a cache — it is called per candidate."""
-    hit = _SHAPE_CACHE.get(word)
-    if hit is None:
-        try:
-            from khasi_engine import phonology as _p
-            hit = bool((_p.validate(word) or {}).get("pass"))
-        except Exception:
-            hit = True
-        _SHAPE_CACHE[word] = hit
-    return hit
+    """phonology.validate() with a cache — it is called per candidate.
+
+    Bounded. The cache used to be a plain module dict that grew by about ten
+    entries per unknown word checked and was never emptied, which in a
+    long-running service under a 512 MB ceiling is a slow leak. Cleared when
+    a checker is built, since a new lexicon may carry new phonology.
+    """
+    try:
+        from khasi_engine import phonology as _p
+        return bool((_p.validate(word) or {}).get("pass"))
+    except Exception:
+        return True
 
 
 def _repair_banned(word: str) -> list[str]:
@@ -761,19 +950,30 @@ def _levenshtein_suggestions(
     db: "KhasiDB",
     max_dist: int = 2,
     top_n: int = 5,
+    *,
+    freq: Optional[Mapping[str, int]] = None,
+    extra_index: Optional["_DeleteIndex"] = None,
+    extra_forms: frozenset | set = frozenset(),
+    penalised: frozenset | set = frozenset(),
 ) -> list[tuple[float, str]]:
     """
     Return up to *top_n* (distance, word) pairs within *max_dist* phonemic
-    edits of *word*, sorted by (distance, -freq_score).
+    edits of *word*, sorted by (distance, first-letter, -score).
 
     Returning distances alongside words lets callers preserve phonemic
     proximity as the primary ranking key — morphological validity is only
     used as a secondary tie-breaker, never to override a closer match.
+
+    The keyword arguments carry a checker's own state, which is not stored on
+    the shared lexicon: *freq* its frequency table (corpus counts when
+    applied), *extra_index* / *extra_forms* the corpus-pool and runtime-taught
+    words it may offer, and *penalised* the subset charged
+    `_CORPUS_FORM_PENALTY`.
     """
     word = word.lower()
-    scored: list[tuple[int, int, str]] = []
+    scored: list[tuple[float, int, float, str]] = []
     seen: set[str] = set()
-    freq_data = db.to_freq_dict()
+    freq_data = freq if freq is not None else db.to_freq_dict()
     # Narrow the search space before measuring distance. Falls back to the
     # full scan only when no index is ATTACHED — an attached index that
     # returns nothing is taken at its word, and the search ends there.
@@ -785,7 +985,12 @@ def _levenshtein_suggestions(
     # the 294 frozen benchmark items reach it. A caller that needs exactness
     # detaches the index instead.
     index = getattr(db, "_delete_index", None)
-    pool = index.candidates(word) if index is not None else None
+    if index is not None:
+        pool = set(index.candidates(word))
+        if extra_index is not None:
+            pool |= extra_index.candidates(word)
+    else:
+        pool = set(db.all_surface_forms()) | set(extra_forms)
 
     # First pass: include normalised candidates with a small distance boost
     # (they get distance 0.5 so they outrank Levenshtein candidates at dist 1)
@@ -797,24 +1002,19 @@ def _levenshtein_suggestions(
     # `ïatreilan` normalises to `ïatreilang` under the terminal n/ng rule,
     # and `ïatreillang` under doubled-consonant collapse, so both marked the
     # right answer seen, declined to score it, and returned nothing at all.
-    # The set is rebuilt once here rather than per candidate, where it cost
-    # a 15k-element construction on every iteration.
-    surface_forms = None
-    norm_candidates = _normalise_candidates(word)
-    for nc in norm_candidates:
+    surface_forms = db.surface_form_set()
+    for nc in _normalise_candidates(word):
         if nc in seen or " " in nc:
             continue
-        if surface_forms is None:
-            surface_forms = {sf for sf in db.all_surface_forms() if " " not in sf}
-        if nc in freq_data or nc in surface_forms:
+        if nc in freq_data or nc in surface_forms or nc in extra_forms:
             seen.add(nc)
-            freq   = freq_data.get(nc, 0)
+            f      = freq_data.get(nc, 0)
             prefix = _shared_phoneme_prefix(word, nc)
-            score  = freq + prefix * 3
+            score  = f + prefix * _PREFIX_BONUS_WEIGHT
             scored.append((0.5, _first_letter_differs(word, nc), -score, nc))
 
-    # Second pass: measure distance over the candidate pool (or everything).
-    for sf in (pool if pool is not None else db.all_surface_forms()):
+    # Second pass: measure distance over the candidate pool.
+    for sf in pool:
         # Skip multi-word strings (safety net)
         if " " in sf or not sf:
             continue
@@ -826,8 +1026,7 @@ def _levenshtein_suggestions(
         # headwords; see _NON_HEADWORD_PENALTY.
         if _NON_HEADWORD_PENALTY and sf not in db._surface_index:
             d += _NON_HEADWORD_PENALTY
-        if _CORPUS_FORM_PENALTY and getattr(db, "_corpus_forms", None) \
-                and sf in db._corpus_forms:
+        if _CORPUS_FORM_PENALTY and sf in penalised:
             d += _CORPUS_FORM_PENALTY
         # A candidate the engine's own phonotactics rejects is ranked below
         # one it accepts. `sbngaifi` was answered with `pbngaiñ` at 81%
@@ -844,12 +1043,14 @@ def _levenshtein_suggestions(
         if _INVALID_SHAPE_PENALTY and not _phonotactically_ok(sf):
             d += _INVALID_SHAPE_PENALTY
         if 0 < d <= max_dist:
-            freq   = freq_data.get(sf, 0)
+            f      = freq_data.get(sf, 0)
             # Prefix bonus: candidates sharing more leading phonemes with the
-            # input word rank higher when edit distance is tied.
-            # Weight: 3 points per shared leading phoneme.
+            # input word rank higher when edit distance is tied. Uses the
+            # same weight as the final merge in suggest(); the literal 3 here
+            # used to drift from _PREFIX_BONUS_WEIGHT, so changing the
+            # constant (as the ablation script does) only half took effect.
             prefix = _shared_phoneme_prefix(word, sf)
-            score  = freq + prefix * 3
+            score  = f + prefix * _PREFIX_BONUS_WEIGHT
             scored.append((d, _first_letter_differs(word, sf), -score, sf))
 
     scored.sort()
@@ -870,8 +1071,13 @@ def _build_speller(freq_dict: dict):
         sig    = inspect.signature(Speller.__init__)
         params = set(sig.parameters.keys())
 
-        if "custom_words" in params and "expand_morphology" in params:
-            return Speller(lang="kh", nlp_data=freq_dict, expand_morphology=True)
+        # expand_morphology=False: the engine expands the table itself, from
+        # the lexicon's own prefix inventory (see _expand_frequency_table).
+        # The vendored Speller's expansion used its hard-coded prefix list,
+        # which treats the free morphemes ba, la, iai and nang as prefixes
+        # and knows nothing of sngew- or ïa-.
+        if "expand_morphology" in params:
+            return Speller(lang="kh", nlp_data=freq_dict, expand_morphology=False)
         if "nlp_data" in params:
             return Speller(lang="kh", nlp_data=freq_dict)
 
@@ -882,6 +1088,50 @@ def _build_speller(freq_dict: dict):
     except Exception as e:
         print(f"[khasi-nlp] Warning: Speller init failed — {e}")
         return None
+
+
+def _expand_frequency_table(freq: dict) -> int:
+    """Add prefix + root combinations to *freq*, in place. Returns the count.
+
+    The table is what corpus frequencies are later mapped onto, and it is the
+    whitelist of forms that may earn the vote's "frequent" signal: a string
+    is only eligible if it is a lexicon form or a plausible combination. The
+    heads come from the lexicon's own morphology block — every prefix marked
+    `productive`, with assimilation applied (pyn- + lait -> pyllait), and the
+    `free_morphemes` (ba, la, iai, nang, …) that are written solid before a
+    root. The vendored Speller used a fixed list that called the free
+    morphemes prefixes and omitted sngew- and ïa-.
+
+    Values stay BELOW the frequent bar. They are structural placeholders, not
+    observations, and a placeholder must never earn "frequent" on its own —
+    only a corpus count can lift a combination over the bar.
+    """
+    try:
+        from khasi_engine import morphology as _morph
+        from khasi_engine.assimilation import should_assimilate
+    except Exception:                                   # pragma: no cover
+        return 0
+    heads: list[tuple[str, int, bool]] = []
+    for name, info in (getattr(_morph, "PREFIXES", None) or {}).items():
+        if info.get("productive"):
+            heads.append((name, 2, True))
+    for name in ((getattr(_morph, "_MORPH", None) or {}).get("free_morphemes") or {}):
+        heads.append((name.lower(), 4, False))
+    cap = KhasiSpellChecker._FREQ_HIGH_BAR - 1
+    roots = [(w, v) for w, v in freq.items() if w and " " not in w]
+    added = 0
+    for head, divisor, assimilates in heads:
+        for root, value in roots:
+            derived = None
+            if assimilates:
+                applied, surface = should_assimilate(head + "-", root)
+                if applied and surface:
+                    derived = surface
+            derived = derived or head + root
+            if derived not in freq:
+                freq[derived] = max(1, min(int(value) // divisor, cap))
+                added += 1
+    return added
 
 
 # ---------------------------------------------------------------------------
@@ -917,16 +1167,38 @@ class KhasiSpellChecker:
         self._db         = db
         self._morph_check = morph_check   # injected after analyser is constructed
         self._morph_diag  = None          # richer parse oracle, optional
-        # Hybrid (semantic re-rank) now runs against a Hugging Face Space —
-        # see khasi_engine/w2v_client. No model lives in this process so
-        # we just hold a boolean flag toggled by /v1/load-model.
+        # FastText re-ranking flag. The model itself is handled by
+        # khasi_engine.w2v_client, which prefers the bundled local model and
+        # falls back to a remote Space; this object only holds the switch.
         self._hybrid     = False
         # model_path is accepted for backwards compatibility with the v1
-        # KhasiAnalyser constructor but is otherwise ignored — we never
-        # load gensim models locally any more (Render OOM).
+        # KhasiAnalyser constructor and ignored: w2v_client resolves the
+        # model (KHASI_W2V_MODEL overrides the bundled path).
         _ = model_path
 
-        freq_dict = db.to_freq_dict()
+        # ── Per-checker state ─────────────────────────────────────────────
+        # Everything a speller adds on top of the lexicon lives HERE, not on
+        # the KhasiDB, which is memoised and shared by every speller in the
+        # process. Stored on the database, one speller's corpus pool,
+        # corpus frequencies and taught words leaked into the next.
+        #
+        #   _corpus_forms   corpus types the pool admitted: offerable
+        #   _corpus_accept  those, plus their reduced spelling: acceptable
+        #   _taught         add_word(): acceptable and offerable, any spelling
+        #   _extra_index    delete index over _corpus_forms and _taught
+        #   _ranking_freq   corpus-scaled lexicon frequencies (gate-1 search)
+        self._corpus_forms: set = set()
+        self._corpus_accept: set = set()
+        self._taught: set = set()
+        self._extra_index: Optional[_DeleteIndex] = None
+        self._ranking_freq: Optional[Mapping[str, int]] = None
+        self._corpus_freq_applied = False
+        self._corpus_accept_on = False
+        self._lock = threading.RLock()
+        _phonotactically_ok.cache_clear()
+
+        freq_dict = dict(db.to_freq_dict())
+        _expand_frequency_table(freq_dict)
         self._speller = _build_speller(freq_dict)
 
         if self._speller:
@@ -942,7 +1214,10 @@ class KhasiSpellChecker:
         else:
             print("[khasi-nlp] Speller unavailable — using Levenshtein fallback")
 
-        self.build_delete_index()
+        # The index is a property of the lexicon, so it is built once per
+        # database rather than once per speller.
+        if getattr(db, "_delete_index", None) is None:
+            self.build_delete_index()
 
         if use_hybrid:
             # Honour the constructor flag for backwards compatibility, but
@@ -970,25 +1245,109 @@ class KhasiSpellChecker:
             self._db._delete_index = None
 
     def teach_word(self, word: str) -> bool:
-        """Make *word* reachable as a correction candidate.
+        """Accept *word* and make it reachable as a correction, for THIS checker.
 
-        Returns True when the index gained an entry.
+        Returns True when the word was new.
 
-        The frequency dictionary is what the confidence vote reads, so
-        teaching a word there is enough for it to be ACCEPTED. Candidate
-        search reads the delete index instead, which is built once from the
-        lexicon — so a taught word was accepted and yet could never be
-        offered for a misspelling of itself. That is the same asymmetry the
-        morphological generator exists to close, arriving by a different
-        route.
+        Used by `KhasiSpeller.add_word`. A taught word is accepted before any
+        gate runs, so names and loans that break Khasi phonotactics —
+        `Meghalaya` has a bare g, `Congress` a c — can be taught too; they
+        were rejected at the phonotactic gate however they were added. It is
+        also indexed for candidate search, so a typo of it is corrected to it.
+
+        Stored on the checker, not the shared lexicon: teaching one speller
+        used to teach every speller in the process.
         """
-        index = getattr(self._db, "_delete_index", None)
-        if index is not None:
-            try:
-                return bool(index.add(word))
-            except Exception:
-                pass
-        return False
+        w = _tokens.canonical(word or "").lower().strip()
+        if not w or " " in w:
+            return False
+        with self._lock:
+            if w in self._taught:
+                return False
+            self._taught.add(w)
+            self._index_extra(w)
+        return True
+
+    # ── Corpus supply and acceptance (per checker) ────────────────────────
+
+    def _index_extra(self, w: str) -> None:
+        """Add *w* to this checker's own candidate index."""
+        if getattr(self._db, "_delete_index", None) is None:
+            return                         # full-scan mode reads the sets directly
+        if self._extra_index is None:
+            self._extra_index = _DeleteIndex((), max_dist=self._db._delete_index.max_dist)
+        self._extra_index.add(w)
+
+    def register_corpus_forms(self, forms) -> int:
+        """Admit corpus types as offerable-but-not-known candidates.
+
+        They become correction candidates — without them `pyntreikam`, 1,940
+        corpus occurrences and not a headword, is not in the list to be
+        ranked. They do NOT become lexicon words: `KhasiDB.is_known()` never
+        sees them. Returns the number newly registered.
+        """
+        n = 0
+        with self._lock:
+            for f in forms:
+                w = _tokens.canonical(f or "").lower()
+                if w and " " not in w and w not in self._corpus_forms:
+                    self._corpus_forms.add(w)
+                    self._index_extra(w)
+                    n += 1
+        return n
+
+    def register_corpus_acceptance(self, forms) -> int:
+        """Let corpus words earn the vote's frequency signal. Returns the count."""
+        before = len(self._corpus_accept)
+        with self._lock:
+            self._corpus_accept.update(
+                _tokens.canonical(f).lower() for f in forms if f and " " not in f)
+        return len(self._corpus_accept) - before
+
+    def is_corpus_form(self, word: str) -> bool:
+        """True when *word* is offerable only because the corpus attests it."""
+        return _tokens.canonical(word or "").lower() in self._corpus_forms
+
+    def is_corpus_accepted(self, word: str) -> bool:
+        """True when the corpus attests *word* often enough to accept it."""
+        return _tokens.canonical(word or "").lower() in self._corpus_accept
+
+    def is_taught(self, word: str) -> bool:
+        return _tokens.canonical(word or "").lower() in self._taught
+
+    def is_attested(self, word: str) -> bool:
+        """Did the lexicon, the admitted corpus pool or the user record *word*?"""
+        w = _tokens.canonical(word or "").lower()
+        return (self._db.is_attested(w) or w in self._corpus_forms
+                or w in self._taught)
+
+    def candidate_forms(self) -> list[str]:
+        """Every single-token form this checker can offer, sorted."""
+        extra = (self._corpus_forms | self._taught) - self._db.surface_form_set()
+        return sorted(set(self._db.all_surface_forms()) | extra)
+
+    def candidate_form_count(self) -> int:
+        """len(candidate_forms()), without building the list."""
+        extra = (self._corpus_forms | self._taught) - self._db.surface_form_set()
+        return len(self._db.surface_form_set()) + len(extra)
+
+    def set_ranking_frequencies(self, freq: Optional[Mapping[str, int]]) -> None:
+        """Frequencies the first-pass candidate search ranks by.
+
+        Set by khasi_spell.corpus_freq so the phonotactic-gate path ranks on
+        the same corpus counts as the final merge. Held per checker; it used
+        to be written into the shared lexicon's own table.
+        """
+        self._ranking_freq = freq
+
+    def _search_kwargs(self) -> dict:
+        """This checker's state, as `_levenshtein_suggestions` takes it."""
+        return {
+            "freq": self._ranking_freq,
+            "extra_index": self._extra_index,
+            "extra_forms": self._corpus_forms | self._taught,
+            "penalised": self._corpus_forms,
+        }
 
     def set_morph_check(self, morph_check: Callable[[str], bool]) -> None:
         """
@@ -1008,9 +1367,9 @@ class KhasiSpellChecker:
 
     def load_model(self, model_path: Optional[str] = None) -> None:
         """
-        Kept for backwards compatibility with callers that used the
-        local-gensim flow. Today this just flips the hybrid flag — the
-        actual model lives on a Hugging Face Space (see w2v_client).
+        Kept for backwards compatibility. Flips the hybrid flag; the model
+        itself is resolved by w2v_client — the bundled local model first,
+        then a remote Space when KHASI_W2V_URL is set.
         """
         _ = model_path
         self.set_remote_w2v_enabled(True)
@@ -1018,23 +1377,27 @@ class KhasiSpellChecker:
     def unload_model(self) -> None:
         """
         Backwards-compatible alias for `set_remote_w2v_enabled(False)`.
-        Nothing is freed in this process — the model never lived here.
+        Only the flag changes; `w2v_client.unload_local()` frees a loaded
+        local model.
         """
         self.set_remote_w2v_enabled(False)
 
     def set_remote_w2v_enabled(self, enabled: bool) -> None:
-        """Toggle the HF-proxied semantic re-ranker on or off."""
+        """Toggle FastText re-ranking on or off.
+
+        The name is historical: the backend is whatever w2v_client resolves,
+        which is the bundled LOCAL model when present and a remote Space only
+        otherwise.
+        """
         if enabled:
             from . import w2v_client
             if not w2v_client.is_configured():
-                # No KHASI_W2V_URL → silently stay in rule-only mode. The
-                # API layer raises a 503 before reaching here in the
-                # normal toggle path, but this guard makes the method
-                # safe to call from any code path.
+                # Neither a local model nor KHASI_W2V_URL: stay rule-only.
                 self._hybrid = False
                 return
             self._hybrid = True
-            print("[khasi-nlp] Spell-checker hybrid (remote w2v) ENABLED.")
+            print(f"[khasi-nlp] Spell-checker hybrid ENABLED "
+                  f"({w2v_client.active_backend()} backend).")
         else:
             self._hybrid = False
             print("[khasi-nlp] Spell-checker hybrid DISABLED (rule-only).")
@@ -1044,11 +1407,28 @@ class KhasiSpellChecker:
     # ------------------------------------------------------------------
 
     def sync_with_db(self) -> None:
-        freq_dict = self._db.to_freq_dict()
+        """Rebuild what this checker derives from the lexicon after an edit.
+
+        Used to swap in the raw frequency table only: the expansion, the
+        delete index and the morphological generator all kept the old
+        lexicon, so an added entry was accepted but never offered. Corpus
+        frequencies applied by the facade are not re-applied here.
+        """
+        freq_dict = dict(self._db.to_freq_dict())
+        _expand_frequency_table(freq_dict)
+        for w in self._taught:
+            freq_dict.setdefault(w, 20)
         if self._speller and hasattr(self._speller, "nlp_data"):
             self._speller.nlp_data = freq_dict
         elif self._speller:
             self._speller = _build_speller(freq_dict)
+        self.build_delete_index()
+        try:
+            from khasi_engine.generate import reset_generator
+            reset_generator()
+        except Exception:                               # pragma: no cover
+            pass
+        _phonotactically_ok.cache_clear()
 
     # ------------------------------------------------------------------
     # Gate helpers
@@ -1122,7 +1502,12 @@ class KhasiSpellChecker:
         from khasi_engine.phonology import (
             VOWELS as _V, SEMANTICALLY_INVALID_STANDALONE as _INVALID,
         )
-        low = cand.lower()
+        low = _tokens.canonical(cand).lower()
+        # A word the user taught this checker is offerable whatever its
+        # letters — that is the point of teaching `Meghalaya` or `Congress` —
+        # though never as a "correction" of itself.
+        if low in self._taught:
+            return not (word and low == _tokens.canonical(word).lower())
         # A correction that is the input is not a correction. This could not
         # arise while the pool was the lexicon and the gate refused anything
         # in it, but a corpus-derived candidate can be rejected by the vote
@@ -1174,11 +1559,21 @@ class KhasiSpellChecker:
             if low not in _named_entities():
                 return False
             return True
+        # No Khasi word ends in y — hard for the same reason: the lexicon
+        # attests `bodily` and `longingly` only because English text became
+        # headwords. Names keep their exemption here too.
+        from khasi_engine.phonology import ends_in_forbidden_vowel
+        if ends_in_forbidden_vowel(low) and low not in _named_entities():
+            return False
+        # Nor is an English word, unless the Khasi lexicon records it
+        # (maintainer ruling 2026-10-01; see _english_words).
+        if low in _english_words() and not self._db.is_known(low):
+            return False
         if word:
             w = word.lower()
             if low != w and not (set(low) & set(w)):
                 return False
-        return self._phonotactically_valid(cand) or self._db.is_attested(cand)
+        return self._phonotactically_valid(cand) or self.is_attested(cand)
 
     def _phonotactically_valid(self, word: str) -> bool:
         from khasi_engine.phonology import is_phonotactically_valid
@@ -1348,9 +1743,7 @@ class KhasiSpellChecker:
         freq_data = getattr(self._speller, "nlp_data", {}) if self._speller else {}
         if freq_data.get(w, 0) >= self._FREQ_HIGH_BAR:
             signals["frequent"] = self._W_FREQUENT
-        elif getattr(self, "_corpus_accept_on", False) \
-                and getattr(self._db, "is_corpus_accepted", None) \
-                and self._db.is_corpus_accepted(w):
+        elif self._corpus_accept_on and w in self._corpus_accept:
             # A corpus word the lexicon does not record. nlp_data is built
             # from the lexicon, so this signal never reached such a word:
             # `jylla`, seen 24,252 times, scored 1 of the 3 needed. Words
@@ -1359,9 +1752,9 @@ class KhasiSpellChecker:
             # only, phonotactically possible, not dominated by a far
             # commoner neighbour, not a run-together spelling.
             #
-            # The switch lives on the checker, not the database: KhasiDB is
-            # memoised per data source, so every speller in a process shares
-            # one, and a flag stored there would leak between instances.
+            # The set and the switch both live on the checker, not the
+            # database: KhasiDB is memoised per data source, so every speller
+            # in a process shares one, and anything stored there leaked.
             signals["frequent"] = self._W_FREQUENT
 
         return {
@@ -1376,101 +1769,127 @@ class KhasiSpellChecker:
 
     def is_known(self, word: str) -> bool:
         """
-        True if the morphological engine accepts the word OR it is in the
-        spell checker's frequency dictionary.
+        True if the checker accepts *word* — the same decision `suggest()`
+        makes, so the two can never disagree.
+
+        This used to answer "does morphology accept it, or is it in the
+        frequency table", a looser rule than the confidence vote: any bare-root
+        parse and any of the generated prefix+root strings counted.
+        Nothing in the package called it, which is how the divergence went
+        unnoticed.
         """
-        if self._morphologically_valid(word):
-            return True
-        if self._speller and hasattr(self._speller, "nlp_data"):
-            return word.lower() in self._speller.nlp_data
-        if self._speller and hasattr(self._speller, "is_known"):
-            return self._speller.is_known(word)
-        return False
+        return bool(self.suggest(word, n=1).get("is_known"))
 
-    def _rank_candidates(self, word: str, n: int, max_dist: int = 2) -> tuple[list[str], str]:
+    # _rank_candidates() was removed 2026-09-30. Its docstring said it was
+    # shared by gates 1 and 3; neither called it. It also ranked differently
+    # from the live path (no attested bonus, the Speller merged regardless of
+    # SPELLER_CANDIDATES_ENABLED), so reading it misdescribed the ranking.
+
+    def _hyphenated_part_veto(self, word_lower: str, conf: dict,
+                              in_lexicon: bool) -> Optional[dict]:
+        """Reject an accepted hyphenated compound whose part is a misspelling.
+
+        Phase 4 accepts any well-formed two-part hyphenated token as a
+        compound without checking that its parts are words, so `man-miay`
+        cleared the vote on morphology 2 + phonotactics 1 although `miay` is
+        not a word. The text path caught this in the facade and the word
+        path did not, so `/word`, `/batch`, `correct()` and the CLI accepted
+        what `/check` flagged. The rule now lives here, where every entry
+        point passes.
+
+        A compound the lexicon records, or the corpus attests often enough to
+        count as frequent, is a word in its own right whatever its parts look
+        like (`jrain-jrain`). A part that is not a word but has no suggestion
+        is left alone, exactly as before: an unknown part with nothing to
+        offer is not evidence of a typo.
         """
-        Generate and rank correction candidates. Shared by gates 1 and 3.
-
-        Both gates want the best correction for a misspelling; the only
-        difference is that gate 1 searches wider, because a word that breaks
-        phonotactics is often further from its target. Gate 1 used to call
-        _levenshtein_suggestions directly instead — skipping the Speller
-        merge, the morphology bonus and the shared-onset bonus — and ranked
-        measurably worse for it: 61.9% top-1 against gate 3's 71.1% on the
-        same probe. Wiring the coda check pushed more words down that path
-        and the overall top-1 fell from 59.7% to 53.3%, which is what
-        surfaced the inconsistency.
-        """
-        lev_pairs = _levenshtein_suggestions(word, self._db, max_dist=max_dist,
-                                             top_n=n * 4)
-        # The lexicon is ground truth; the validator's rules do not cover
-        # every place name, loan or reduplication. `is_attested` rather than
-        # `is_known` — a form the lexicon wrote down is offerable even when
-        # it is not itself an acceptable standalone word.
-        lev_ok = [(d, sf) for d, sf in lev_pairs if self._offerable(sf, word)]
-
-        speller_extra: list[tuple[float, str]] = []
-        lev_words = {sf for _, sf in lev_ok}
-        if self._speller:
-            try:
-                if hasattr(self._speller, "get_suggestions"):
-                    raw = self._speller.get_suggestions(word, n=n * 3)
-                elif hasattr(self._speller, "get_candidates"):
-                    pairs = self._speller.get_candidates(word)
-                    pairs.sort(reverse=True)
-                    raw = [w for _, w in pairs[: n * 3]]
-                else:
-                    raw = []
-                for sf in raw:
-                    if self._offerable(sf, word) and sf not in lev_words:
-                        speller_extra.append((_levenshtein(word, sf), sf))
-            except Exception as e:
-                print(f"[khasi-nlp] Speller.suggest error: {e}")
-
-        freq_data = getattr(self._speller, "nlp_data", {}) if self._speller else {}
-        scored: list[tuple[float, float, str]] = []
-        seen: set[str] = set()
-        for d, sf in lev_ok + speller_extra:
-            if sf in seen:
+        if "-" not in word_lower or in_lexicon or "frequent" in conf.get("signals", {}):
+            return None
+        parts = word_lower.split("-")
+        if any(not p for p in parts):
+            return None
+        fixed, bad = [], []
+        for part in parts:
+            if self._db.is_known(part) or part in self._taught:
+                fixed.append(part)
                 continue
-            seen.add(sf)
-            freq   = freq_data.get(sf, 0)
-            bonus  = _MORPHO_VALID_BONUS if self._morphologically_valid(sf) else 0
-            prefix = _shared_phoneme_prefix(word, sf) * _PREFIX_BONUS_WEIGHT
-            scored.append((d, _first_letter_differs(word, sf), -(freq + bonus + prefix), sf))
-
-        scored.sort()
-        method = "levenshtein_primary" if not speller_extra else "levenshtein_speller_combined"
-        return [sf for _, _, _, sf in scored[:n]], method
+            r = self.suggest(part, n=1)
+            if r.get("is_known") or not r.get("suggestions"):
+                fixed.append(part)
+                continue
+            fixed.append(r["suggestions"][0])
+            bad.append((part, r["suggestions"][0]))
+        if not bad:
+            return None
+        rebuilt = "-".join(fixed)
+        note = "; ".join(f"'{p}' is not a word (did you mean '{s}'?)" for p, s in bad)
+        return {
+            "is_known":              False,
+            "morphologically_valid": False,
+            "phonotactically_valid": True,
+            "suggestions":           [rebuilt],
+            "suggestion_distances":  [round(_levenshtein(word_lower, rebuilt), 3)],
+            "method":                "hyphenated_part",
+            "in_lexicon":            False,
+            "gate_reached":          3,
+            "confidence":            {**conf, "veto": note},
+            "reason":                note,
+        }
 
     def suggest(self, word: str, n: int = 5) -> dict:
         """
-        Morphology-gated spelling suggestions for *word*.
+        Morphology-gated spelling decision and suggestions for *word*.
 
-        Gate 1 — phonotactic check:
-            Fail → return immediately with is_known=False, suggestions=[],
-                   method="phonotactically_invalid".  Edit-distance on a
-                   phonotactically illegal string produces mostly useless
-                   candidates, so we skip it.
+        The input is normalised first: Unicode NFC, and the typographic
+        apostrophe (’) read as the ASCII one. Then:
 
-        Gate 2 — morphological check:
-            Pass → return is_known=True, suggestions=[],
-                   method="morphology_gate".  The word is valid; no
-                   correction needed.
+        Taught words — accepted outright (method "user_dictionary").
 
-        Gate 3 — spell checker (only reached when both gates fail):
-            Generate candidates, post-filter for phonotactic validity,
-            re-rank by morphological validity bonus, optionally re-rank
-            by FastText similarity.
+        Gate 0 — semantically invalid standalone token (`ng`):
+            is_known=False, gate 0, with suggestions from a narrow search.
+
+        Gates 1+2 — the confidence vote (lexicon 3, affixed morphology 2 or
+            1, corpus frequency 2, phonotactics 1; threshold 3):
+            clears → is_known=True, method "confidence_gate", gate 2 — unless
+                a hyphenated compound the lexicon does not record has a part
+                that is itself a misspelling, which is rejected with the
+                repaired compound (method "hyphenated_part", gate 3);
+            below, and phonotactically invalid → gate 1, method
+                "levenshtein_phonotactic", suggestions from a widened search
+                plus banned-letter repair, and the validator's `reason`.
+
+        Gate 3 — below the threshold but well formed: candidates from the
+            delete index, the corpus pool and the morphological generator,
+            ranked by distance then frequency, morphology and shared onset.
+            Optional FastText re-ranking; a run-together split goes first.
         """
         # Strip surrounding punctuation but preserve ' (glottal stop) and - (compound)
         import re as _re
+        word = _tokens.canonical(word or "")
         word = _re.sub(r"^[^\w\u00ef\u00f1\u00cf\u00d1'\-]+|[^\w\u00ef\u00f1\u00cf\u00d1'\-]+$", "", word.strip())
         if not word:
             return {"is_known": False, "morphologically_valid": False,
                     "phonotactically_valid": False, "suggestions": [],
                     "method": "empty", "in_lexicon": False, "gate_reached": 0}
         word_lower = word.lower()
+
+        # A word the user taught this checker (KhasiSpeller.add_word) is
+        # accepted before any gate: names and loans such as `Meghalaya` break
+        # Khasi phonotactics by design, and teaching them is the only way to
+        # stop them being flagged.
+        if word_lower in self._taught:
+            return {
+                "is_known":              True,
+                "morphologically_valid": False,
+                "phonotactically_valid": self._phonotactically_valid(word_lower),
+                "suggestions":           [],
+                "method":                "user_dictionary",
+                "in_lexicon":            self._db.is_known(word_lower),
+                "gate_reached":          2,
+                "confidence":            {"score": self._W_THRESHOLD,
+                                          "signals": {"user_dictionary": self._W_THRESHOLD},
+                                          "threshold": self._W_THRESHOLD},
+            }
 
         # ── Gate 0: Semantically invalid standalone check ─────────────
         # Tokens like "ng" listed in semantically_invalid_standalone are
@@ -1509,7 +1928,8 @@ class KhasiSpellChecker:
             # `n` and `g` occupy two of five slots at distance 0.4 and are
             # then discarded, which cost the real answer `nga` its place.
             _pairs = _levenshtein_suggestions(word_lower, self._db,
-                                              max_dist=3, top_n=n * 4)
+                                              max_dist=3, top_n=n * 4,
+                                              **self._search_kwargs())
             _kept = [(d, s) for d, s in _pairs if self._offerable(s, word_lower)][:n]
             _suggs = [s for _, s in _kept]
             return {
@@ -1541,7 +1961,25 @@ class KhasiSpellChecker:
         morph_valid = "morphology" in conf["signals"] or in_lexicon
         phon_valid = "phonotactic" in conf["signals"]
 
-        if conf["score"] >= conf["threshold"]:
+        # No Khasi word ends in y (maintainer ruling 2026-10-01), and unlike
+        # the rest of phonotactics the vote may not overrule that. Before the
+        # rule, frequent English words cleared it on corpus frequency 2 +
+        # phonotactics 1 (party, deputy, history); the lexicon holds a few
+        # y-final forms only as scan damage (bodily, longingly — English
+        # text in the 1906 dictionary) or as the first half of a hyphenated
+        # entry (jaly of jaly-eit). Such a word fails validation, so it goes
+        # to gate 1 below, with the validator's reason and suggestions.
+        from khasi_engine.phonology import ends_in_forbidden_vowel
+        ends_in_y = ends_in_forbidden_vowel(word_lower)
+        # English words are rejected in the same way (maintainer ruling
+        # 2026-10-01) unless the Khasi lexicon records the spelling: corpus
+        # frequency used to carry `hospital` and `state` over the bar, and a
+        # spurious parse carried `within` and `tablet`. See _english_words.
+        english = not in_lexicon and word_lower in _english_words()
+        if conf["score"] >= conf["threshold"] and not ends_in_y and not english:
+            veto = self._hyphenated_part_veto(word_lower, conf, in_lexicon)
+            if veto is not None:
+                return veto
             return {
                 "is_known":              True,
                 "morphologically_valid": morph_valid,
@@ -1552,6 +1990,35 @@ class KhasiSpellChecker:
                 "gate_reached":          2,
                 "confidence":            conf,
             }
+
+        # An English word is flagged with no suggestion. It is not a
+        # misspelling of a Khasi word, so any Khasi string near it is noise,
+        # and auto-correction must leave it alone: `state` was being
+        # "corrected" to `star`. Checked before the y rule, so `party` says
+        # what it is rather than that it ends in y.
+        if english:
+            note = f"'{word_lower}' is an English word, not a Khasi word"
+            return {
+                "is_known":              False,
+                "morphologically_valid": False,
+                "phonotactically_valid": phon_valid,
+                "suggestions":           [],
+                "suggestion_distances":  [],
+                "method":                "english_word",
+                "in_lexicon":            False,
+                "gate_reached":          3,
+                "confidence":            {**conf, "veto": note},
+                "reason":                note,
+            }
+
+        # A hyphenated word that breaks the rule through its last part is
+        # best answered part by part, the way an accepted compound with a
+        # misspelled part is: `man-miay` -> `man-miat`. The lexicon search
+        # below finds only whole entries (`man-man`).
+        if ends_in_y and "-" in word_lower:
+            veto = self._hyphenated_part_veto(word_lower, conf, in_lexicon=False)
+            if veto is not None:
+                return {**veto, "phonotactically_valid": False}
 
         # Low-confidence input. If it also fails phonotactics, surface that
         # to the UI as a distinct "phonotactic warning" path so users can
@@ -1566,7 +2033,8 @@ class KhasiSpellChecker:
             # Over-fetched for the same reason as Gate 0: the filter runs
             # after the search, so asking for exactly n under-delivers.
             lev_pairs = _levenshtein_suggestions(word_lower, self._db,
-                                                 max_dist=3, top_n=n * 4)
+                                                 max_dist=3, top_n=n * 4,
+                                                 **self._search_kwargs())
             lev_kept = [(d, s) for d, s in lev_pairs
                         if self._offerable(s, word_lower)][:n]
 
@@ -1595,7 +2063,8 @@ class KhasiSpellChecker:
                         if repaired not in merged or d0 < merged[repaired]:
                             merged[repaired] = d0
                     for d, cand in _levenshtein_suggestions(
-                            repaired, self._db, max_dist=2, top_n=n * 2):
+                            repaired, self._db, max_dist=2, top_n=n * 2,
+                            **self._search_kwargs()):
                         # A candidate much shorter than what was typed is not
                         # a correction of it. Without this, `xerox` proposed
                         # `er` and `eoi`.
@@ -1655,7 +2124,8 @@ class KhasiSpellChecker:
         # Returns (distance, word) pairs sorted by (dist, -freq_score).
         # Distance is the PRIMARY ranking signal — morphological validity
         # and frequency are secondary tie-breakers only.
-        lev_pairs = _levenshtein_suggestions(word_lower, self._db, top_n=n * 4)
+        lev_pairs = _levenshtein_suggestions(word_lower, self._db, top_n=n * 4,
+                                             **self._search_kwargs())
         # Phonotactic check is a heuristic; the lexicon is ground truth. If a
         # candidate is recorded in the lexicon as a real Khasi word, never drop
         # it just because the validator's rules don't cover it (place names,
@@ -1851,83 +2321,64 @@ class KhasiSpellChecker:
     def check_sentence(self, sentence: str) -> list[dict]:
         """
         Tokenise *sentence* and return corrections for words that fail
-        the morphological gate.
+        the gate.
 
-        Words that parse morphologically are silently skipped — they are
-        never flagged as misspellings even if absent from the static lexicon.
+        Words the gate accepts are silently skipped — never flagged even if
+        absent from the static lexicon. Offsets index *sentence* as given;
+        callers that normalise (NFC) must pass the normalised text.
+
+        Suggestions carry the capitalisation of the word they replace, so a
+        sentence-initial `Shnng` is corrected to `Shnong`, not `shnong`.
         """
         results = []
 
         # This used to call self._speller.check_sentence() for its tokeniser,
-        # falling through to the loop below only on error. That was removed,
-        # for two independent reasons.
+        # which ran edit-distance-2 correction on every token (up to 18 s on
+        # one sentence) and silently pre-filtered what reached the gate. It
+        # was removed; see the README section "Sentence latency".
         #
-        # 1. Cost. The Speller's check_sentence() runs full edit-distance-2
-        #    correction on every token to decide which ones changed, and the
-        #    corrections were then discarded — the suggestions below are
-        #    recomputed from self.suggest(). One profiled sentence containing
-        #    'Scheduled Tribes ... Scheduled Castes' spent 41 s in that call:
-        #    9.6M string joins in typos._join, 5.0M in _inserts, 4.5M in
-        #    _replaces. Edit-2 generation is O(n^2 * alphabet^2), so long
-        #    unknown words — English proper nouns especially — explode. It
-        #    made sentence latency bimodal: ~24 ms typical, up to 18 s.
-        #
-        # 2. It silently pre-filtered. Only tokens the Speller corrected to
-        #    something *different* were passed to the gate below, so any word
-        #    it happened to correct to itself was never gate-checked at all.
-        #    That is a detection filter, and it was never meant to be one —
-        #    it was a side effect of borrowing the tokeniser.
-        #
-        # Nothing is lost by dropping it: word_regexes["kh"] and _WORD_PATTERN
-        # are the same expression, so spans are unchanged. This also brings
-        # the sentence path in line with SPELLER_CANDIDATES_ENABLED = False,
-        # which had already removed the Speller from the word path.
+        # One decision per distinct word: suggest() is a pure function of the
+        # normalised word for a given checker, and long documents repeat
+        # their unknown words many times.
+        memo: dict[str, dict] = {}
         for match in _WORD_PATTERN.finditer(sentence):
             w    = match.group(0)
-            gate = self.suggest(w, n=5)
+            key  = _tokens.canonical(w).lower()
+            gate = memo.get(key)
+            if gate is None:
+                gate = memo[key] = self.suggest(w, n=5)
             # Flag gate=0 (not a word on its own), gate=1 (phonotactically
-            # invalid) and gate=3 (unknown). Gate=2 (morphologically valid)
-            # words are silently skipped.
+            # invalid) and gate=3 (unknown, with something to offer). Gate=2
+            # (accepted) words are silently skipped.
             #
-            # Gate 0 was missing here, and the two paths disagreed as a
-            # result: `ng` typed on its own was refused with suggestions
-            # (na, ngi, nga), while `u ng la wan` passed silently, because
-            # the sentence path never asked about gate 0. It is as certain
-            # a rejection as gate 1 — the phonology block names these forms
-            # explicitly — so it is reported the same way, with or without
-            # something to offer.
-            #
-            # A failing word is reported even when nothing can be offered for
-            # it. This used to require `and gate["suggestions"]`, so a word
-            # the engine had already judged impossible vanished from the
-            # result whenever no candidate was close enough — `sbngaifi`
-            # contains `f`, which is not in Khasi orthography at all, and
-            # phonology.validate says so, yet the reader was shown nothing.
-            # Measured: 82% of strings carrying a banned letter (c f v x z)
-            # were detected as invalid and then dropped, `xerox`, `office`
-            # and `qwerty` among them. Being unable to fix a word is not a
-            # reason to call it correct.
-            #
-            # `suggestion` is None in that case; callers that rewrite text
-            # must leave the word alone rather than substitute None.
             # Gate 1 is reported even with nothing to offer; gate 3 is not.
             # The difference is what we know. Gate 1 means the string breaks
-            # Khasi phonotactics — `sbngaifi` contains an `f`, which is not
-            # in the orthography — so it is wrong whether or not we can fix
-            # it. Gate 3 only means "not in the lexicon", which is also true
-            # of every legitimate word we have never recorded; flagging those
-            # with no suggestion turns a silence into a false alarm, and
-            # `roi-u-par` (a hyphenated compound of good parts) is one.
+            # Khasi phonotactics — `sbngaifi` contains an `f`, which is not in
+            # the orthography — so it is wrong whether or not we can fix it.
+            # Gate 3 only means "not in the lexicon", which is also true of
+            # every legitimate word we have never recorded; flagging those
+            # with no suggestion turns a silence into a false alarm.
+            #
+            # A gate-3 rejection that carries a reason is reported with or
+            # without a suggestion, for the same reason as gate 1: the reason
+            # is something we know — "an English word" (maintainer ruling
+            # 2026-10-01) — not merely "absent from the lexicon". `hospital`
+            # has no Khasi neighbour to suggest and was passing silently.
+            #
+            # `suggestion` is None when nothing can be offered; callers that
+            # rewrite text must leave the word alone rather than substitute
+            # None.
             if gate["gate_reached"] in (0, 1) or (
-                    gate["gate_reached"] == 3 and gate["suggestions"]):
+                    gate["gate_reached"] == 3
+                    and (gate["suggestions"] or gate.get("reason"))):
+                suggs = [_tokens.match_case(w, x) for x in gate["suggestions"]]
                 results.append({
                     "original":         w,
-                    "suggestion":       (gate["suggestions"][0]
-                                         if gate["suggestions"] else None),
+                    "suggestion":       suggs[0] if suggs else None,
                     "start":            match.start(),
                     "end":              match.end(),
-                    "suggestions_top5": gate["suggestions"],
-                    "suggestion_distances": gate.get("suggestion_distances") or [],
+                    "suggestions_top5": suggs,
+                    "suggestion_distances": list(gate.get("suggestion_distances") or []),
                     "method":           gate["method"],
                     "morphologically_valid": gate["morphologically_valid"],
                     "phonotactically_valid": gate["phonotactically_valid"],
@@ -1937,7 +2388,9 @@ class KhasiSpellChecker:
         return results
 
     def autocorrect(self, word: str) -> str:
+        """The best correction for *word*, in its capitalisation; the word
+        itself when it is accepted or nothing can be offered."""
         gate = self.suggest(word, n=1)
-        if gate["is_known"]:
+        if gate["is_known"] or not gate["suggestions"]:
             return word
-        return gate["suggestions"][0] if gate["suggestions"] else word
+        return _tokens.match_case(word.strip(), gate["suggestions"][0])

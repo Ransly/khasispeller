@@ -6,8 +6,11 @@ fix_aspirate_coda_splits.py — an aspirate never closes a syllable.
 Khasi syllable: it ends in `kh`. The lexicon's own phonology block says so
 twice —
 
-    phonology.forbidden_final   ph th kh bh dh jh lh rh  (+ s l sh j)
-    phonology.consonant_chart   every aspirate carries "final": false
+    phonology.forbidden_final       ph th kh bh dh jh lh rh  (+ s l sh j)
+    phonology.consonant_plus_h      every aspirate carries "final": false
+                                    (phonology.consonant_chart until
+                                    2026-10-01, when the aspirates left the
+                                    consonant inventory as consonant + h)
 
 — because aspiration is a release feature and an aspirated stop in a coda is
 not pronounceable as such. The `kh` belongs to the ONSET of the next
@@ -69,7 +72,9 @@ def main() -> int:
     phon = data.get("phonology") or {}
     aspirates = sorted(phon.get("aspirates") or [], key=len, reverse=True)
     onsets = set(phon.get("valid_initial_clusters") or [])
-    consonants = set(phon.get("consonants") or [])
+    # The aspirates are listed too: since 2026-10-01 they are consonant + h
+    # and no longer in `consonants`, and an aspirate alone is a valid onset.
+    consonants = set(phon.get("consonants") or []) | set(aspirates)
     vowels = set(phon.get("vowels_simple") or [])
     if not aspirates or not onsets or len(vowels) < 5:
         print("  ERROR: phonology block is missing aspirates/clusters/vowels")
@@ -155,8 +160,8 @@ def main() -> int:
         "date": datetime.now().strftime("%Y-%m-%d"),
         "moved": moved,
         "skipped": len(skipped),
-        "note": "An aspirate cannot close a syllable (consonant_chart marks "
-                "every aspirate final:false); it was moved to the onset of "
+        "note": "An aspirate cannot close a syllable (consonant_plus_h "
+                "marks every aspirate final:false); it was moved to the onset of "
                 "the following syllable where that yields a valid cluster. "
                 "Letters unchanged, only a boundary. s/l/sh/j codas are NOT "
                 "touched — forbidden_final governs word-final position, and "

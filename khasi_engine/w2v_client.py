@@ -54,7 +54,10 @@ _model_path: Optional[Path] = None
 # Noise filter — mirrors the Hugging Face Space so both backends agree
 # ---------------------------------------------------------------------------
 
-_CLEAN_RE = re.compile(r"^[a-zïñ'\-]+$")
+# No apostrophe here: the check above already rejects any token containing
+# one, as the Space does, so allowing it in the pattern was dead and implied
+# a behaviour the function does not have.
+_CLEAN_RE = re.compile(r"^[a-zïñ\-]+$")
 
 
 def is_clean(tok: str) -> bool:

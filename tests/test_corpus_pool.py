@@ -10,8 +10,10 @@ candidate that was never a candidate.
 Supply alone left a contradiction — the pool offered words the checker then
 rejected (`jyla` -> `jylla`, and `jylla` flagged once accepted). Admitted
 words now also pass the confidence vote, credited with corpus frequency.
-`is_known()` still refuses them: acceptance comes through the vote, not by
-turning corpus types into lexicon words.
+`KhasiDB.is_known()` still refuses them: acceptance comes through the vote,
+not by turning corpus types into lexicon words.
+
+The pool belongs to each speller's checker, not to the shared lexicon.
 
 No lexicon content appears here. `pyntreikam` and `nongthohkhubor` are
 corpus types, absent from `data/khasi_db.json` by construction — that
@@ -50,7 +52,9 @@ def test_corpus_frequent_word_is_reachable(sp):
 
 @pytest.mark.parametrize("word,_count", CORPUS_ONLY)
 def test_corpus_types_enter_the_candidate_pool(sp, word, _count):
-    assert word in set(sp.analyser.db.all_surface_forms())
+    assert word in set(sp.analyser.spell.candidate_forms())
+    # ...and only this speller's pool: the lexicon itself is untouched.
+    assert word not in sp.analyser.db.surface_form_set()
 
 
 def test_suggestion_is_never_the_input(sp):
@@ -71,9 +75,8 @@ def test_suggestion_is_never_the_input(sp):
 def test_corpus_types_are_attested_but_not_known(sp, word, _count):
     """`is_attested` answers 'was this written down', `is_known` 'is this a
     word'. Admitting corpus supply must move only the first."""
-    db = sp.analyser.db
-    assert db.is_attested(word), "corpus type should be offerable"
-    assert not db.is_known(word), "corpus type must not become a known word"
+    assert sp.analyser.spell.is_attested(word), "corpus type should be offerable"
+    assert not sp.analyser.db.is_known(word), "corpus type must not become a known word"
 
 
 @pytest.mark.parametrize("word,_count", CORPUS_ONLY + [("jylla", 24252),
@@ -114,12 +117,9 @@ def test_diacritic_headwords_keep_no_plain_rival(sp):
     and the check collapses into `is_known(w)`.
     """
     db = sp.analyser.db
-    corpus_forms = getattr(db, "_corpus_forms", set())
+    corpus_forms = sp.analyser.spell._corpus_forms
     fold = str.maketrans({"ï": "i", "ñ": "n"})
-    lexicon_folds = {
-        w.translate(fold) for w in db.all_surface_forms()
-        if w not in corpus_forms
-    }
+    lexicon_folds = {w.translate(fold) for w in db.all_surface_forms()}
     collisions = sorted(w for w in corpus_forms
                         if w.translate(fold) in lexicon_folds)
     assert not collisions[:5], (
@@ -157,7 +157,7 @@ def test_corpus_types_are_admitted_in_lexicon_orthography(sp):
     """
     from khasi_spell.corpus_pool import _ain_confirmed
     db = sp.analyser.db
-    forms = getattr(db, "_corpus_forms", set())
+    forms = sp.analyser.spell._corpus_forms
     plain_ia = sorted(w for w in forms if w.startswith("ia"))
     assert not plain_ia[:5], f"un-canonicalised corpus forms in pool: {plain_ia[:5]}"
     # -ain keeps its plain spelling only where the lexicon's own -aiñ rule
@@ -171,7 +171,7 @@ def test_ain_is_restored_only_where_the_lexicon_agrees(sp):
     """`hussain` is a name and `risain` a loan (resign); `hussaiñ` and
     `risaiñ` are spellings no one writes. `thawain` is a Khasi compound whose
     final element the lexicon records with the tilde."""
-    forms = getattr(sp.analyser.db, "_corpus_forms", set())
+    forms = sp.analyser.spell._corpus_forms
     assert "hussaiñ" not in forms and "risaiñ" not in forms
     assert "thawaiñ" in forms
 
@@ -195,7 +195,7 @@ def test_reduced_spelling_is_accepted_with_the_diacritic_offered(sp, plain, stan
 def test_runtogether_spellings_are_not_admitted(sp):
     """`jongki` is `jong ki` written solid. The split table corrects it; the
     pool must neither offer it nor, now, accept it."""
-    forms = getattr(sp.analyser.db, "_corpus_forms", set())
+    forms = sp.analyser.spell._corpus_forms
     assert "jongki" not in forms
     r = sp.check("jongki")
     assert r.is_correct is False and r.suggestions[0] == "jong ki"
@@ -220,8 +220,7 @@ def test_suggestions_do_not_cycle(sp):
 def test_pool_growth_is_bounded(sp):
     """The delete index costs ~27 keys per form and the deployment ceiling
     is 512 MB. An unbounded pool is an OOM, not a feature."""
-    db = sp.analyser.db
-    corpus_forms = getattr(db, "_corpus_forms", set())
+    corpus_forms = sp.analyser.spell._corpus_forms
     assert len(corpus_forms) < 60000, (
         "corpus pool of %d forms will not fit the memory budget"
         % len(corpus_forms)
@@ -245,15 +244,11 @@ def test_acceptance_can_be_switched_off():
     del off
 
 
-def test_pool_off_is_not_honoured_after_a_pooled_speller(sp):
-    """WEAK — pins a known weakness, not a desirable end state.
-
-    KhasiDB is memoised per data source, so every speller in a process
-    shares one database and one delete index, and corpus_pool writes into
-    both. A later `use_corpus_pool=False` speller therefore still offers
-    pool words. Acceptance does not leak (its switch is per-checker), but
-    supply does. Measure pool-on against pool-off in separate processes.
-    """
+def test_pool_off_is_honoured_after_a_pooled_speller(sp):
+    """Was pinned WEAK: the pool was written into the memoised KhasiDB and
+    its delete index, so a later `use_corpus_pool=False` speller in the same
+    process still offered pool words. The pool now lives on each checker."""
     off = KhasiSpeller(eager=True, use_corpus_pool=False)
-    assert "pyntreikam" in off.suggest("pyntreika", n=5)
+    assert "pyntreikam" not in off.suggest("pyntreika", n=5)
+    assert "pyntreikam" in sp.suggest("pyntreika", n=5)
     del off

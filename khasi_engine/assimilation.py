@@ -39,16 +39,11 @@ def _load_assimilation_rules() -> list[dict]:
     """Load assimilation_rules from khasi_db.json morphology section.
     Short-circuits to [] on Render to avoid a redundant ~300 MB
     transient parse of the 77 MB JSON file."""
-    if os.environ.get("DATABASE_URL"):
-        return []
-    db_path = Path(__file__).parent.parent / "data" / "khasi_db.json"
-    try:
-        with open(db_path, encoding="utf-8") as f:
-            raw = json.load(f)
-        return raw.get("morphology", {}).get("assimilation_rules", [])
-    except Exception as e:
-        print(f"[khasi-nlp] Warning: could not load assimilation rules — {e}")
-        return []
+    # One shared parse with phonology and morphology; empty under
+    # DATABASE_URL, where KhasiDB injects the rules after its PG load.
+    from khasi_engine import paths as _paths
+    morph = _paths.lexicon_blocks().get("morphology") or {}
+    return list(morph.get("assimilation_rules") or [])
 
 
 def set_assimilation_rules_cache(rules: list[dict]) -> None:
@@ -157,10 +152,6 @@ def check(word: str, lexicon_lookup) -> dict:
         if not w.startswith(sp):
             continue
 
-        # Bail out for known exceptions
-        if w in rule.get("exceptions", []):
-            continue
-
         after_surface_prefix = w[len(sp):]
         if not after_surface_prefix:
             continue
@@ -169,6 +160,14 @@ def check(word: str, lexicon_lookup) -> dict:
         # root is the same as the assimilated consonant
         candidate_root = _reconstruct_root(rule, after_surface_prefix)
         if not candidate_root:
+            continue
+
+        # Exceptions are stored as UNDERLYING forms (pynleh, pynloit), the
+        # same convention should_assimilate() reads. This used to compare the
+        # SURFACE word against that list, which can never match a word that
+        # begins with the assimilated prefix, so the check did nothing.
+        underlying = rule["trigger_prefix"].rstrip("-") + candidate_root
+        if underlying in rule.get("exceptions", []):
             continue
 
         # Confirm root exists in lexicon (strong signal this rule fired)

@@ -19,8 +19,12 @@ Validation (new):
   semantic content and must not be accepted as standalone words.
 
 Display (new — added from Khasi Structure HTM):
-  consonant_chart          — manner-grouped list of consonant objects
-  consonant_total          — int, total phonemic consonants
+  alphabet                 — the Khasi alphabet: 7 vowels, 16 consonants
+  consonant_chart          — manner-grouped list of consonant objects (16)
+  consonant_total          — int, total consonants (16)
+  consonant_note           — string, what is and is not counted
+  consonant_plus_h         — sh ph th kh bh dh jh lh rh: a consonant letter
+                             + h, not counted among the consonants
   consonant_inferences     — list of descriptive strings
   consonant_distribution_notes — list of strings
   minimal_pairs            — dict of named groups → list of pair objects
@@ -45,7 +49,8 @@ from pathlib import Path as _Path
 # ---------------------------------------------------------------------------
 
 def _db_path() -> _Path:
-    return _Path(__file__).parent.parent / "data" / "khasi_db.json"
+    from khasi_engine import paths as _paths
+    return _paths.default_db_path()
 
 
 # Cached phonology section. khasi_db.json is ~77 MB, so re-parsing it on
@@ -69,18 +74,11 @@ def _load_db() -> dict:
     global _PHON_CACHE
     if _PHON_CACHE is not None:
         return _PHON_CACHE
-    if _os.environ.get("DATABASE_URL"):
-        # KhasiDB will inject the phonology block during lifespan startup
-        # via set_phonology_cache(). No request can run before then, so
-        # the empty starter state is safe.
-        _PHON_CACHE = {}
-        return _PHON_CACHE
-    try:
-        with open(_db_path(), encoding="utf-8") as f:
-            _PHON_CACHE = _json.load(f).get("phonology", {}) or {}
-    except Exception as e:
-        print(f"[khasi-nlp] phonology: could not load khasi_db.json — {e}")
-        _PHON_CACHE = {}
+    # One shared parse for phonology, morphology and assimilation (see
+    # khasi_engine.paths.lexicon_blocks). Empty under DATABASE_URL: KhasiDB
+    # injects the block via set_phonology_cache() before any request runs.
+    from khasi_engine import paths as _paths
+    _PHON_CACHE = dict(_paths.lexicon_blocks().get("phonology") or {})
     return _PHON_CACHE
 
 
@@ -128,27 +126,39 @@ def _load_phonology() -> dict:
                 w.lower() for w in p.get("phonotactic_exceptions", [])
             ),
             # Loan-diagnostic final consonants (War Ch.IX §3.5): native Khasi
-            # words do not end in -l, -s or -j. Advisory warning only.
+            # words do not end in -l or -s. Advisory warning only. -j was on
+            # this list until 2026-10-01, when the maintainer ruled that
+            # native words end in it (siej 'bamboo', biej 'silly').
             "LOAN_FINAL_SIGNALS":       frozenset(
-                s.lower() for s in p.get("loan_final_signals", ["l", "s", "j"])
+                s.lower() for s in p.get("loan_final_signals", ["l", "s"])
+            ),
+            # The members of forbidden_final that are vowel letters — y. A
+            # Khasi word never ends in y (maintainer ruling 2026-10-01).
+            "NO_FINAL_VOWELS":          frozenset(
+                f for f in p.get("forbidden_final", [])
+                if f in set("".join(p.get("vowels_simple", [])) + "ï")
             ),
         }
     except Exception as e:
         print(f"[khasi-nlp] phonology fallback constants — {e}")
         return {
+            # Mirrors the data as of 2026-10 so the fallback can never
+            # disagree with it: `jh` is a digraph and `dz` is not; c and f
+            # are not Khasi letters; j may end a word and y may not.
             "VOWELS":                   frozenset("aáeéiíoóuúyýï"),
-            "DIGRAPHS_AS_SINGLE":       frozenset(["ng","sh","ph","th","kh","bh","dh","lh","rh","dz"]),
-            "ASPIRATES":                frozenset(["ph","th","kh","bh","dh","lh","rh"]),
-            "FORBIDDEN_FINAL":          frozenset(["ph","th","kh","bh","dh","lh","rh","dz"]),
-            "ALLOWED_FINAL_CONSONANTS": frozenset("pbdtkcsmnlr"),
-            "ALLOWED_FINAL_DIGRAPHS":   frozenset(["ng","sh"]),
+            "DIGRAPHS_AS_SINGLE":       frozenset(["ng","sh","ph","th","kh","bh","dh","jh","lh","rh"]),
+            "ASPIRATES":                frozenset(["ph","th","kh","bh","dh","jh","lh","rh"]),
+            "FORBIDDEN_FINAL":          frozenset(["ph","th","kh","bh","dh","jh","s","l","sh","lh","rh","y"]),
+            "ALLOWED_FINAL_CONSONANTS": frozenset("pbdtk'mnrj"),
+            "ALLOWED_FINAL_DIGRAPHS":   frozenset(["ng"]),
             "ALLOWED_FINAL_SPECIAL":    frozenset(["ñ"]),
-            "ALLOWED_GEMINATES":        frozenset(["ll","nn"]),
-            "VALID_CHARS":              frozenset("abcdefghijklmnoprstuwykáéíóúýïñ-'"),
+            "ALLOWED_GEMINATES":        frozenset(["ll"]),
+            "VALID_CHARS":              frozenset("abdeghijklmnoprstuwyáéíóúýïñ-'"),
             "DIPHTHONGS":               frozenset(["ai","ái","aw","ei","ew","iw","ie","ui","úi","oi","ou","au"]),
-            "SEMANTICALLY_INVALID_STANDALONE": frozenset(["ng"]),
+            "SEMANTICALLY_INVALID_STANDALONE": frozenset(["ng", "e"]),
             "PHONOTACTIC_EXCEPTIONS":   frozenset(),
-            "LOAN_FINAL_SIGNALS":       frozenset(["l", "s", "j"]),
+            "LOAN_FINAL_SIGNALS":       frozenset(["l", "s"]),
+            "NO_FINAL_VOWELS":          frozenset(["y"]),
         }
 
 
@@ -189,6 +199,7 @@ DIPHTHONGS:               frozenset = _PHON["DIPHTHONGS"]
 SEMANTICALLY_INVALID_STANDALONE: frozenset = _PHON["SEMANTICALLY_INVALID_STANDALONE"]
 PHONOTACTIC_EXCEPTIONS:   frozenset = _PHON["PHONOTACTIC_EXCEPTIONS"]
 LOAN_FINAL_SIGNALS:       frozenset = _PHON["LOAN_FINAL_SIGNALS"]
+NO_FINAL_VOWELS:          frozenset = _PHON["NO_FINAL_VOWELS"]
 
 VALID_INITIAL_CLUSTERS:   frozenset = _load_clusters()
 
@@ -209,13 +220,16 @@ VALID_INITIALS: frozenset[str] = frozenset(c for c in VALID_CHARS if c not in "�
 #                    The constant predates the 2026-08-26 spelling
 #                    correction and is simply stale.
 #
-#   FORBIDDEN_FINAL  is fully covered elsewhere and partly wrong. Of its 14
-#                    members, 8 are aspirates already rejected by the
-#                    aspirate rule, 3 (j, l, s) are loan signals raised as
-#                    warnings, 1 (sh) is caught by the coda check below —
-#                    and the remaining 2, 'h' and 'w', are contradicted by
-#                    838 and 378 attested entries respectively. Final -h is
-#                    the glottal stop, final -w a diphthong offglide.
+#   FORBIDDEN_FINAL  is covered elsewhere. Its 12 members are the 8
+#                    aspirates (rejected by the aspirate rule), the loan
+#                    signals l, s (raised as warnings), sh (caught by the
+#                    coda check below) and y, the one member read from it
+#                    directly: as NO_FINAL_VOWELS, by ends_in_forbidden_vowel.
+#                    It used to also list 'h' and 'w', which 838 and 378
+#                    attested entries contradict — final -h is the glottal
+#                    stop, final -w a diphthong offglide — and those two were
+#                    removed from the data, as was 'j' on 2026-10-01 (siej,
+#                    biej).
 #
 #   DIPHTHONGS       describes nuclei for the reference charts. Nothing in
 #                    the validator needs to enumerate them, and a rule that
@@ -248,6 +262,7 @@ def _rebind_phon_constants() -> None:
     g["SEMANTICALLY_INVALID_STANDALONE"] = g["_PHON"]["SEMANTICALLY_INVALID_STANDALONE"]
     g["PHONOTACTIC_EXCEPTIONS"]          = g["_PHON"]["PHONOTACTIC_EXCEPTIONS"]
     g["LOAN_FINAL_SIGNALS"]              = g["_PHON"]["LOAN_FINAL_SIGNALS"]
+    g["NO_FINAL_VOWELS"]                 = g["_PHON"]["NO_FINAL_VOWELS"]
     g["VALID_INITIAL_CLUSTERS"]          = _load_clusters()
     g["VALID_INITIALS"]                  = frozenset(c for c in g["VALID_CHARS"] if c not in "ïñ-")
 
@@ -281,11 +296,9 @@ def validate(word: str) -> dict:
     # Phonotactic exceptions — words listed in khasi_db.json under
     # phonology.phonotactic_exceptions are accepted as Phase-1-valid even
     # though their syllable structure does not satisfy the standard rules.
-    # In Khasi, certain morphemes use a syllabic consonant (most often 'y'
-    # acting as /ɨ/) instead of an orthographic vowel — for example
-    #   ym /ɨm/  "not"        yn /ɨn/  "shall"
-    #   pyn /pɨn/ causative    bym /bɨm/ "that not"
-    # Add or remove entries by editing the JSON; no code changes required.
+    # `y` is a vowel in the data (vowels_simple), so ym, yn, pyn and bym need
+    # no exception; the list currently holds a single form. Add or remove
+    # entries by editing the JSON; no code changes required.
     if word.lower() in PHONOTACTIC_EXCEPTIONS:
         result["details"]["length"] = len(word)
         result["details"]["segments"] = 1
@@ -350,10 +363,35 @@ def validate(word: str) -> dict:
             f"in the digraph 'ng', never as a Khasi phoneme of its own"
         )
 
+    if ends_in_forbidden_vowel(word):
+        result["pass"] = False
+        result["errors"].append(
+            f"'{word}' ends in '{word[-1]}' — Khasi words do not end in y"
+        )
+
     if result["errors"]:
         result["pass"] = False
 
     return result
+
+
+_ACUTE_TO_PLAIN = str.maketrans("áéíóúý", "aeiouy")
+
+
+def ends_in_forbidden_vowel(word: str) -> bool:
+    """True when *word* ends in a vowel letter no Khasi word ends in: y.
+
+    Khasi words end in a e i ï o u, and in h and w, but never in y
+    (maintainer ruling 2026-10-01); `ý` counts as y. The letters come from
+    phonology.forbidden_final (NO_FINAL_VOWELS), not from this function.
+
+    Judged on the WHOLE word, unlike the coda rules, which run on each
+    hyphen-separated part: in reduplications such as `bak-ly-bak` and
+    `ïarly-ïar` the y closes a part, not the word. An affix written with its
+    hyphen (`ly-`) ends in the hyphen and is not caught.
+    """
+    w = (word or "").strip().rstrip("!.,").lower()
+    return bool(w) and w[-1].translate(_ACUTE_TO_PLAIN) in NO_FINAL_VOWELS
 
 
 def _check_segment(seg: str) -> tuple[list, list, dict]:
@@ -380,9 +418,10 @@ def _check_segment(seg: str) -> tuple[list, list, dict]:
             cluster3 = seg[:3] if len(seg) >= 3 else ""
             cluster4 = seg[:4] if len(seg) >= 4 else ""
 
-            # ── Bug fix: digraphs are SINGLE phonemes, not two-consonant clusters ──
-            # A digraph like 'ng', 'sh', 'ph', 'kh', 'th', 'bh', 'dh', 'jh', 'ny'
-            # is ONE phoneme written with two letters.  When it appears at the start
+            # ── Bug fix: digraphs are SINGLE units, not two-consonant clusters ──
+            # A digraph like 'ng', 'sh', 'ph', 'kh', 'th', 'bh', 'dh', 'jh' is
+            # read as ONE unit: 'ng' is a letter of the alphabet, and 'sh' and
+            # the aspirates are a consonant + h that never split.  When it appears at the start
             # of a word we must NOT treat the two letters as a consonant cluster.
             # Instead, treat the digraph as a single unit and look at what follows it.
             if cluster2 in DIGRAPHS_AS_SINGLE:
@@ -462,18 +501,22 @@ def _check_segment(seg: str) -> tuple[list, list, dict]:
             break
 
     # Loan-diagnostic final consonants (War Ch.IX §3.5). Native Khasi words
-    # never end in -l, -s or -j; when they appear (bol, bus, garaj) the word
-    # is almost certainly a loan. This is advisory, not fatal — the word is
-    # still well-formed — so it is a WARNING. Data-driven via
-    # phonology.loan_final_signals; falls back to nothing if unset.
+    # never end in -l or -s; when they appear (bol, bus) the word is almost
+    # certainly a loan. This is advisory, not fatal — the word is still
+    # well-formed — so it is a WARNING. Data-driven via
+    # phonology.loan_final_signals; falls back to -l and -s if unset.
+    #
+    # -j is NOT a loan signal: native words end in it (siej 'bamboo', biej
+    # 'silly'; maintainer ruling 2026-10-01). It used to be on the list, so
+    # all 86 single-word lexicon forms ending in -j were labelled loanwords.
     _last = seg[-1] if seg else ""
     if _last and _last in LOAN_FINAL_SIGNALS and _last not in VOWELS:
         # Skip when the final is part of an allowed geminate/digraph handled
-        # above (none of l/s/j are, but keep the guard explicit).
+        # above (neither l nor s is, but keep the guard explicit).
         warnings.append(
             f"Final '-{_last}' in '{seg}' is not native to Khasi — "
             f"likely a loanword (War Ch.IX: native words do not end in "
-            f"-l, -s or -j)"
+            f"-l or -s)"
         )
 
     # ── Word-final coda validation ────────────────────────────────────
@@ -488,9 +531,9 @@ def _check_segment(seg: str) -> tuple[list, list, dict]:
     # diphthong offglide (ksew /ksɛu/). Taking the list literally would have
     # rejected 1,216 attested words.
     #
-    # l, s and j are left to the loan WARNING above: 148 entries end that way
-    # and every one inspected is a borrowing (angel, aspatal, baptis, awaj),
-    # so they are marked, not rejected.
+    # l and s are left to the loan WARNING above: entries ending that way
+    # are borrowings (angel, aspatal, baptis), so they are marked, not
+    # rejected. j is simply an allowed final (allowed_final_consonants).
     if not CODA_CHECK_ENABLED:
         _final_ok = None
     else:
@@ -514,8 +557,8 @@ def _check_segment(seg: str) -> tuple[list, list, dict]:
 
     if seg.endswith("dz"):
         errors.append(
-            f"Affricate 'dz' in final position of '{seg}' — "
-            f"affricates do not occur word-finally in native Khasi"
+            f"'dz' in final position of '{seg}' — not a Khasi spelling; "
+            f"the affricate is written j (siej, biej)"
         )
 
     if len(seg) > 12:
@@ -541,8 +584,9 @@ def get_consonant_inventory() -> dict:
     All data is read from khasi_db.json — no hardcoding.
 
     JSON keys used:
-      consonant_chart, consonant_total, consonant_inferences,
-      consonant_distribution_notes, minimal_pairs
+      alphabet, consonant_chart, consonant_total, consonant_note,
+      consonant_plus_h, consonant_inferences, consonant_distribution_notes,
+      minimal_pairs
     """
     p = _load_db()
     chart = p.get("consonant_chart", {})
@@ -554,8 +598,13 @@ def get_consonant_inventory() -> dict:
 
     return {
         "total":                    p.get("consonant_total", len(all_consonants)),
+        "note":                     p.get("consonant_note", ""),
+        "alphabet":                 p.get("alphabet", {}),
         "chart":                    chart,
         "all_consonants":           all_consonants,
+        # sh and the aspirates are not letters of the alphabet, so they are
+        # shown beside the 16 consonants rather than among them.
+        "consonant_plus_h":         p.get("consonant_plus_h", []),
         "minimal_pairs":            p.get("minimal_pairs", {}),
         "distribution": {
             "forbidden_final":      p.get("forbidden_final", []),
@@ -611,12 +660,15 @@ def get_full_phonology_display() -> dict:
     Every value originates from khasi_db.json — nothing hardcoded.
     """
     p = _load_db()
+    consonants = get_consonant_inventory()
     return {
-        "consonants": get_consonant_inventory(),
+        "consonants": consonants,
         "vowels":     get_vowel_inventory(),
         "processes":  get_phonological_processes(),
         "summary": {
-            "total_consonants": p.get("consonant_total", 24),
+            # The same figure as consonants["total"]; this used to fall back
+            # to a literal 24 while the inventory fell back to the chart size.
+            "total_consonants": consonants["total"],
             "total_vowels":     len(p.get("vowel_chart", [])),
             "diphthongs":       len(p.get("diphthongs", [])),
             "language":         "Khasi",

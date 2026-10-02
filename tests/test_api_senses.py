@@ -30,3 +30,24 @@ def test_the_english_word_imitate_is_not_a_note():
     out = api._split_senses(["Imitate the cry"], "verb", "")
     assert out["senses"] == ["Imitate the cry"]
     assert "imitatives" not in out
+
+
+# The panel's syllables must spell the word they are shown for. Synthetic
+# words: `abcde` stands for any word whose entry holds another word's list.
+
+def test_syllables_of_another_word_are_refused():
+    assert api._own_syllables("abcde", ["ab", "xy"]) is None
+
+
+def test_syllables_that_spell_the_word_are_kept():
+    assert api._own_syllables("abcde", ["ab", "cde"]) == ["ab", "cde"]
+    assert api._own_syllables("Ab-cde", ["ab", "cde"]) == ["ab", "cde"]
+
+
+def test_a_dropped_mark_is_restored_from_the_word():
+    assert api._own_syllables("ïabcñe", ["ia", "bcne"]) == ["ïa", "bcñe"]
+
+
+def test_no_syllables_is_none():
+    assert api._own_syllables("abcde", []) is None
+    assert api._own_syllables("abcde", None) is None

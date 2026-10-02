@@ -43,7 +43,9 @@ import math
 from pathlib import Path
 from typing import Any, Optional
 
-DEFAULT_PATH = Path(__file__).parent.parent / "data" / "corpus_freq.json"
+from khasi_engine import paths as _paths
+
+DEFAULT_PATH = _paths.data_file("corpus_freq.json")
 
 # Diacritic -> plain, for inheriting counts (see FOLD_INHERIT below).
 _FOLD_TABLE = str.maketrans({
@@ -57,8 +59,9 @@ _FOLD_TABLE = str.maketrans({
 # without erasing them.
 DEFAULT_WEIGHT = 2.0
 
-# Words the corpus never uses. They are not necessarily bad — the Speller
-# expands the lexicon into ~305k prefix+root combinations, most of which are
+# Words the corpus never uses. They are not necessarily bad — the checker
+# expands the lexicon's table with prefix+root combinations (about 160k, see
+# spell_checker._expand_frequency_table), most of which are
 # well formed but simply unattested. Flooring them all to one constant throws
 # away the structural signal (root vs generated form) without replacing it,
 # so instead their original pseudo-frequency is compressed into a low band
@@ -81,7 +84,7 @@ UNATTESTED_MAX_PSEUDO = 25   # the engine's pseudo-frequencies top out around 20
 
 def load(path: Optional[str | Path] = None) -> dict:
     """Load the frequency file. Returns {"meta": {...}, "counts": {...}}."""
-    p = Path(path) if path else DEFAULT_PATH
+    p = Path(path) if path else _paths.data_file("corpus_freq.json")
     if not p.is_file():
         raise FileNotFoundError(
             f"No corpus frequency list at {p}.\n"
@@ -96,6 +99,32 @@ def scale(count: int, weight: float = DEFAULT_WEIGHT) -> int:
     return int(round(math.log2(1 + count) * weight))
 
 
+def _remap(table, counts: dict, weight: float, floor: int) -> dict:
+    """Corpus-scaled values for every key of *table*, which is not modified.
+
+    Attested words get `scale(count)`. A diacritic word the corpus cannot
+    type inherits its plain spelling's count (FOLD_INHERIT). Anything else
+    keeps its structural pseudo-frequency, compressed into the low band so a
+    lexicon root still outranks a generated combination while both stay
+    below any word the corpus has actually seen.
+    """
+    out: dict = {}
+    for word, pseudo in table.items():
+        c = counts.get(word)
+        if c is None and FOLD_INHERIT:
+            plain = word.translate(_FOLD_TABLE)
+            if plain != word and counts.get(plain):
+                c = int(counts[plain] * FOLD_DISCOUNT)
+        if c is not None:
+            out[word] = max(floor, scale(c, weight))
+        else:
+            p = pseudo if isinstance(pseudo, (int, float)) else 0
+            out[word] = max(floor, min(UNATTESTED_BAND,
+                                       int(round(p / UNATTESTED_MAX_PSEUDO
+                                                 * UNATTESTED_BAND))))
+    return out
+
+
 def apply(
     speller: Any,
     path: Optional[str | Path] = None,
@@ -104,9 +133,21 @@ def apply(
     extend_vocabulary: bool = False,
 ) -> dict:
     """
-    Rewrite a speller's frequency values from corpus counts, in place.
+    Rewrite ONE speller's frequency values from corpus counts.
 
     Accepts either a `KhasiSpeller` or a raw `KhasiSpellChecker`.
+
+    Only the checker's own tables change: its Speller's `nlp_data`, which
+    the vote and the final ranking read, and a separate corpus-scaled copy
+    of the lexicon's table for the first-pass candidate search. The shared
+    lexicon is never written. It used to be, and because every speller in a
+    process shares one lexicon object, a second speller re-applied the
+    squash to the already-squashed values of the first — its unattested
+    band collapsed from 1-3 to 1 — and a `use_corpus_freq=False` speller
+    built afterwards got corpus values anyway.
+
+    Idempotent: a second call on the same checker returns the first call's
+    summary and changes nothing.
 
     Parameters
     ----------
@@ -120,6 +161,9 @@ def apply(
     # Accept the facade or the engine object.
     analyser = getattr(speller, "analyser", None)
     spell = analyser.spell if analyser is not None else speller
+    done = getattr(spell, "_corpus_freq_summary", None)
+    if done is not None:
+        return done
     inner = getattr(spell, "_speller", None)
     if inner is None or not hasattr(inner, "nlp_data"):
         raise RuntimeError("speller has no nlp_data to update")
@@ -128,69 +172,28 @@ def apply(
     counts: dict[str, int] = payload["counts"]
     nlp = inner.nlp_data
 
-    # Fold a word to its diacritic-free spelling so counts can be inherited.
-    def _folded_count(w: str) -> Optional[int]:
-        if not FOLD_INHERIT:
-            return None
-        plain = w.translate(_FOLD_TABLE)
-        if plain == w:
-            return None
-        c = counts.get(plain)
-        return int(c * FOLD_DISCOUNT) if c else None
+    scaled = _remap(nlp, counts, weight, floor)
+    matched = sum(1 for w in nlp if w in counts)
+    inherited = sum(1 for w in nlp if w not in counts and FOLD_INHERIT
+                    and w.translate(_FOLD_TABLE) != w
+                    and counts.get(w.translate(_FOLD_TABLE)))
+    missing = len(nlp) - matched - inherited
+    nlp.update(scaled)
 
-    matched = missing = inherited = added = 0
-    for word in list(nlp.keys()):
-        c = counts.get(word)
-        if c is None:
-            c = _folded_count(word)
-            if c is not None:
-                nlp[word] = max(floor, scale(c, weight))
-                inherited += 1
-                continue
-        if c is None:
-            # Unattested: compress the existing pseudo-frequency into the low
-            # band so a lexicon root still outranks a generated combination,
-            # while both stay below any word the corpus has actually seen.
-            pseudo = nlp[word] if isinstance(nlp[word], (int, float)) else 0
-            nlp[word] = max(
-                floor,
-                min(UNATTESTED_BAND,
-                    int(round(pseudo / UNATTESTED_MAX_PSEUDO * UNATTESTED_BAND))),
-            )
-            missing += 1
-        else:
-            nlp[word] = max(floor, scale(c, weight))
-            matched += 1
-
-    # The gate-1 path (phonotactically invalid input) ranks candidates inside
-    # _levenshtein_suggestions, which reads db.to_freq_dict() rather than the
-    # Speller's nlp_data. Patching only the Speller leaves that path on the old
-    # pseudo-frequencies, where every lexicon word scores 20 and ties fall
-    # through to alphabetical order — which is exactly how 'shnng' ended up
-    # suggesting 'shna' over the far commoner 'shnong'. Patch both stores.
+    # The phonotactic-gate path ranks candidates inside
+    # _levenshtein_suggestions, which reads the lexicon's frequency table
+    # rather than the Speller's nlp_data. Left on pseudo-frequencies, every
+    # lexicon word there scores 20 and ties fall through to alphabetical
+    # order — which is how 'shnng' ended up suggesting 'shna' over the far
+    # commoner 'shnong'. The checker gets its own corpus-scaled copy.
     db = getattr(spell, "_db", None)
     db_updated = 0
-    if db is not None and hasattr(db, "_freq_dict"):
-        for word in list(db._freq_dict.keys()):
-            c = counts.get(word)
-            if c is None:
-                pseudo = db._freq_dict[word]
-                db._freq_dict[word] = max(
-                    floor,
-                    min(UNATTESTED_BAND,
-                        int(round(pseudo / UNATTESTED_MAX_PSEUDO * UNATTESTED_BAND))),
-                )
-            else:
-                db._freq_dict[word] = max(floor, scale(c, weight))
-                db_updated += 1
-        # Same inheritance for the DB store, which the gate-1 path reads.
-        for word in list(db._freq_dict.keys()):
-            if word in counts:
-                continue
-            c = _folded_count(word)
-            if c is not None:
-                db._freq_dict[word] = max(floor, scale(c, weight))
+    if db is not None and hasattr(spell, "set_ranking_frequencies"):
+        ranking = _remap(db.to_freq_dict(), counts, weight, floor)
+        db_updated = sum(1 for w in ranking if w in counts)
+        spell.set_ranking_frequencies(ranking)
 
+    added = 0
     if extend_vocabulary:
         for word, c in counts.items():
             if word not in nlp:
@@ -210,4 +213,6 @@ def apply(
         "distinct_values": len(set(nlp.values())),
         "db_freq_updated": db_updated,
     }
+    spell._corpus_freq_summary = summary
+    spell._corpus_freq_applied = True
     return summary
