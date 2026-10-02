@@ -796,6 +796,143 @@ body{
 }
 .brand h1{letter-spacing:-.02em}
 
+/* ===================================================================
+   Polish (2 October 2026): softer borders, filled buttons, a switch for
+   the word-choice setting, pill-shaped key entries. Edges and fills are a
+   low-alpha mix of the ink colour, so one rule reads right on both themes;
+   things nested inside a card lean on their background, not on a line.
+   ===================================================================*/
+:root{
+  --edge:  color-mix(in srgb, var(--ink) 11%, transparent);
+  --edge2: color-mix(in srgb, var(--ink) 7%, transparent);
+  --fill:  color-mix(in srgb, var(--ink) 6%, transparent);
+  --fill2: color-mix(in srgb, var(--ink) 11%, transparent);
+}
+.topbar{border-bottom-color:var(--edge2)}
+.card{border-color:var(--edge);border-radius:16px}
+.card::before{border-radius:16px 16px 0 0}
+.card:hover{border-color:var(--edge)}
+.panel{border-color:var(--edge2);border-radius:14px}
+.analysis{border-color:var(--edge2);border-radius:12px}
+textarea{border:1px solid var(--edge);border-radius:12px}
+textarea:hover{border-color:color-mix(in srgb, var(--ink) 20%, transparent)}
+textarea:focus{border-color:var(--blue)}
+
+/* Buttons: a quiet fill rather than an outline; the primary keeps its blue. */
+.btn{border:1px solid var(--edge);border-radius:10px;background:var(--fill);color:var(--ink)}
+.btn:hover{background:var(--fill2);border-color:color-mix(in srgb, var(--ink) 18%, transparent)}
+.btn .ic{width:1.05em;height:1.05em}
+.nav button{border-radius:10px}
+.nav button:hover{background:var(--fill)}
+.seg,.themebtn{border-color:var(--edge);border-radius:10px;background:var(--fill)}
+.seg button + button{border-left-color:var(--edge)}
+.pager button{width:30px;height:30px;border-color:var(--edge);border-radius:9px;background:var(--fill)}
+.pager button:hover:not(:disabled){background:var(--fill2)}
+
+/* The word-choice setting as an on/off switch: it is a setting, not an
+   action, and a switch says so where a checkbox under buttons did not. */
+.opt-rw{gap:10px;color:var(--ink2)}
+.opt-rw input[type=checkbox]{appearance:none;-webkit-appearance:none;margin:0;flex:none;
+  position:relative;width:38px;height:22px;border-radius:999px;cursor:pointer;
+  background:var(--fill2);border:1px solid var(--edge);
+  transition:background .15s ease, border-color .15s ease}
+.opt-rw input[type=checkbox]::before{content:"";position:absolute;top:2px;left:2px;
+  width:16px;height:16px;border-radius:50%;background:var(--ink2);
+  transition:transform .15s ease, background .15s ease}
+.opt-rw input[type=checkbox]:checked{background:var(--blue);border-color:var(--blue)}
+.opt-rw input[type=checkbox]:checked::before{transform:translateX(16px);background:#fff}
+
+/* The colour key: one pill per colour, the count beside its swatch. */
+.legend{gap:8px}
+.legend .key{gap:7px;padding:5px 12px 5px 10px;border-radius:999px;
+  background:var(--fill);border:1px solid var(--edge2)}
+.legend .key .sw{width:12px;height:12px}
+
+/* Word Details */
+.wp-sec{border-color:var(--edge2)}
+.wp-body{border-top-color:var(--edge2)}
+.sug{border-color:var(--edge2);border-radius:12px}
+.ilg{border-color:var(--edge2)}
+.wp-foot .btn:last-child{margin-left:auto}
+.pop{border-color:var(--edge);border-radius:12px}
+.chip{border-color:var(--edge)}
+
+/* ===================================================================
+   Visual design, second pass (2 October 2026). The first pass was too
+   quiet to notice; this one changes the look outright, without touching
+   the layout: pill buttons, a pill navigation switcher, cards raised by
+   shadow instead of outlined, panels separated by tone, icons on the
+   section titles.
+   ===================================================================*/
+:root{
+  --raise: 0 1px 2px rgba(0,0,0,.35), 0 10px 30px -12px rgba(0,0,0,.70);
+  --raise-hover: 0 1px 2px rgba(0,0,0,.35), 0 16px 36px -14px rgba(0,0,0,.80);
+}
+body{background-color:color-mix(in srgb, var(--bg) 88%, #000)}
+
+/* Cards: raised, not outlined. */
+.card{border-color:transparent;box-shadow:var(--raise)}
+.card:hover{border-color:transparent;box-shadow:var(--raise-hover)}
+.card>.hd{padding:18px 20px 0}
+.card>.bd{padding:16px 20px 20px}
+.card h2{font-size:calc(17px*var(--fs))}
+.ttl{display:flex;align-items:center;gap:10px}
+.ttl-ic{width:30px;height:30px;border-radius:9px;display:inline-grid;place-items:center;flex:none}
+.ttl-ic .ic{width:17px;height:17px}
+.ttl-ic.blue{background:var(--blue-s);color:var(--blue)}
+.ttl-ic.teal{background:var(--teal-s);color:var(--teal)}
+.ttl-ic.violet{background:var(--violet-s);color:var(--violet)}
+.panel h3 .ttl-ic{width:26px;height:26px;border-radius:8px}
+.panel h3 .ttl-ic .ic{width:15px;height:15px}
+
+/* Panels inside a card: a step lighter, no line. */
+.panel{background:var(--card2);border-color:transparent;border-radius:14px;padding:16px}
+.analysis{background:var(--field);border-color:transparent;border-radius:12px;
+  box-shadow:inset 0 0 0 1px var(--edge2)}
+
+/* The text box: deeper, with a clear blue ring when typing. */
+textarea{background:var(--field);border:1.5px solid var(--edge);border-radius:14px;padding:14px 16px}
+textarea:focus{border-color:var(--blue);
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--blue) 28%, transparent)}
+
+/* Buttons: pills. Primary solid blue with a glow; the others a lighter tone
+   with a visible edge that turns blue on hover. */
+.btn{border-radius:999px;padding:10px 20px;font-weight:650;
+  background:color-mix(in srgb, var(--ink) 9%, var(--card));
+  border:1.5px solid color-mix(in srgb, var(--ink) 16%, transparent);color:var(--ink)}
+.btn:hover{background:color-mix(in srgb, var(--blue) 14%, var(--card));
+  border-color:var(--blue);color:var(--ink)}
+.btn.pri{border:1.5px solid transparent;color:var(--on-accent);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--blue) 88%, #fff), var(--blue-d));
+  box-shadow:0 8px 22px -8px color-mix(in srgb, var(--blue) 85%, transparent),
+             0 1px 0 rgba(255,255,255,.22) inset}
+.btn.pri:hover{filter:brightness(1.08);border-color:transparent}
+.btn.sm{padding:8px 16px}
+.pop .pf .btn{padding:6px 13px}
+
+/* Navigation: one pill switcher; the current page is the filled pill. */
+.nav{background:color-mix(in srgb, var(--ink) 7%, transparent);padding:4px;border-radius:999px;
+  box-shadow:inset 0 0 0 1px var(--edge2);gap:2px}
+.nav button{border-radius:999px;padding:8px 18px}
+.nav button[aria-selected="true"]{box-shadow:0 4px 14px -6px color-mix(in srgb, var(--blue) 90%, transparent)}
+
+/* Header controls and the word pager: pills and circles. */
+.seg{border-radius:999px;border-color:var(--edge2);padding:2px;gap:2px}
+.seg button{border-radius:999px}
+.seg button + button{border-left:0}
+.themebtn{border-radius:999px;padding:7px 12px}
+.pager button{border-radius:50%;width:32px;height:32px;border-color:var(--edge2)}
+
+/* Word Details: sections and suggestion rows separated by tone. */
+.wp-sec{border-color:transparent;background:var(--card2)}
+.wp-body{border-top-color:var(--edge2)}
+.sug{border-color:transparent;background:var(--card);
+  box-shadow:inset 0 0 0 1px var(--edge2);border-radius:12px}
+.sug:hover{background:var(--blue-s);box-shadow:inset 0 0 0 1.5px var(--blue)}
+.ilg{border-color:transparent;background:var(--card);box-shadow:inset 0 0 0 1px var(--edge2)}
+.legend .key{border-color:transparent;background:color-mix(in srgb, var(--ink) 8%, transparent)}
+.chip{border-radius:999px}
+
 /* Light theme corrections for the refresh: the white highlights above are
    drawn for a dark surface and read as haze on a light one. */
 @media (prefers-color-scheme:light){
@@ -820,6 +957,14 @@ body{
 :root[data-theme="light"] textarea{box-shadow:inset 0 1px 2px rgba(16,24,40,.06)}
 :root[data-theme="light"] .brand svg{filter:none}
 :root[data-theme="light"] .tip{box-shadow:0 10px 24px rgba(16,24,40,.18), 0 2px 6px rgba(16,24,40,.10)}
+:root[data-theme="light"]{--raise:0 1px 2px rgba(16,24,40,.06), 0 10px 28px -14px rgba(16,24,40,.30);
+  --raise-hover:0 1px 2px rgba(16,24,40,.06), 0 16px 34px -16px rgba(16,24,40,.38)}
+:root[data-theme="light"] body{background-color:var(--bg)}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){--raise:0 1px 2px rgba(16,24,40,.06), 0 10px 28px -14px rgba(16,24,40,.30);
+    --raise-hover:0 1px 2px rgba(16,24,40,.06), 0 16px 34px -16px rgba(16,24,40,.38)}
+  :root:not([data-theme="dark"]) body{background-color:var(--bg)}
+}
 </style>
 
 <header class="topbar">
@@ -966,7 +1111,7 @@ body{
 <aside class="side">
   <div class="card" id="details">
     <div class="hd">
-      <h2>Word Details</h2>
+      <h2 class="ttl"><span class="ttl-ic violet"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></svg></span>Word Details</h2>
       <div class="pager">
         <button onclick="pageWord(-1)" id="pg-prev" aria-label="Previous word">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 5-7 7 7 7"/></svg></button>
@@ -1503,7 +1648,7 @@ function renderResults(res){
     : "";
 
   $("results").innerHTML =
-    '<div class="card"><div class="hd"><h2>Results Summary</h2>'
+    '<div class="card"><div class="hd"><h2 class="ttl"><span class="ttl-ic blue"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Results Summary</h2>'
   + '<span style="font-size:calc(12px*var(--fs));color:var(--mut)">Analysis completed in '
   + (res._ms/1000).toFixed(2) + ' seconds</span></div><div class="bd">'
   + '<p class="summary" data-tip="Nothing to report for these words. Most are in the dictionary, '
@@ -1528,7 +1673,7 @@ function renderResults(res){
   // meanings, which the table never had room for. It had no bulk action, so
   // nothing was lost with it. The Alternative Spellings panel below stays:
   // Accept all / Ignore all have no equivalent on a single word.
-  + '<div class="panel"><h3>Text with Analysis'
+  + '<div class="panel"><h3><span class="ttl-ic teal"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 11h16M4 16h10"/></svg></span>Text with Analysis'
   // Every token is clickable, not only the highlighted ones: a plain
   // word carries onclick=inspectWord and opens the same Word Details
   // panel. Nothing said so, so on a clean text — where the line below
@@ -2246,7 +2391,7 @@ function wordPanel(w, r, a, note){
           : '<p class="sub"><span class="spin" style="border-color:rgba(76,141,255,.3);'
             + 'border-top-color:var(--blue)"></span> analysing…</p>');
 
-  h += '<div class="row" style="margin-top:16px">'
+  h += '<div class="row wp-foot" style="margin-top:16px">'
      + (flagged.length > 1
          ? '<button class="btn sm" onclick="pageWord(-1)">&#8592; Previous</button>'
            + '<button class="btn sm" onclick="pageWord(1)">Next &#8594;</button>' : "")
