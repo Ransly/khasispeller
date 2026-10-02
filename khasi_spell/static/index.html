@@ -36,6 +36,8 @@ try {
   --red:#f2585b; --red-s:#331519; --red-b:#7a2a2f; --on-red:#ff9fa2;
   --amber:#e3a008; --amber-s:#332612; --amber-b:#7a5a1a; --on-amber:#ffd27a;
   --slate-s:#212c3f;
+  /* Word Details sections: Morphology violet, Phonology teal. */
+  --violet:#a78bfa; --violet-s:#251f3f; --teal:#2cb99e; --teal-s:#0f2b28;
   /* Brand mark. The PRIMARY lockup's deep teal ring measures 1.69:1 against
      this header — invisible — so the dark UI takes the REVERSED ring, which
      measures 14.67:1. The teal check is unchanged between the two, exactly as
@@ -73,7 +75,6 @@ h1,h2,h3{margin:0}
   margin-left:9px;padding-left:11px;border-left:1px solid var(--line);
   white-space:nowrap}
 @media (max-width:640px){.brand h1 .kh{display:none}}
-.brand p{margin:1px 0 0;font-size:calc(12px*var(--fs-chrome));color:var(--mut)}
 .nav{display:flex;gap:6px;margin:0 auto}
 .nav button{display:flex;align-items:center;gap:7px;padding:9px 16px;border:0;
   border-radius:9px;background:transparent;color:var(--ink2);font-weight:500}
@@ -483,32 +484,64 @@ dl.kv dd{margin:0;font-weight:600}
   background:var(--slate-s);border:1px solid var(--line);border-radius:5px;
   padding:1px 7px;color:var(--ink2);font-weight:600}
 .wp-gram .gg{font-size:calc(11.5px*var(--fs));color:var(--mut)}
-.wp-sec{border-top:1px solid var(--line2);margin-top:18px;padding-top:13px}
-.wp-sec h4{margin:0 0 9px;font-size:calc(11.5px*var(--fs));font-weight:700;letter-spacing:.9px;
-  text-transform:uppercase;color:var(--mut)}
+/* Each section is its own card: a header with an icon in the section's
+   colour, its name and what it covers; the content inset beneath. They used
+   to be small grey capitals over a hairline, so one section ran into the
+   next. Collapsible ones are <details>, the header their <summary>. */
+.wp-sec{margin-top:14px;border:1px solid var(--line);border-radius:12px;
+  background:var(--card2);overflow:hidden}
+.wp-head{display:flex;align-items:center;gap:11px;padding:10px 13px}
+.wp-sec h4{margin:0;font-size:calc(13.5px*var(--fs));font-weight:700;color:var(--ink);
+  letter-spacing:0;text-transform:none}
+.wp-t{display:flex;flex-direction:column;gap:1px;min-width:0}
+.wp-sub{font-size:calc(11.5px*var(--fs));color:var(--mut);line-height:1.3}
+.wp-ic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none}
+.wp-ic .ic{width:18px;height:18px}
+.wp-sec.sugg .wp-ic{background:var(--blue-s);color:var(--blue)}
+.wp-sec.morph .wp-ic{background:var(--violet-s);color:var(--violet)}
+.wp-sec.phon .wp-ic{background:var(--teal-s);color:var(--teal)}
+.wp-sec.assim .wp-ic{background:var(--amber-s);color:var(--amber)}
+.wp-body{padding:12px 13px 13px;border-top:1px solid var(--line)}
 /* Collapsible sections. <details>/<summary> rather than a JS toggle: it is
    keyboard-operable and screen-reader-announced without any work, and the
    open state is a real DOM property we can read back. The default marker is
    hidden in favour of a chevron that rotates. */
-.wp-sec > summary{list-style:none;cursor:pointer;display:flex;align-items:center;
-  gap:8px;border-radius:6px}
+.wp-sec > summary{list-style:none;cursor:pointer}
 .wp-sec > summary::-webkit-details-marker{display:none}
-.wp-sec > summary h4{margin:0}
-.wp-sec > summary:hover h4,.wp-sec > summary:focus-visible h4{color:var(--mut)}
-.wp-sec > summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
-.wp-sec > summary::after{content:"";margin-left:auto;width:6px;height:6px;
-  border-right:1.6px solid var(--mut2);border-bottom:1.6px solid var(--mut2);
+.wp-sec > summary:hover{background:color-mix(in srgb, var(--ink) 4%, transparent)}
+.wp-sec > summary:focus-visible{outline:2px solid var(--blue);outline-offset:-2px;border-radius:12px}
+.wp-sec > summary::after{content:"";margin-left:auto;width:7px;height:7px;flex:none;
+  border-right:1.8px solid var(--mut);border-bottom:1.8px solid var(--mut);
   transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s ease}
 .wp-sec[open] > summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
-.wp-sec > summary + *{margin-top:9px}
-.wp-sec > p{margin:0 0 8px;font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.55}
-.wp-sec > p:last-child{margin-bottom:0}
+.wp-body > p{margin:0 0 8px;font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.55}
+.wp-body > p:last-child{margin-bottom:0}
 /* A verdict line: the state chip and its explanation on one row, aligned to
    the chip rather than wrapping under it. */
 .wp-state{display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;
   font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.5}
 .wp-state .tag{flex:none;margin-top:1px}
 .wp-morph{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+/* Morphology as two levels: surface (as written) above lexical (as built),
+   one column per piece, and the meaning of each piece beneath. */
+.ilg{display:grid;gap:5px 16px;align-items:baseline;justify-content:start;margin:2px 0 10px;
+  padding:10px 13px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.ilg-k{font-size:calc(10.5px*var(--fs));font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;color:var(--mut2);cursor:help}
+.ilg-s{font-size:calc(15.5px*var(--fs));font-weight:700;color:var(--ink)}
+.ilg-s .chg,.ilg-s .inf{color:var(--amber)}
+.ilg-s .chg{font-weight:800}
+.ilg-s .inf{font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.ilg-l{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(13px*var(--fs));
+  font-weight:600;color:var(--blue)}
+.ilg-l.root{color:var(--green)}
+.ilg-g{font-size:calc(12px*var(--fs));color:var(--ink2)}
+.ilg-g i{font-style:normal;color:var(--mut2)}
+.ilg-dir{display:flex;gap:10px;align-items:baseline;margin:0 0 4px;
+  font-size:calc(12.5px*var(--fs));color:var(--ink2)}
+.ilg-dir b{flex:none;min-width:6.6em;font-size:.82em;font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--mut);cursor:help}
+.ilg-rule{display:block;margin-top:2px;font-style:normal;color:var(--amber);font-size:.92em}
 /* Derivational chain: the word assembled one affix at a time. */
 .wp-chain{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
 .wp-chain .arrow{color:var(--mut2);font-size:calc(12px*var(--fs))}
@@ -612,7 +645,6 @@ textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
 @media (max-width:640px){
   :root:not([data-text]){--fs:1}
   .topbar{position:static}
-  .brand p{display:none}
   .nav{order:3;width:100%;margin:0}
   .nav button{flex:1 1 0;justify-content:center;padding:8px 6px}
   .nav button .ic{display:none}
@@ -643,6 +675,7 @@ body{overflow-x:hidden}
     --red:#c81e1e; --red-s:#fce9e9; --red-b:#f0b0b0; --on-red:#8d1717;
     --amber:#a45606; --amber-s:#fcf2df; --amber-b:#e4c489; --on-amber:#6f4305;
     --slate-s:#edf1f8;
+    --violet:#6d28d9; --violet-s:#efe9fe; --teal:#0f766e; --teal-s:#dcf3ef;
     --lg-ring:#0E4A4F;
     --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
   }
@@ -661,6 +694,7 @@ body{overflow-x:hidden}
     --red:#c81e1e; --red-s:#fce9e9; --red-b:#f0b0b0; --on-red:#8d1717;
     --amber:#a45606; --amber-s:#fcf2df; --amber-b:#e4c489; --on-amber:#6f4305;
     --slate-s:#edf1f8;
+    --violet:#6d28d9; --violet-s:#efe9fe; --teal:#0f766e; --teal-s:#dcf3ef;
     --lg-ring:#0E4A4F;
     --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
 }
@@ -809,7 +843,6 @@ body{
            than as a tagline. Lighter weight and colour keep the English form
            dominant without demoting the Khasi to small print. -->
       <h1>Khasi Spellchecker <span class="kh">Ka Thoh ka Tar Tynrai</span></h1>
-      <p>Morphology-Gated &middot; Powered by Khasi Language Resources</p>
     </div>
   </div>
   <!-- Section nav. It had been removed on request; it is back (2 October
@@ -1764,6 +1797,68 @@ async function loadAnalysis(word){
   renderDetail();
 }
 
+/* Morphology as two levels of one word. The SURFACE form is the word as
+   written, kept whole; the LEXICAL form is the pieces it is built from,
+   before any sound change, one column per piece. Letters that changed are
+   coloured in the written word (pyl in pyllait, from pyn-). Under them, what each piece means. Then the two directions:
+   analysis takes the written word to its pieces, generation builds the word
+   back — step by step for stacked prefixes, with the sound change when one
+   applies. An infix is written inside its root, so its surface row is the
+   whole word with the infix marked: b‹yn›riew. */
+function formMapHtml(fm, word){
+  const segs = fm.segments || [];
+  if (!segs.length) return "";
+  const n = segs.length;
+  const marked = s => esc(s).replace(/\u2039(.*?)\u203a/g, '<b class="inf">$1</b>');
+  let h = '<div class="ilg" style="grid-template-columns:auto repeat(' + n + ', max-content)">';
+  h += '<span class="ilg-k" data-tip="The word as it is written.">Surface</span>';
+  // The written word stays whole — it is one word, not pieces with gaps.
+  // Only the letters that differ from the lexical form are coloured.
+  h += '<span class="ilg-s" style="grid-column:span ' + n + '">'
+     + (fm.marked ? marked(fm.marked)
+        : segs.map(s => s.changed
+            ? '<b class="chg" data-tip="Written ' + esc(s.surface) + ', from '
+              + esc(s.lexical) + '">' + esc(s.surface) + '</b>'
+            : esc(s.surface)).join(""))
+     + '</span>';
+  h += '<span class="ilg-k" data-tip="The pieces the word is built from, before any sound change.">Lexical</span>'
+     + segs.map(s => '<span class="ilg-l ' + esc(s.kind) + '">' + esc(s.lexical) + '</span>').join("");
+  h += '<span class="ilg-k" data-tip="What each piece means or does.">Meaning</span>'
+     + segs.map(s => '<span class="ilg-g">' + esc(s.gloss || s.kind)
+        + (s.pos ? ' <i>' + esc(s.pos) + '</i>' : '') + '</span>').join("");
+  h += '</div>';
+  if (n > 1) {
+    const lex = segs.map(s => s.lexical).join(" + ");
+    h += '<p class="ilg-dir"><b data-tip="From the written word to its pieces.">Analysis</b>'
+       + '<span>' + esc(word) + ' &rarr; ' + esc(lex) + '</span></p>';
+    h += '<p class="ilg-dir"><b data-tip="From the pieces back to the written word.">Generation</b>'
+       + '<span>' + (fm.generation || [lex, word]).map(esc).join(' &rarr; ')
+       + (fm.rule ? '<i class="ilg-rule">' + esc(fm.rule) + '</i>' : '') + '</span></p>';
+  }
+  return h;
+}
+
+/* What each Word Details section is: its colour class, icon, and one line
+   on what it covers — so the reader can tell the sections apart at a glance. */
+const SECTION = {
+  "Suggested corrections": {cls: "sugg", sub: "Closest Khasi words, best first",
+    icon: '<path d="M4 7h10M4 12h10M4 17h6"/><path d="m15 16 2 2 4-4"/>'},
+  "Morphology": {cls: "morph", sub: "How the word is built",
+    icon: '<rect x="2.5" y="7" width="8.5" height="10" rx="2"/><rect x="13" y="7" width="8.5" height="10" rx="2"/>'},
+  "Phonology": {cls: "phon", sub: "Sounds, syllables and spelling rules",
+    icon: '<path d="M3 12h1.5M7 8.5v7M11 5v14M15 8.5v7M19 10.5v3"/>'},
+  "Assimilation": {cls: "assim", sub: "A sound change where two pieces meet",
+    icon: '<path d="M5 5v5a6 6 0 0 0 6 6h7"/><path d="m15 13 3 3-3 3"/>'},
+};
+function secHead(label){
+  const m = SECTION[label] || {};
+  return (m.icon ? '<span class="wp-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" '
+          + 'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+          + m.icon + '</svg></span>' : '')
+    + '<span class="wp-t"><h4>' + esc(label) + '</h4>'
+    + (m.sub ? '<span class="wp-sub">' + esc(m.sub) + '</span>' : '') + '</span>';
+}
+
 /* The linguistic body of the panel. The word, its verdict badge and its gloss
    are drawn by wordPanel() above this, so nothing here repeats them: this
    function used to open with its own <h3>word</h3>, which is why the merged
@@ -1782,10 +1877,11 @@ function analysisHtml(a){
     // above, and that is the whole of what most readings need. The analysis
     // is there when it is asked for.
     const open = secOpen[label] === true;
-    return '<details class="wp-sec"' + (open ? ' open' : '')
+    return '<details class="wp-sec ' + ((SECTION[label] || {}).cls || '') + '"' + (open ? ' open' : '')
       + ' ontoggle="secOpen[' + JSON.stringify(label).replace(/"/g, "&quot;")
       + ']=this.open">'
-      + '<summary><h4>' + label + '</h4></summary>' + inner + '</details>';
+      + '<summary class="wp-head">' + secHead(label) + '</summary>'
+      + '<div class="wp-body">' + inner + '</div></details>';
   };
 
   // --- phonology ---
@@ -1836,13 +1932,33 @@ function analysisHtml(a){
   (ph.warnings || []).forEach(w => bits.push(['Note', esc(w)]));
   if (bits.length) pIn += '<dl class="kv">'
       + bits.map(b => '<dt>' + b[0] + '</dt><dd>' + b[1] + '</dd>').join("") + '</dl>';
-  h += sec('Phonology', pIn);
+  // Added after Morphology, which comes first (on request, 2 October 2026).
+  const phonSec = sec('Phonology', pIn);
 
   // --- morphology ---
   let mIn;
   if (!m.root){
     mIn = '<p>' + esc(m.status_label
         || "No parse — the analyser could not decompose this form.") + '</p>';
+  } else if (m.form_map) {
+    // The word at its two levels, aligned piece by piece — see formMapHtml.
+    mIn = formMapHtml(m.form_map, a.word || "");
+    const rows = [];
+    if (m.is_compound && (m.compound_roots || []).length)
+      rows.push(['Root built from', m.compound_roots.map(esc).join(" + ")]);
+    if (m.root_in_lexicon === false)
+      rows.push(['Root', '<span class="sub">not a lexicon headword</span>']);
+    if (rows.length)
+      mIn += '<dl class="kv" style="margin-top:8px">'
+          + rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join("") + '</dl>';
+    if (m.status !== "direct_match" && (m.status_label || m.status))
+      mIn += '<p class="sub" style="margin:10px 0 0"'
+          + (m.status ? ' data-tip="engine status: ' + esc(m.status) + '"' : '') + '>'
+          + esc(m.status_label || m.status) + '</p>';
+    if ((m.alternatives || []).length)
+      mIn += '<p class="sub" style="margin:6px 0 0">Also considered: '
+          + m.alternatives.map(x => '<code>' + esc(x.structure) + '</code>').join(", ")
+          + '</p>';
   } else {
     mIn = "";
     // The word built one step at a time. A stacked derivation is an ordered
@@ -1898,8 +2014,11 @@ function analysisHtml(a){
           + '</p>';
   }
   h += sec('Morphology', mIn);
+  h += phonSec;
 
-  if (as.rule)
+  // A sound change is shown inside Morphology when the word map carries it
+  // (pyl above pyn- in pyllait); the separate section is the fallback.
+  if (as.rule && !(m.form_map && m.form_map.rule))
     h += sec('Assimilation', '<div class="note">' + esc(as.description || as.rule)
        + (as.prefix ? '<br>Underlying: <b>' + esc(as.prefix) + '</b> + <b>'
             + esc(as.root) + '</b>' : '') + '</div>');
@@ -2116,10 +2235,11 @@ function wordPanel(w, r, a, note){
         + pctBar(p, r.distances && r.distances[i])
         + '</b><i>match</i></span></button>';
     }).join("");
-    h += '<div class="wp-sec"><h4>Suggested corrections</h4>' + list
+    h += '<div class="wp-sec sugg"><div class="wp-head">' + secHead('Suggested corrections')
+       + '</div><div class="wp-body">' + list
        + '<p class="sub" style="margin:8px 0 0">Distances count <b>phonemes</b>, not '
        + 'letters &mdash; <code>ng</code> and <code>sh</code> are one sound each. '
-       + 'A <i>known confusion</i> costs less than a full edit.</p></div>';
+       + 'A <i>known confusion</i> costs less than a full edit.</p></div></div>';
   }
 
   h += (a ? analysisHtml(a)

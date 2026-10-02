@@ -570,3 +570,35 @@ def test_an_infix_is_shown_inside_its_root(client, word, root, marked, form):
     assert m["chain"] == [root, marked]
     (row,) = [a for a in m["affixes"] if a["role"] == "infix"]
     assert row["form"] == form and row["label"].startswith("infix, makes")
+
+
+@pytest.mark.parametrize("word, surface, lexical", [
+    ("jingstad", ["jing", "stad"], ["jing-", "stad"]),                # prefix + root
+    ("jingïalehkai", ["jing", "ïa", "lehkai"], ["jing-", "ïa-", "lehkai"]),
+    ("pyllait", ["pyl", "lait"], ["pyn-", "lait"]),                   # n -> l before l
+    ("bynriew", ["briew", "yn"], ["briew", "-yn-"]),                  # infix
+    ("katkum", ["katkum"], ["katkum"]),                               # bare root
+])
+def test_morphology_maps_surface_to_lexical(client, word, surface, lexical):
+    """Word Details shows the word as written above the pieces it is built
+    from. A piece that changed is marked, the root carries its own class, and
+    the pieces always spell the written word."""
+    fm = client.post("/analyse", json={"word": word}).json()["morphology"]["form_map"]
+    assert [s["surface"] for s in fm["segments"]] == surface
+    assert [s["lexical"] for s in fm["segments"]] == lexical
+    if word == "pyllait":
+        assert fm["segments"][0]["changed"] and "assimilates" in fm["rule"]
+        assert fm["generation"] == ["pyn- + lait", "pyllait"]
+    if word == "bynriew":
+        assert fm["marked"] == "b‹yn›riew"
+    if word == "jingïalehkai":
+        assert fm["generation"] == ["lehkai", "ïalehkai", "jingïalehkai"]
+    else:
+        assert all(not s["changed"] for s in fm["segments"][1:])
+
+
+def test_the_root_carries_its_own_word_class(client):
+    """`stad` was labelled a noun because `jingstad` is one."""
+    fm = client.post("/analyse", json={"word": "pynlong"}).json()["morphology"]["form_map"]
+    root = fm["segments"][-1]
+    assert root["kind"] == "root" and root["lexical"] == "long" and root["pos"] == "verb"

@@ -374,6 +374,112 @@ def _infix_detail(form: str, word: str, root: str) -> dict:
     return out
 
 
+def _root_meaning(db, root: str):
+    """(first sense, word class) from *root*'s OWN entry, or ("", "").
+
+    The panel used to label the root with the class of the word it was
+    looking at — `stad` was shown as a noun because `jingstad` is one.
+    """
+    rows = db.lookup(root) or []
+    if not rows:
+        return "", ""
+    r = rows[0]
+    pos = r.get("grammatical_class") or ""
+    senses = _split_senses([r.get("english_gloss") or ""], pos,
+                           r.get("clitic") or "").get("senses") or []
+    return (senses[0] if senses else ""), pos
+
+
+def _prefix_label(prefix: str) -> str:
+    """What a prefix does, from the lexicon's own registry (pyn- causative)."""
+    fn = (morphology.PREFIXES.get(prefix.strip("-")) or {}).get("function") or ""
+    return morphology._short_function_label(fn) if fn else ""
+
+
+def _form_map(word: str, p2: dict, assim: dict, db) -> dict:
+    """The word at its two levels: as written (surface) and as built (lexical).
+
+    One segment per morpheme, surface above lexical, so the panel can align
+    them and show where they differ — `pyl` above `pyn-` in pyllait, where
+    n became l before l. Also the two directions: analysis (surface to
+    lexical) and generation (lexical to surface, with the sound change or
+    the step-by-step derivation). Four shapes:
+
+        sound change   pyllait  = pyn- + lait   (n -> l before l)
+        infix          bynriew  = briew + -yn-  (b‹yn›riew)
+        affixes        jingïalehkai = jing- + ïa- + lehkai
+        bare root      katkum   = katkum
+
+    Returned only when the pieces spell the written word exactly; anything
+    else gets no map, and the panel falls back to its plain listing.
+    """
+    w = _tokens.nfc(word or "").strip()
+    wl = w.lower()
+    layers = p2.get("layers") or {}
+    info = p2.get("affix_info") or {}
+    root = (p2.get("root") or "").strip()
+
+    def seg(surface, lexical, kind, gloss="", pos=""):
+        return {"surface": surface, "lexical": lexical, "kind": kind, "gloss": gloss,
+                "pos": pos, "changed": surface.lower() != lexical.strip("-").lower()}
+
+    # 1. A sound change where a prefix meets the root.
+    if assim.get("rule") and assim.get("prefix") and assim.get("root"):
+        pre, rt = assim["prefix"].strip("-"), assim["root"]
+        if wl.endswith(rt.lower()) and len(wl) > len(rt):
+            g, pos = _root_meaning(db, rt)
+            cut = len(w) - len(rt)
+            return {"form_map": {
+                "segments": [seg(w[:cut], pre + "-", "prefix", _prefix_label(pre)),
+                             seg(w[cut:], rt, "root", g, pos)],
+                "generation": [pre + "- + " + rt, w],
+                "rule": assim.get("description") or ""}}
+
+    # 2. An infix inside the root: written as one word, built from two pieces.
+    if layers.get("infix") and root:
+        d = _infix_detail(layers["infix"], w, root)
+        if d.get("marked"):
+            g, pos = _root_meaning(db, root)
+            return {"form_map": {
+                "segments": [dict(seg(root, root, "root", g, pos), changed=False),
+                             dict(seg(d["form"].strip("-"), d["form"], "infix",
+                                      d.get("label", "").replace("infix, ", "")),
+                                  changed=False)],
+                "marked": d["marked"],
+                "generation": [root + " + " + d["form"], w]}}
+
+    # 3. Prefixes, outermost first, and any suffix, over a root.
+    keys = [k for k in ("prefix", "prefix2", "prefix3") if layers.get(k)]
+    suffix = (layers.get("suffix") or "").strip("-")
+    if root and (keys or suffix):
+        pieces = [layers[k].strip("-") for k in keys] + [root] + ([suffix] if suffix else [])
+        if "".join(pieces).lower() == wl:
+            at, surface = 0, []
+            for p in pieces:                     # the written word's own letters
+                surface.append(w[at:at + len(p)])
+                at += len(p)
+            segs = [seg(surface[i], layers[k].strip("-") + "-", "prefix",
+                        info.get(f"{k}_function_label") or _prefix_label(layers[k]))
+                    for i, k in enumerate(keys)]
+            g, pos = _root_meaning(db, root)
+            segs.append(seg(surface[len(keys)], root, "root", g, pos))
+            if suffix:
+                segs.append(seg(surface[-1], "-" + suffix, "suffix",
+                                info.get("suffix_function_label") or ""))
+            chain = [s.strip() for s in str(info.get("derivational_chain") or "").split("→")
+                     if s.strip()]
+            return {"form_map": {
+                "segments": segs,
+                "generation": chain if len(chain) > 1
+                              else [" + ".join(s["lexical"] for s in segs), w]}}
+
+    # 4. A bare root: one piece, the same at both levels.
+    if root and root.lower() == wl:
+        g, pos = _root_meaning(db, root)
+        return {"form_map": {"segments": [seg(w, root, "root", g, pos)]}}
+    return {}
+
+
 def _affix_detail(p2: dict, word: str = "") -> dict:
     """Per-affix function, the derivational order, and rejected parses.
 
@@ -845,6 +951,14 @@ def analyse_word(req: WordRequest):
             # that jing- nominalises and ïa- is the reciprocal, which is the
             # part a reader of Khasi actually wants. See _affix_detail.
             **_affix_detail(p2, a.get("input") or ""),
+            # The word at two levels — as written and as built — aligned
+            # piece by piece, with any sound change. See _form_map.
+            **_form_map(a.get("input") or "", p2,
+                        {"rule": p3.get("rule_detected"),
+                         "description": p3.get("rule_description"),
+                         "prefix": p3.get("reconstructed_prefix"),
+                         "root": p3.get("reconstructed_root")},
+                        sp.analyser.db),
         },
         "assimilation": {
             "rule": p3.get("rule_detected"),
