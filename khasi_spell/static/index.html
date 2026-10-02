@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Khasi Spellchecker</title>
+<script>
+/* Display settings, applied before the first paint so nothing jumps: the
+   theme and text size last chosen on this computer. Storage can throw
+   (private window, site data blocked); the defaults then stand. */
+try {
+  const t = localStorage.getItem("ks-theme"), z = localStorage.getItem("ks-text");
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  if (z === "normal" || z === "large" || z === "larger") document.documentElement.dataset.text = z;
+} catch (e) {}
+</script>
 <style>
 /* Dark theme.
    Four surface levels, not one: --bg behind everything, --card for panels on
@@ -32,11 +42,19 @@
      in the concept sheet. On a light surface --lg-ring would be #0E4A4F. */
   --lg-ring:#E8F1F2; --lg-check:#2CB99E;
   --r:14px; --r2:10px;
+  /* Text scale. Every font size on the page is written as calc(Npx * --fs),
+     so one number sizes all text and nothing else: the layout widths stay
+     put. 1.15 by default — the page is shown on a projector — and the
+     header's text-size control sets 1, 1.15 or 1.3. */
+  --fs:1.15;
+  /* The header's own text stops growing at the default size: the audience
+     needs the content larger, and the bar has to stay on one line. */
+  --fs-chrome:min(var(--fs), 1.15);
   --sh:0 1px 2px rgba(0,0,0,.30),0 1px 3px rgba(0,0,0,.36);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font:calc(14px*var(--fs))/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;cursor:pointer}
 h1,h2,h3{margin:0}
@@ -44,17 +62,18 @@ h1,h2,h3{margin:0}
 
 /* ---------- top bar ---------- */
 .topbar{background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;
+  font-size:calc(14px*var(--fs-chrome));
   display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
-.brand h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.brand h1{font-size:calc(20px*var(--fs-chrome));font-weight:700;letter-spacing:-.01em}
 /* The Khasi name. A thin divider rather than a bracket or dash, so the two
    names read as equals on one line; it drops below 640px, where the header
    has no room for both. */
-.brand h1 .kh{font-weight:600;font-size:15px;color:var(--mut);letter-spacing:0;
+.brand h1 .kh{font-weight:600;font-size:calc(15px*var(--fs-chrome));color:var(--mut);letter-spacing:0;
   margin-left:9px;padding-left:11px;border-left:1px solid var(--line);
   white-space:nowrap}
 @media (max-width:640px){.brand h1 .kh{display:none}}
-.brand p{margin:1px 0 0;font-size:12px;color:var(--mut)}
+.brand p{margin:1px 0 0;font-size:calc(12px*var(--fs-chrome));color:var(--mut)}
 .nav{display:flex;gap:6px;margin:0 auto}
 .nav button{display:flex;align-items:center;gap:7px;padding:9px 16px;border:0;
   border-radius:9px;background:transparent;color:var(--ink2);font-weight:500}
@@ -68,40 +87,108 @@ h1,h2,h3{margin:0}
 /* Icon and count on one line, the pair pushed to the right so the count
    still lines up with the label and tagline beneath it. */
 .meter .nrow{display:flex;align-items:center;justify-content:flex-end;gap:7px}
-.meter .n{font-size:19px;font-weight:700;line-height:1.1}
-.meter .l{font-size:12px;color:var(--mut)}
-.meter .t{display:block;font-size:11.5px;font-style:italic;color:var(--mut);margin-top:3px}
+.meter .n{font-size:calc(19px*var(--fs-chrome));font-weight:700;line-height:1.1}
+.meter .l{font-size:calc(12px*var(--fs-chrome));color:var(--mut)}
+.meter .t{display:block;font-size:calc(11.5px*var(--fs-chrome));font-style:italic;color:var(--mut);margin-top:3px}
+
+/* Display controls at the right of the header: text size and theme. */
+.tools{display:flex;align-items:center;gap:8px}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink2);padding:6px 10px;
+  font-weight:700;line-height:1;min-width:34px}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button:hover,.themebtn:hover{background:var(--slate-s)}
+.seg button[aria-pressed="true"]{background:var(--blue);color:var(--on-accent)}
+.themebtn{display:flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line);
+  border-radius:9px;background:transparent;color:var(--ink2);font-weight:600}
+:root[data-text="normal"]{--fs:1}
+:root[data-text="larger"]{--fs:1.3}
+
+/* How to use, in three numbered steps, at the top of the check card. */
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 26px;
+  font-size:calc(13.5px*var(--fs));color:var(--ink2)}
+.steps li{display:flex;align-items:center;gap:8px}
+.steps b{display:grid;place-items:center;flex:none;width:1.6em;height:1.6em;border-radius:50%;
+  background:var(--blue-s);border:1px solid var(--blue-b);color:var(--blue);font-size:.85em}
+.steps i{font-style:normal;font-weight:700;color:var(--ink)}
+.steps b .ic{width:1.15em;height:1.15em}
+.kbd{font-size:.8em;color:var(--mut);border:1px solid var(--line);border-radius:5px;
+  padding:1px 6px;margin-left:4px;white-space:nowrap}
+.row .opt-rw{margin-left:auto}
+/* A check scrolls its results into view; this keeps them clear of the
+   sticky header rather than tucked beneath it. */
+#results > .card{scroll-margin-top:110px}
+/* Projector widths (1280-1440): the header has to stay on one line, or the
+   sticky bar doubles in height. The tagline and the theme button's label
+   give way; the theme icon stays, with its tooltip. */
+@media (max-width:1440px){
+  .topbar{gap:16px}
+  .meter .t{display:none}
+  #theme-label{display:none}
+}
+/* Results summary: one sentence, then the colour key with a count on each
+   colour (the four count tiles it replaces repeated the key). */
+.summary{margin:0 0 10px;font-size:calc(14.5px*var(--fs));color:var(--ink2);cursor:help}
+.summary b{color:var(--ink);font-size:1.12em}
+.legend .key b{color:var(--ink);font-size:1.08em;min-width:1ch}
+.legend .key[data-tip]{cursor:help}
+.legend .key.zero{opacity:.55}
+
+/* Hover hints, drawn by the page. The browser's own tooltip (the title
+   attribute) is a plain black box that no page can style; these use the
+   page's surfaces, and a flagged word's hint takes its colour: green for a
+   word with another spelling, red for an invalid one, amber for unknown. */
+.tip{position:fixed;z-index:70;max-width:min(340px, calc(100vw - 16px));
+  padding:9px 13px 10px;border-radius:10px;background:var(--card);color:var(--ink2);
+  border:1px solid var(--line3);font-size:calc(13px*var(--fs));line-height:1.45;
+  box-shadow:0 12px 28px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.30);
+  pointer-events:none;animation:popin .12s ease-out}
+.tip .tk{display:flex;align-items:center;gap:7px;margin-bottom:3px;
+  font-size:calc(11px*var(--fs));font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--mut)}
+.tip .tk::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.tip::after{content:"";position:absolute;left:var(--ax,50%);bottom:-6px;width:10px;height:10px;
+  margin-left:-5px;transform:rotate(45deg);background:var(--card);
+  border-right:1px solid var(--line3);border-bottom:1px solid var(--line3)}
+.tip.below::after{bottom:auto;top:-6px;border:0;
+  border-left:1px solid var(--line3);border-top:1px solid var(--line3)}
+.tip.alt{border-color:var(--green-b)}   .tip.alt .tk{color:var(--green)}
+.tip.err{border-color:var(--red-b)}     .tip.err .tk{color:var(--red)}
+.tip.warn{border-color:var(--amber-b)}  .tip.warn .tk{color:var(--amber)}
+.tip.alt::after{border-color:var(--green-b)}
+.tip.err::after{border-color:var(--red-b)}
+.tip.warn::after{border-color:var(--amber-b)}
 
 /* ---------- layout ---------- */
 .wrap{max-width:1500px;margin:0 auto;padding:20px;
-  display:grid;grid-template-columns:minmax(0,1fr) 470px;gap:20px;align-items:start}
+  display:grid;grid-template-columns:minmax(0,1fr) 500px;gap:20px;align-items:start}
 @media (max-width:1180px){.wrap{grid-template-columns:minmax(0,1fr)}}
 .wrap.solo{grid-template-columns:minmax(0,1fr)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   box-shadow:var(--sh);margin-bottom:20px}
 .card>.hd{display:flex;align-items:flex-start;justify-content:space-between;
   gap:14px;padding:16px 18px 0}
-.card h2{font-size:16px;font-weight:700}
-.card .sub{margin:3px 0 0;font-size:12.5px;color:var(--mut)}
+.card h2{font-size:calc(16px*var(--fs));font-weight:700}
+.card .sub{margin:3px 0 0;font-size:calc(12.5px*var(--fs));color:var(--mut)}
 .card>.bd{padding:14px 18px 18px}
 /* The sidebar rebuilds its body into #detail-body, so its panes are
    GRANDchildren of .card and the direct-child rule above never reached them:
    the tab content sat flush against the card edge while the title, word and
    tabs — which each carry their own padding — were indented 18px. */
 #detail-body .bd{padding:16px 18px 18px}
-#detail-body .bd>h3{font-size:14px;font-weight:700;margin-bottom:3px}
+#detail-body .bd>h3{font-size:calc(14px*var(--fs));font-weight:700;margin-bottom:3px}
 
 /* ---------- controls ---------- */
 /* Trimmed from 10px/16px and body size. These are ordinary controls sitting
    under the editor, not the focus of the screen; the icon is 1em so it comes
    down with the text rather than needing its own rule. */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;
   border:1px solid var(--line);border-radius:8px;background:var(--card);font-weight:600;
-  font-size:13px;color:var(--ink2)}
+  font-size:calc(13px*var(--fs));color:var(--ink2)}
 .btn:hover{background:var(--slate-s)}
 .btn.pri{background:var(--blue-d);border-color:var(--blue-d);color:var(--on-accent)}
 .btn.pri:hover{background:var(--blue)}
-.btn.sm{padding:7px 12px;font-size:12.5px;font-weight:600}
+.btn.sm{padding:7px 12px;font-size:calc(12.5px*var(--fs));font-weight:600}
 .btn:disabled{opacity:.55;cursor:default}
 /* Confirmation states for flashButton(). Colour AND an icon, so the feedback
    does not rely on distinguishing green from red. */
@@ -124,7 +211,7 @@ textarea:hover{border-color:var(--mut2)}
 textarea:focus{outline:none;background:var(--card);border-color:var(--blue);
   box-shadow:0 0 0 3px rgba(37,99,235,.16)}
 textarea::placeholder{color:var(--mut2)}
-.count{font-size:12px;color:var(--mut);text-align:right;margin:7px 2px 12px}
+.count{font-size:calc(12px*var(--fs));color:var(--mut);text-align:right;margin:7px 2px 12px}
 
 /* ---------- marks ---------- */
 mark{border-radius:5px;padding:1px 3px;background:transparent;color:inherit}
@@ -138,12 +225,12 @@ mark.warn{background:var(--amber-s);color:var(--on-amber)}
 mark.alt{background:var(--green-s2);color:var(--on-green);border-bottom:2px dotted var(--green);
   border-radius:4px 4px 0 0;cursor:pointer;padding:1px 4px}
 mark.alt:hover{background:var(--green-s)}
-mark.alt::after{content:"\2194";font-size:9px;vertical-align:super;
+mark.alt::after{content:"\2194";font-size:calc(9px*var(--fs));vertical-align:super;
   margin-left:3px;opacity:.7;font-weight:700}
 mark.skip{background:var(--slate-s);color:var(--mut)}
 mark.rw{background:transparent;color:inherit;border-bottom:2px dashed var(--amber);
   border-radius:0;cursor:pointer}
-.opt-rw{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);
+.opt-rw{display:inline-flex;align-items:center;gap:6px;font-size:calc(13px*var(--fs));color:var(--mut);
   cursor:pointer;min-height:36px}
 /* `sel` marks the word the Word Details panel is currently describing. It
    carries no outline on purpose: the mark already has its own fill, and a
@@ -160,8 +247,9 @@ mark.flash{animation:fl 1.1s ease-out}
    just a dotted underline on hover. */
 .tok{cursor:pointer;border-radius:3px;padding:0 1px}
 .tok:hover{background:var(--blue-s);box-shadow:inset 0 -2px 0 var(--blue-b)}
-.analysis{padding:13px 14px;border:1px solid var(--line);border-radius:var(--r2);
-  background:var(--card2);line-height:2.05;word-break:break-word}
+.analysis{padding:14px 16px;border:1px solid var(--line);border-radius:var(--r2);
+  background:var(--card2);line-height:2;word-break:break-word;
+  font-size:calc(16.5px*var(--fs))}
 
 /* ---------- stats ---------- */
 /* The four counts are context, not the headline — the reader's attention
@@ -169,51 +257,51 @@ mark.flash{animation:fl 1.1s ease-out}
    smaller icon tile, smaller number, tighter padding. */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
 @media (max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
-.stat{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;
+.stat{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;
   border:1px solid var(--line);background:var(--card2)}
-.stat .b{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
-.stat .b .ic{width:14px;height:14px}
-.stat .n{font-size:16px;font-weight:700;line-height:1.1}
-.stat .l{font-size:11.5px;color:var(--mut);line-height:1.25}
+.stat .b{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none}
+.stat .b .ic{width:17px;height:17px}
+.stat .n{font-size:calc(19px*var(--fs));font-weight:700;line-height:1.1}
+.stat .l{font-size:calc(12.5px*var(--fs));color:var(--mut);line-height:1.25}
 /* One short line saying what the count means, so the two kinds of flagged
    word can be told apart without hovering. */
-.stat .s{font-size:10.5px;color:var(--mut2);line-height:1.2;margin-top:1px}
-.stat[title]{cursor:help}
+.stat .s{font-size:calc(11.5px*var(--fs));color:var(--mut2);line-height:1.2;margin-top:1px}
+.stat[data-tip]{cursor:help}
 .b.blue{background:var(--blue-s);color:var(--blue)}
 .b.green{background:var(--green-s);color:var(--green)}
 .b.red{background:var(--red-s);color:var(--red)}
 .b.amber{background:var(--amber-s);color:var(--amber)}
-.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:var(--mut2);
+.legend{display:flex;gap:10px 22px;flex-wrap:wrap;font-size:calc(13px*var(--fs));color:var(--mut2);
   margin-bottom:16px}
 .legend span{display:flex;align-items:center;gap:7px;color:var(--ink2)}
-.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block}
 
 /* ---------- inner panels ---------- */
 .panel{border:1px solid var(--line);border-radius:12px;background:var(--card2);
   padding:14px;margin-top:14px}
-.panel h3{font-size:13.5px;font-weight:700;margin-bottom:4px;display:flex;
+.panel h3{font-size:calc(13.5px*var(--fs));font-weight:700;margin-bottom:4px;display:flex;
   align-items:center;gap:7px}
 /* A quiet note on a panel title. The h3 is already a flex row, so `auto`
    left margin parks it at the right edge on the same line, where it reads
    as guidance about the panel rather than as part of its name. */
-.h3note{margin-left:auto;font-size:11.5px;font-weight:500;color:var(--mut2)}
-.panel .sub{font-size:12px;color:var(--mut);margin:0 0 11px}
+.h3note{margin-left:auto;font-size:calc(11.5px*var(--fs));font-weight:500;color:var(--mut2)}
+.panel .sub{font-size:calc(12px*var(--fs));color:var(--mut);margin:0 0 11px}
 
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;font-size:11.5px;font-weight:600;color:var(--mut);
+table{width:100%;border-collapse:collapse;font-size:calc(13px*var(--fs))}
+th{text-align:left;font-size:calc(11.5px*var(--fs));font-weight:600;color:var(--mut);
   padding:8px 10px;border-bottom:1px solid var(--line)}
 td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:middle}
 tr:last-child td{border-bottom:0}
 .tw{display:flex;align-items:center;gap:8px}
 
 .tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;
-  font-size:11px;font-weight:600;white-space:nowrap}
+  font-size:calc(11px*var(--fs));font-weight:600;white-space:nowrap}
 .tag.err{background:var(--red-s);color:var(--on-red)}
 .tag.warn{background:var(--amber-s);color:var(--on-amber)}
 .tag.ok{background:var(--green-s);color:var(--on-green)}
 .tag.mut{background:var(--slate-s);color:var(--mut)}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:999px;
-  border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:500}
+  border:1px solid var(--line);background:var(--card);font-size:calc(13px*var(--fs));font-weight:500}
 .chip:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-s)}
 /* An alternative spelling, wherever it appears. Same green language as
    mark.alt in the analysed text, so the two read as one idea rather than
@@ -237,7 +325,7 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
    Replaces the native `title` tooltip on a highlighted word. A tooltip can
    only tell; this has to offer — the spelling it names is the thing the
    reader wants to apply, and a tooltip cannot be clicked. */
-.pop{position:absolute;z-index:60;min-width:250px;max-width:330px;
+.pop{position:absolute;z-index:60;min-width:calc(250px*var(--fs));max-width:calc(330px*var(--fs));
   background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
   /* Deeper than the light theme used: a soft shadow is nearly invisible on a
      dark ground, and this menu must clearly float above the text. */
@@ -246,15 +334,15 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 @keyframes popin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .pop .ph{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   padding:9px 12px;background:var(--slate-s);border-bottom:1px solid var(--line)}
-.pop .ph b{font-size:13.5px;color:var(--ink)}
-.pop .ph i{font-style:normal;font-size:11px;letter-spacing:.5px;color:var(--mut);
+.pop .ph b{font-size:calc(13.5px*var(--fs));color:var(--ink)}
+.pop .ph i{font-style:normal;font-size:calc(11px*var(--fs));letter-spacing:.5px;color:var(--mut);
   text-transform:uppercase}
 .pop .opt{display:block;width:100%;text-align:left;border:0;background:none;
   font:inherit;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line2)}
 .pop .opt:hover,.pop .opt:focus-visible{background:var(--green-s);outline:none}
-.pop .opt .v{font-weight:650;font-size:13.5px;color:var(--green)}
+.pop .opt .v{font-weight:650;font-size:calc(13.5px*var(--fs));color:var(--green)}
 .pop .opt .tag{margin-left:6px;vertical-align:1px}
-.pop .opt .g{display:block;color:var(--mut);font-size:12px;margin-top:3px;line-height:1.4}
+.pop .opt .g{display:block;color:var(--mut);font-size:calc(12px*var(--fs));margin-top:3px;line-height:1.4}
 /* Fix menu. Same shape, different colour: green offers an equally valid
    spelling of a correct word, blue proposes a replacement for a wrong one —
    the distinction the whole UI is built on, so the menus must not look alike. */
@@ -263,11 +351,20 @@ tr.active td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
    surface colour, deep enough for white text and therefore too dark
    to read as text itself on this panel. */
 .pop.fix .opt .v{color:var(--blue)}
-.pop .opt .m{float:right;font-weight:700;font-size:12px}
-.pop .opt .rk{display:inline-block;min-width:15px;color:var(--mut2);font-size:11.5px;
+/* Example menu: a choice of texts, neither a correction nor a spelling, so
+   it takes the neutral ink and the blue hover of an ordinary control. */
+.pop.ex{max-width:calc(390px*var(--fs))}
+.pop.ex .opt:hover,.pop.ex .opt:focus-visible{background:var(--blue-s)}
+.pop.ex .opt .v{color:var(--ink)}
+/* The words to point at, coloured as the checked text colours them: a
+   misspelling red, a correct word with another spelling green. */
+.pop.ex .opt .g .ew{color:var(--red);font-weight:650}
+.pop.ex .opt .g .aw{color:var(--green);font-weight:650}
+.pop .opt .m{float:right;font-weight:700;font-size:calc(12px*var(--fs))}
+.pop .opt .rk{display:inline-block;min-width:15px;color:var(--mut2);font-size:calc(11.5px*var(--fs));
   font-weight:600;margin-right:5px}
 .pop .pf{display:flex;gap:8px;padding:8px 12px;background:var(--slate-s)}
-.pop .pf .btn{padding:5px 10px;font-size:12px}
+.pop .pf .btn{padding:5px 10px;font-size:calc(12px*var(--fs))}
 /* The caret sits on the popover edge, so its two visible sides are borrowed
    from whichever face it points away from. */
 .pop .arw{position:absolute;width:10px;height:10px;transform:rotate(45deg);
@@ -284,69 +381,69 @@ mark[aria-expanded="true"]{box-shadow:0 0 0 2px var(--green-b)}
 
 /* ---------- sidebar ---------- */
 .side{position:sticky;top:20px}
-.pager{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.pager{display:flex;align-items:center;gap:8px;font-size:calc(12px*var(--fs));color:var(--mut)}
 .pager button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;
   background:var(--card);display:grid;place-items:center}
 .pager button:disabled{opacity:.4;cursor:default}
 .wordhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   padding:14px 18px 0}
-.wordhead .w{font-size:27px;font-weight:700;letter-spacing:-.02em}
+.wordhead .w{font-size:calc(27px*var(--fs));font-weight:700;letter-spacing:-.02em}
 .speak{width:38px;height:38px;border-radius:10px;border:0;background:var(--blue-s);
   color:var(--blue);display:grid;place-items:center;margin-left:auto}
 .speak:hover{background:var(--blue-b)}
 .tabs{display:flex;gap:2px;padding:12px 18px 0;border-bottom:1px solid var(--line)}
 .tabs button{padding:10px 15px;border:0;background:transparent;font-weight:600;
-  font-size:13px;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+  font-size:calc(13px*var(--fs));color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue);
   background:var(--blue-s);border-radius:9px 9px 0 0}
 .sug{display:flex;align-items:center;gap:12px;padding:12px 13px;border:1px solid var(--line);
   border-radius:11px;margin-bottom:9px;background:var(--card);width:100%;text-align:left}
 .sug:hover{border-color:var(--blue);background:var(--blue-s)}
 .sug .rk{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
-  font-size:12px;font-weight:700;background:var(--slate-s);color:var(--mut);flex:none}
+  font-size:calc(12px*var(--fs));font-weight:700;background:var(--slate-s);color:var(--mut);flex:none}
 .sug.top .rk{background:var(--green);color:var(--on-accent)}
-.sug .w{font-weight:700;font-size:15px}
+.sug .w{font-weight:700;font-size:calc(15px*var(--fs))}
 .sug .body{flex:1;min-width:0}
 /* The gloss is the field a reader actually decides on — `dang` and `danda`
    are equally plausible strings, and only the meaning separates them. It was
    set in --mut (#64748b) at 11.5px, which read as incidental metadata next to
    the bold headword. Darker and a size up, so it carries its own weight. */
-.sug .gl{display:block;font-size:12.5px;color:var(--ink2);margin-top:3px;
+.sug .gl{display:block;font-size:calc(12.5px*var(--fs));color:var(--ink2);margin-top:3px;
   line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Absence stays quiet: it is a statement about the lexicon, not a definition. */
-.sug .gl.none{color:var(--mut2);font-style:italic;font-size:11.5px}
+.sug .gl.none{color:var(--mut2);font-style:italic;font-size:calc(11.5px*var(--fs))}
 .altrow .acts{margin-left:auto;display:flex;gap:6px;flex:none}
 .sug .m{margin-left:auto;text-align:right;line-height:1.2;flex:none;padding-left:8px}
-.sug .m b{font-size:14px}
-.sug .m i{display:block;font-style:normal;font-size:11.5px;color:var(--mut)}
+.sug .m b{font-size:calc(14px*var(--fs))}
+.sug .m i{display:block;font-style:normal;font-size:calc(11.5px*var(--fs));color:var(--mut)}
 .bar{display:inline-block;width:54px;height:6px;border-radius:3px;
-     background:rgba(255,255,255,.14);overflow:hidden;vertical-align:middle}
+     background:color-mix(in srgb, var(--ink) 16%, transparent);overflow:hidden;vertical-align:middle}
 .bar i{display:block;height:100%;border-radius:3px;background:currentColor}
 .sug .m .bar{width:64px;height:7px}
 .nobar{color:var(--mut2)}
 .note{background:var(--blue-s);border:1px solid var(--blue-b);border-radius:11px;
-  padding:13px;font-size:12.5px;color:var(--ink2);line-height:1.6}
-.note .nh{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:13px;font-weight:700}
-.empty{padding:34px 18px;text-align:center;color:var(--mut);font-size:13px}
+  padding:13px;font-size:calc(12.5px*var(--fs));color:var(--ink2);line-height:1.6}
+.note .nh{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:calc(13px*var(--fs));font-weight:700}
+.empty{padding:34px 18px;text-align:center;color:var(--mut);font-size:calc(13px*var(--fs))}
 .hint{cursor:help;color:var(--mut2)}
 
 /* "Why these corrections" — one block per candidate. */
-.ipa{margin:2px 0 8px;font-size:15px;color:var(--blue-d);
+.ipa{margin:2px 0 8px;font-size:calc(15px*var(--fs));color:var(--blue-d);
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .why{border:1px solid var(--line);border-radius:10px;padding:10px 12px;
   margin-bottom:8px;background:var(--card)}
-.why .w{font-weight:700;font-size:14px}
-.why .d{float:right;font-size:11.5px;color:var(--mut)}
+.why .w{font-weight:700;font-size:calc(14px*var(--fs))}
+.why .d{float:right;font-size:calc(11.5px*var(--fs));color:var(--mut)}
 .why .ops{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
 /* The edit operations now sit inside the suggestion row, under its gloss. */
 .sug .ops{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
-.why .gl{margin-top:5px;font-size:12px;color:var(--ink2)}
-.op{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+.why .gl{margin-top:5px;font-size:calc(12px*var(--fs));color:var(--ink2)}
+.op{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(11.5px*var(--fs));
   background:var(--slate-s);color:var(--ink2);padding:2px 7px;border-radius:6px}
-.opk{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+.opk{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(11.5px*var(--fs));
   background:var(--green-s);color:var(--on-green);padding:2px 7px;border-radius:6px;
   font-weight:700}
-dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:13px}
+dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:calc(13px*var(--fs))}
 dl.kv dt{color:var(--mut)}
 dl.kv dd{margin:0;font-weight:600}
 
@@ -360,35 +457,35 @@ dl.kv dd{margin:0;font-weight:600}
 /* Senses of the headword. Each is its own item with a thin separator, so a
    three-sense entry reads as three meanings rather than one long sentence. */
 .senses{display:flex;flex-wrap:wrap;align-items:baseline;gap:0;
-  font-size:13.5px;line-height:1.5;color:var(--ink)}
+  font-size:calc(13.5px*var(--fs));line-height:1.5;color:var(--ink)}
 .senses .sn{display:inline-flex;align-items:baseline;gap:5px}
 .senses .sn + .sn::before{content:"·";color:var(--mut2);margin:0 8px;font-weight:700}
 /* A part-of-speech lifted out of the sense text ("Adverb: in good condition"). */
-.senses .sn i{font-style:normal;font-size:10.5px;letter-spacing:.4px;
+.senses .sn i{font-style:normal;font-size:calc(10.5px*var(--fs));letter-spacing:.4px;
   text-transform:uppercase;color:var(--mut2);transform:translateY(-1px)}
 /* The dictionary's imitative — "[Imit. ab-cd.]", its word-collocation —
    on a labelled line of its own instead of as bracketed text in a sense. */
 .wp-imit{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 8px;
-  font-size:13.5px;line-height:1.5}
-.wp-imit .lbl{font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;
+  font-size:calc(13.5px*var(--fs));line-height:1.5}
+.wp-imit .lbl{font-size:calc(10.5px*var(--fs));letter-spacing:.4px;text-transform:uppercase;
   color:var(--mut2);cursor:help}
 .wp-imit .pair{font-style:italic;color:var(--ink)}
 .wp-imit .pair + .pair::before{content:"·";font-style:normal;color:var(--mut2);margin:0 8px}
 .imit-inline{color:var(--mut)}
-.imit-inline i{font-style:normal;font-size:10px;letter-spacing:.4px;
+.imit-inline i{font-style:normal;font-size:calc(10px*var(--fs));letter-spacing:.4px;
   text-transform:uppercase;color:var(--mut2);margin:0 3px 0 4px}
 /* Grammar line: word class, noun-class article, gender. The class was set as
    muted body text, which read as an afterthought rather than a label. */
 .wp-gram{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px}
 .wp-gram .tag.pos{background:var(--blue-s);color:var(--blue);
   border:1px solid var(--blue-b);font-weight:700;letter-spacing:.2px}
-.wp-gram .ga{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+.wp-gram .ga{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(12px*var(--fs));
   background:var(--slate-s);border:1px solid var(--line);border-radius:5px;
   padding:1px 7px;color:var(--ink2);font-weight:600}
-.wp-gram .gg{font-size:11.5px;color:var(--mut)}
+.wp-gram .gg{font-size:calc(11.5px*var(--fs));color:var(--mut)}
 .wp-sec{border-top:1px solid var(--line2);margin-top:18px;padding-top:13px}
-.wp-sec h4{margin:0 0 9px;font-size:10.5px;font-weight:700;letter-spacing:.9px;
-  text-transform:uppercase;color:var(--mut2)}
+.wp-sec h4{margin:0 0 9px;font-size:calc(11.5px*var(--fs));font-weight:700;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--mut)}
 /* Collapsible sections. <details>/<summary> rather than a JS toggle: it is
    keyboard-operable and screen-reader-announced without any work, and the
    open state is a real DOM property we can read back. The default marker is
@@ -404,35 +501,35 @@ dl.kv dd{margin:0;font-weight:600}
   transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s ease}
 .wp-sec[open] > summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
 .wp-sec > summary + *{margin-top:9px}
-.wp-sec > p{margin:0 0 8px;font-size:13px;color:var(--ink2);line-height:1.55}
+.wp-sec > p{margin:0 0 8px;font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.55}
 .wp-sec > p:last-child{margin-bottom:0}
 /* A verdict line: the state chip and its explanation on one row, aligned to
    the chip rather than wrapping under it. */
 .wp-state{display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;
-  font-size:13px;color:var(--ink2);line-height:1.5}
+  font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.5}
 .wp-state .tag{flex:none;margin-top:1px}
 .wp-morph{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
 /* Derivational chain: the word assembled one affix at a time. */
 .wp-chain{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
-.wp-chain .arrow{color:var(--mut2);font-size:12px}
+.wp-chain .arrow{color:var(--mut2);font-size:calc(12px*var(--fs))}
 .wp-chain .step-root{border-color:var(--green-b);color:var(--on-green)}
 /* One row per affix: the form, what it does, and what it attaches to. */
 .wp-affix{display:grid;gap:5px;margin:0 0 11px}
 .wp-affix .af{display:flex;align-items:baseline;gap:9px}
 .wp-affix .af .tag{flex:none;min-width:62px;text-align:center}
-.wp-affix .afl{font-size:12.5px;color:var(--ink2);font-weight:600}
-.wp-affix .afa{font-size:11.5px;color:var(--mut)}
-code{background:var(--slate-s);padding:1px 6px;border-radius:5px;font-size:12px}
+.wp-affix .afl{font-size:calc(12.5px*var(--fs));color:var(--ink2);font-weight:600}
+.wp-affix .afa{font-size:calc(11.5px*var(--fs));color:var(--mut)}
+code{background:var(--slate-s);padding:1px 6px;border-radius:5px;font-size:calc(12px*var(--fs))}
 
 .spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:var(--on-accent);
   border-radius:50%;display:inline-block;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-.prose{font-size:13.5px;line-height:1.75;color:var(--ink2);max-width:74ch}
-.prose h3{font-size:14.5px;margin:18px 0 6px;color:var(--ink)}
+.prose{font-size:calc(13.5px*var(--fs));line-height:1.75;color:var(--ink2);max-width:74ch}
+.prose h3{font-size:calc(14.5px*var(--fs));margin:18px 0 6px;color:var(--ink)}
 .prose ul{margin:6px 0;padding-left:20px}
 .prose p{margin:8px 0}
 footer{max-width:1500px;margin:0 auto;padding:16px 22px 30px;display:flex;gap:16px;
-  flex-wrap:wrap;justify-content:space-between;font-size:12px;color:var(--mut)}
+  flex-wrap:wrap;justify-content:space-between;font-size:calc(12px*var(--fs));color:var(--mut)}
 
 /* ===================================================================
    Accessibility, responsiveness and device support
@@ -472,11 +569,11 @@ textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
    type rather than viewport width, so a touchscreen laptop gets it too and a
    narrow desktop window does not. */
 @media (pointer:coarse){
-  .btn{padding:11px 16px;font-size:14px}
-  .btn.sm{padding:10px 14px;font-size:13.5px}
+  .btn{padding:11px 16px;font-size:calc(14px*var(--fs))}
+  .btn.sm{padding:10px 14px;font-size:calc(13.5px*var(--fs))}
   .pager button{min-width:44px;min-height:44px;display:grid;place-items:center}
   .tok{padding:2px 2px}
-  textarea{min-height:140px;font-size:16px}   /* 16px stops iOS zooming on focus */
+  textarea{min-height:140px;font-size:calc(16px*var(--fs))}   /* 16px stops iOS zooming on focus */
 }
 
 /* Motion.
@@ -507,6 +604,22 @@ textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
   .row .btn{flex:1 1 auto;justify-content:center}
 }
 
+/* Phones, with the restored nav and the display controls. A sticky header of
+   brand, nav, count and controls was 288px on a 390px-wide phone, a third of
+   the screen, so on a phone it scrolls away; the nav keeps one row of three
+   equal buttons; the count and the controls share a line. The projector text
+   scale is not wanted on a phone unless someone picks it. */
+@media (max-width:640px){
+  :root:not([data-text]){--fs:1}
+  .topbar{position:static}
+  .brand p{display:none}
+  .nav{order:3;width:100%;margin:0}
+  .nav button{flex:1 1 0;justify-content:center;padding:8px 6px}
+  .nav button .ic{display:none}
+  .meter{width:auto;border-top:0;padding-top:0}
+  .tools{margin-left:auto}
+}
+
 /* Nothing may scroll the page sideways — a long unbroken Khasi compound in a
    suggestion row would otherwise widen the whole document on a phone. */
 body{overflow-x:hidden}
@@ -519,7 +632,7 @@ body{overflow-x:hidden}
    takes #0E4A4F, the value the brand note at the top of this file already
    specifies for a light surface. Ratios are checked, not eyeballed. */
 @media (prefers-color-scheme:light){
-  :root{
+  :root:not([data-theme="dark"]){
     --bg:#f4f7fb; --card:#ffffff; --card2:#f1f5fa; --field:#fbfcfe;
     --line:#d7dfeb; --line2:#e6ecf5; --line3:#c2cee0;
     --ink:#0f1a2b; --ink2:#22314a; --mut:#4f5f78; --mut2:#637187;
@@ -533,6 +646,23 @@ body{overflow-x:hidden}
     --lg-ring:#0E4A4F;
     --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
   }
+}
+/* The header's theme switch sets data-theme on <html>, overriding the
+   system setting either way: a projector in a lit room may need the light
+   theme whatever the laptop is set to. */
+:root[data-theme="light"]{
+    --bg:#f4f7fb; --card:#ffffff; --card2:#f1f5fa; --field:#fbfcfe;
+    --line:#d7dfeb; --line2:#e6ecf5; --line3:#c2cee0;
+    --ink:#0f1a2b; --ink2:#22314a; --mut:#4f5f78; --mut2:#637187;
+    --on-accent:#ffffff;
+    --blue:#1d4ed8; --blue-d:#1d4ed8; --blue-s:#e7eeff; --blue-b:#b4c8f3;
+    --green:#15803d; --green-s:#e4f6ec; --green-s2:#daf1e4; --green-b:#93cfae;
+    --on-green:#0d5b34;
+    --red:#c81e1e; --red-s:#fce9e9; --red-b:#f0b0b0; --on-red:#8d1717;
+    --amber:#a45606; --amber-s:#fcf2df; --amber-b:#e4c489; --on-amber:#6f4305;
+    --slate-s:#edf1f8;
+    --lg-ring:#0E4A4F;
+    --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
 }
 
 /* ===================================================================
@@ -635,16 +765,27 @@ body{
 /* Light theme corrections for the refresh: the white highlights above are
    drawn for a dark surface and read as haze on a light one. */
 @media (prefers-color-scheme:light){
-  body{background-image:
+  :root:not([data-theme="dark"]) body{background-image:
     radial-gradient(900px 500px at 18% -8%, rgba(29,78,216,.07), transparent 60%),
     radial-gradient(760px 460px at 96% 4%,  rgba(21,128,61,.05), transparent 62%)}
-  .topbar{box-shadow:0 1px 0 rgba(16,24,40,.06), 0 6px 20px -14px rgba(16,24,40,.28)}
-  .card{box-shadow:0 1px 2px rgba(16,24,40,.05), 0 12px 26px -20px rgba(16,24,40,.35)}
-  .card::before{background:linear-gradient(90deg, transparent,
+  :root:not([data-theme="dark"]) .topbar{box-shadow:0 1px 0 rgba(16,24,40,.06), 0 6px 20px -14px rgba(16,24,40,.28)}
+  :root:not([data-theme="dark"]) .card{box-shadow:0 1px 2px rgba(16,24,40,.05), 0 12px 26px -20px rgba(16,24,40,.35)}
+  :root:not([data-theme="dark"]) .card::before{background:linear-gradient(90deg, transparent,
     rgba(16,24,40,.06) 22%, rgba(16,24,40,.06) 78%, transparent)}
-  textarea{box-shadow:inset 0 1px 2px rgba(16,24,40,.06)}
-  .brand svg{filter:none}
+  :root:not([data-theme="dark"]) textarea{box-shadow:inset 0 1px 2px rgba(16,24,40,.06)}
+  :root:not([data-theme="dark"]) .brand svg{filter:none}
+  :root:not([data-theme="dark"]) .tip{box-shadow:0 10px 24px rgba(16,24,40,.18), 0 2px 6px rgba(16,24,40,.10)}
 }
+:root[data-theme="light"] body{background-image:
+  radial-gradient(900px 500px at 18% -8%, rgba(29,78,216,.07), transparent 60%),
+  radial-gradient(760px 460px at 96% 4%,  rgba(21,128,61,.05), transparent 62%)}
+:root[data-theme="light"] .topbar{box-shadow:0 1px 0 rgba(16,24,40,.06), 0 6px 20px -14px rgba(16,24,40,.28)}
+:root[data-theme="light"] .card{box-shadow:0 1px 2px rgba(16,24,40,.05), 0 12px 26px -20px rgba(16,24,40,.35)}
+:root[data-theme="light"] .card::before{background:linear-gradient(90deg, transparent,
+  rgba(16,24,40,.06) 22%, rgba(16,24,40,.06) 78%, transparent)}
+:root[data-theme="light"] textarea{box-shadow:inset 0 1px 2px rgba(16,24,40,.06)}
+:root[data-theme="light"] .brand svg{filter:none}
+:root[data-theme="light"] .tip{box-shadow:0 10px 24px rgba(16,24,40,.18), 0 2px 6px rgba(16,24,40,.10)}
 </style>
 
 <header class="topbar">
@@ -671,9 +812,21 @@ body{
       <p>Morphology-Gated &middot; Powered by Khasi Language Resources</p>
     </div>
   </div>
-  <!-- Section nav removed on request. The Learn and About views are still in
-       the page and still reachable by their routes (#!learn, #!about); only
-       the buttons are gone, so restoring them is putting this block back. -->
+  <!-- Section nav. It had been removed on request; it is back (2 October
+       2026) because on a projector nobody can type #!learn, and the two
+       explanatory pages were otherwise unreachable. showView() already keeps
+       aria-selected in step with the view, by these ids. -->
+  <nav class="nav" aria-label="Sections">
+    <button id="nav-check" onclick="showView('check')" aria-selected="true">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12 5 5L20 6"/></svg>
+      Check text</button>
+    <button id="nav-about" onclick="showView('about')" aria-selected="false">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>
+      How it works</button>
+    <button id="nav-learn" onclick="showView('learn')" aria-selected="false">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7M8 11h5"/></svg>
+      Khasi rules</button>
+  </nav>
   <div class="meter">
     <div>
       <!-- The icon belongs on the number's line. Left as a sibling of the
@@ -687,9 +840,25 @@ body{
       <!-- "Khasi word forms" read as grammar jargon. This is the number of
            different words the checker knows, and corrections come only from
            them: dictionary words plus the frequent corpus words. -->
-      <div class="l" title="The number of different Khasi words the checker knows: the words in the dictionary plus common words from Khasi newspaper text. Corrections are always chosen from these." style="cursor:help">Known Khasi words</div>
+      <div class="l" data-tip="The number of different Khasi words the checker knows: the words in the dictionary plus common words from Khasi newspaper text. Corrections are always chosen from these." style="cursor:help">Known Khasi words</div>
       <span class="t">Preserving Khasi, Empowering Meghalaya</span>
     </div>
+  </div>
+  <!-- Display controls for a projector: text size and theme, remembered on
+       this computer. The early script at the top of the page applies the
+       saved choice before the first paint, so nothing jumps on load. -->
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Text size">
+      <button data-size="normal" onclick="setTextSize('normal')" aria-label="Normal text size" data-tip="Normal text"
+              aria-pressed="false"><span style="font-size:.78em">A</span></button>
+      <button data-size="large" onclick="setTextSize('large')" aria-label="Large text size" data-tip="Large text (default)"
+              aria-pressed="true">A</button>
+      <button data-size="larger" onclick="setTextSize('larger')" aria-label="Larger text size" data-tip="Larger text, for a big room"
+              aria-pressed="false"><span style="font-size:1.25em">A</span></button>
+    </div>
+    <button class="themebtn" id="theme-btn" onclick="toggleTheme()" aria-label="Switch theme" data-tip="Switch between the light and dark theme">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <span id="theme-label">Light</span></button>
   </div>
 </header>
 
@@ -704,27 +873,33 @@ body{
       <!-- Heading removed on request. The sub-line stays and now carries the
            card on its own; `.hd` keeps its padding so the text does not sit
            flush against the card edge. -->
+      <!-- Still no heading (removed on request). One hint only: the Check
+           Text and click-a-word steps were dropped on request (2 October
+           2026); the first, how to start, stays. -->
       <div class="hd">
-        <div>
-          <p class="sub" style="margin-top:0">Type or paste your Khasi text below to check spelling, get suggestions, and see linguistic analysis.</p>
-        </div>
+        <ul class="steps" aria-label="How to start">
+          <li><b><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></b><span>Type or paste Khasi text, or press <i>Try Example</i></span></li>
+        </ul>
       </div>
       <div class="bd">
         <textarea id="text" spellcheck="false" oninput="updateCount()"
           placeholder="katba u bynriew u dang iaid hok&hellip;"></textarea>
         <div class="count" id="count">0 characters &middot; 0 words</div>
         <div class="row">
+          <!-- In the order they are used: check, or try the example first; clear
+               to start again. The word-choice switch is a setting, not an
+               action, so it sits apart at the end of the row. -->
           <button class="btn pri" id="btn-check" onclick="checkText()">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12 5 5L20 6"/></svg>
             Check Text</button>
+          <button class="btn" onclick="openExampleMenu(this)" aria-haspopup="menu" aria-expanded="false">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            Try Example</button>
           <button class="btn" onclick="clearAll()">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
             Clear</button>
-          <label class="opt-rw" title="Also look for real Khasi words that look wrong for their neighbours. Contextual guesses, underlined with a dashed line and never applied for you.">
-            <input type="checkbox" id="opt-rw" checked> Check word choice</label>
-          <button class="btn" onclick="loadExample()">
-            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-            Try Example</button>
+          <label class="opt-rw" data-tip="Also look for real Khasi words that look wrong for their neighbours. Contextual guesses, underlined with a dashed line and never applied for you.">
+            <input type="checkbox" id="opt-rw" checked> Also check word choice</label>
         </div>
       </div>
     </div>
@@ -822,7 +997,7 @@ function splitImit(g){
 }
 function glossHtml(g){
   const {text, imits} = splitImit(g);
-  return esc(text) + imits.map(c => '<span class="imit-inline" title="' + esc(IMIT_TIP)
+  return esc(text) + imits.map(c => '<span class="imit-inline" data-tip="' + esc(IMIT_TIP)
     + '"><i>imitative</i>' + esc(c) + '</span>').join("");
 }
 function glossPlain(g){
@@ -895,9 +1070,9 @@ function matchPct(dist, i){
 /* The tooltip carries the actual distance, in edits, as the About page
    promises: the bar alone could not say how far a candidate really is. */
 const pctBar = (p, dist) => p === null
-  ? '<span class="nobar" title="no ranked distance">&mdash;</span>'
+  ? '<span class="nobar" data-tip="no ranked distance">&mdash;</span>'
   : '<span class="bar" role="img" aria-label="match strength"'
-    + ' title="' + (typeof dist === "number"
+    + ' data-tip="' + (typeof dist === "number"
         ? "distance " + dist.toFixed(2) + " edits · " : "")
     + 'match strength: a view of the ranking, not a probability">'
     + '<i style="width:' + p + '%"></i></span>';
@@ -973,10 +1148,61 @@ function updateCount(){
   const w = (t.match(wordRe()) || []).length;
   $("count").textContent = t.length + " characters · " + w + " words";
 }
-function loadExample(){
-  $("text").value = "katba u bynriew u dand iaid hok, im hok katkum ka ain u Blei, "
-    + "u suk-u-sain, u roi-u-par bad u man-bha man-miay";
+/* Example texts for Try Example, each built to show different kinds of
+   error. `errors` and `alts` name the words to point at in a demonstration —
+   the misspelled ones, and the correct ones with another spelling — and the
+   menu lists them under each title, in the colours the checked text gives
+   them. The first is the original example, which #!example still loads. */
+const EXAMPLES = [
+  {title: "Errors and other spellings, mixed",
+   errors: ["dand", "man-miay"], alts: ["iaid", "ain", "suk-u-sain"],
+   text: "katba u bynriew u dand iaid hok, im hok katkum ka ain u Blei, "
+       + "u suk-u-sain, u roi-u-par bad u man-bha man-miay"},
+  {title: "Missing, extra and impossible letters",
+   errors: ["hduh", "saamla", "jingdfstad", "pr", "shonskul"], alts: [],
+   text: "khynnah rit to shonskul bha. hduh ba phin da saamla; jingang jingdfstad "
+       + "to niewkor,kaba phi dang don pr."},
+  {title: "Swapped letters and a missing g",
+   errors: ["pynmhi", "lynkha"], alts: [],
+   text: "U nongrep u la leit sha iew dang step ban die \u00efa u soh bad ki jhur "
+       + "kiba u la pynmhi na ka lynkha."},
+  {title: "Scrambled, doubled and missing letters",
+   errors: ["shongn", "pynllong", "thw"], alts: ["jingialang"],
+   text: "Ka shongn ka pynllong ka jingialang paidbah ban \u00efakren shaphang ka "
+       + "jingroi jong ka shnong ka thw."},
+  {title: "A longer passage, many kinds of error",
+   errors: ["snig", "nongihkai", "skil", "paibah", "pynkkhreh", "\u00efiatreilang"], alts: [],
+   text: "Mynta ka snig ki nongihkai jong ka skil ki la leit sha Shillong ban iaid "
+       + "paibah bad ban pynkkhreh ia ka jingialang, hynrei u nongpyniaid u la ong "
+       + "ba ki dei ban niew bha ia ki jingtip bad ban \u00efiatreilang bad ki samla "
+       + "na ki shong bapherbapher."},
+];
+function loadExample(i){
+  const ex = EXAMPLES[i || 0] || EXAMPLES[0];
+  $("text").value = ex.text;
   updateCount(); checkText();
+}
+/* Try Example opens a menu of the examples rather than loading one, so a
+   demonstration can go straight to the kind of error it wants to show. Same
+   pop-up as a word's suggestions, so it behaves the same way: arrow keys,
+   Escape, a click outside closes it. */
+function openExampleMenu(anchor){
+  const same = popAnchor === anchor;
+  closePop();
+  if (same) return;
+  const words = (list, cls) => list.map(w => '<span class="' + cls + '">' + esc(w) + '</span>');
+  const note = ex => words(ex.errors, "ew").join(" &middot; ")
+    + (ex.alts.length
+        ? (ex.errors.length ? " &middot; " : "")
+          + (ex.alts.length === 1 ? "another spelling for " : "other spellings for ")
+          + words(ex.alts, "aw").join(", ")
+        : "");
+  const opts = EXAMPLES.map((ex, i) =>
+      '<button class="opt" role="menuitem" onclick="closePop();loadExample(' + i + ')">'
+    + '<span class="v"><span class="rk">' + (i + 1) + '</span>' + esc(ex.title) + '</span>'
+    + '<span class="g">' + note(ex) + '</span></button>').join("");
+  showPop(anchor, "ex", '<div class="ph"><b>Try an example</b><i>'
+    + EXAMPLES.length + ' texts</i></div>' + opts);
 }
 function clearAll(){
   ignoredVariants.clear(); settledOffers.clear();
@@ -1015,6 +1241,12 @@ async function checkText(){
     // text to be checked, not for a word to be explained.
     detailsOpen = false;
     renderResults(res); renderDetail();
+    // On a projector the results land below the fold, so the audience sees
+    // nothing happen. Bring the summary up — only when it starts low on the
+    // screen, so a tall display does not jump.
+    const card = $("results").firstElementChild;
+    if (card && card.getBoundingClientRect().top > innerHeight * 0.55)
+      card.scrollIntoView({behavior: "smooth", block: "start"});
     const n = res.corrections.length, v = (res.variants || []).filter(isLive).length;
     const rwn = res.realword.length;
     announce(
@@ -1079,7 +1311,7 @@ function inspectable(chunk){
   let m;
   while ((m = re.exec(chunk)) !== null){
     out += esc(chunk.slice(last, m.index));
-    out += '<span class="tok" title="Show why this word was accepted"'
+    out += '<span class="tok" data-tip="Show why this word was accepted"'
          + ' onclick="inspectWord(' + jsq(m[0]) + ')">' + esc(m[0]) + '</span>';
     last = m.index + m[0].length;
   }
@@ -1119,12 +1351,16 @@ function markup(res, selectable){
            + ' onclick="event.stopPropagation();openFixMenu(' + s.idx + ', this)"'
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openFixMenu(' + s.idx + ', this)}"'
-           + ' title="' + (isEnglish(c) ? FLAG.english + " — not a Khasi word"
-                          : isInvalid(c.gate) ? FLAG.invalid + " — not possible in Khasi"
-                          : isJoin(c) ? FLAG.join + " — join it to the next word"
-                                      : FLAG.unknown + " — not in the dictionary")
-           + (c.suggestion ? ' — suggested: ' + esc(c.suggestion) : "")
-           + ' — click to choose"';
+           // The hover hint: what kind of word this is, as a heading, then
+           // what it means and what clicking does.
+           + ' data-tip-head="' + (isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
+                                  : isJoin(c) ? FLAG.join : FLAG.unknown) + '"'
+           + ' data-tip="' + (isEnglish(c) ? "Not a Khasi word."
+                          : isInvalid(c.gate) ? "Not possible in Khasi."
+                          : isJoin(c) ? "Join it to the next word."
+                                      : "Not in the dictionary.")
+           + (c.suggestion ? ' Suggested: ' + esc(c.suggestion) + '.' : "")
+           + ' Click for suggestions."';
     } else if (s.vidx !== undefined) {
       const alts = liveOptions(res.variants[s.vidx]).map(x => x.variant);
       // The native tooltip is replaced by a real menu — see openVariantMenu.
@@ -1135,7 +1371,8 @@ function markup(res, selectable){
            + ' onclick="event.stopPropagation();openVariantMenu(' + s.vidx + ', this)"'
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openVariantMenu(' + s.vidx + ', this)}"'
-           + ' title="Also written: ' + esc(alts.join(", ")) + ' — click to choose"';
+           + ' data-tip-head="Correct · another spelling"'
+           + ' data-tip="Also written ' + esc(alts.join(", ")) + '. Click to choose."';
     } else if (s.ridx !== undefined) {
       const f = res.realword[s.ridx];
       attr = ' id="rw' + s.ridx + '" tabindex="0" role="button"'
@@ -1143,7 +1380,8 @@ function markup(res, selectable){
            + ' onclick="event.stopPropagation();openWordChoiceMenu(' + s.ridx + ', this)"'
            + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){'
            + 'event.preventDefault();openWordChoiceMenu(' + s.ridx + ', this)}"'
-           + ' title="' + esc(FLAG.realword + " — perhaps " + f.suggestion + "? Click to choose") + '"';
+           + ' data-tip-head="' + esc(FLAG.realword) + '"'
+           + ' data-tip="' + esc("Perhaps " + f.suggestion + "? Click to choose.") + '"';
     }
     html += '<mark class="' + classOf(s.kind) + sel + '"' + attr + '>'
           + esc(res.text.slice(s.start, s.end)) + '</mark>';
@@ -1207,16 +1445,16 @@ function renderResults(res){
   // A join covers two tokens of the count; a word-choice flag is a real word.
   const valid = Math.max(0, total - errs - unk - 2 * joins);
 
-  const stat = (n, l, cls, svg, sub, tip) => '<div class="stat" title="' + esc(tip) + '">'
-    + '<div class="b ' + cls + '">' + svg
-    + '</div><div><div class="n">' + n + '</div><div class="l">' + l + '</div>'
-    + '<div class="s">' + sub + '</div></div></div>';
-  const S = {
-    doc:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
-    ok:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
-    bang:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16h.01"/></svg>',
-    q:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.7-.7 1.3M12 16h.01"/></svg>'
-  };
+  // One key entry per colour in the text, with its count. The four count
+  // tiles that stood above the key are gone (2 October 2026): they repeated
+  // the categories the key already names, and on a projector they pushed the
+  // analysed text below the fold. The counts live here now, next to the
+  // colour they count; the hint on each entry says what the colour means.
+  const key = (n, swatch, label, tip) =>
+    '<span class="key' + (n ? '' : ' zero') + '"' + (tip ? ' data-tip="' + esc(tip) + '"' : '') + '>'
+    + '<i class="sw" style="' + swatch + '"></i><b>' + n + '</b>' + label + '</span>';
+  const alts = (res.variants || []).filter(isLive).length;
+  const held = (res.skipped || []).length;
 
   // Names and acronyms withheld from checking, one chip per word.
   const skipped = (res.skipped || []).length
@@ -1225,7 +1463,7 @@ function renderResults(res){
       + 'About one running-text token in seven is withheld this way.</p><div class="chips">'
       + uniqueSkipped(res.skipped).map(s => '<span class="chip">' + esc(s.word)
         + ' <span class="tag mut">' + esc(s.reason) + '</span>'
-        + (s.n > 1 ? ' <span class="tag mut" title="withheld ' + s.n
+        + (s.n > 1 ? ' <span class="tag mut" data-tip="withheld ' + s.n
                      + ' times in this text">&times;' + s.n + '</span>' : '')
         + '</span>').join("")
       + '</div></div>'
@@ -1233,30 +1471,23 @@ function renderResults(res){
 
   $("results").innerHTML =
     '<div class="card"><div class="hd"><h2>Results Summary</h2>'
-  + '<span style="font-size:12px;color:var(--mut)">Analysis completed in '
+  + '<span style="font-size:calc(12px*var(--fs));color:var(--mut)">Analysis completed in '
   + (res._ms/1000).toFixed(2) + ' seconds</span></div><div class="bd">'
-  + '<div class="stats">'
-  + stat(total,"Total Words","blue",S.doc,"in your text","Every word in your text.")
-  + stat(valid,"Valid Words","green",S.ok,"no problem found",
-         "Nothing to report. Most are in the dictionary, built from a known word, "
-       + "or common in Khasi text. Names and acronyms are not checked and are counted here too.")
-  + stat(errs,"Invalid Spelling","red",S.bang,"not possible in Khasi",FLAG.invalidWhy)
-  + stat(unk,"Unknown Words","amber",S.q,"not in the dictionary",FLAG.unknownWhy)
-  + '</div>'
+  + '<p class="summary" data-tip="Nothing to report for these words. Most are in the dictionary, '
+  + 'built from a known word, or common in Khasi text. Names and acronyms are not checked and '
+  + 'are counted here too."><b>' + total + '</b> ' + (total === 1 ? 'word' : 'words')
+  + ' checked &middot; <b>' + valid + '</b> with no problem found</p>'
   + '<div class="legend">'
-  + '<span title="' + esc(FLAG.invalidWhy) + '"><i class="sw" style="background:var(--red-b)"></i>'
-  + 'Invalid spelling &mdash; not possible in Khasi</span>'
-  + '<span title="' + esc(FLAG.unknownWhy) + '"><i class="sw" style="background:var(--amber-b)"></i>'
-  + 'Unknown word &mdash; not in the dictionary</span>'
-  + '<span><i class="sw" style="border-bottom:2px dotted var(--green);'
-  + 'background:var(--green-s2)"></i>Correct &mdash; another spelling exists</span>'
-  + '<span><i class="sw" style="background:var(--slate-s)"></i>Withheld (name)</span>'
-  + (joins ? '<span title="' + esc(FLAG.joinWhy) + '"><i class="sw" style="background:var(--amber-b)"></i>'
-      + FLAG.join + ' &mdash; ' + joins + ' to join</span>' : '')
+  + key(errs, 'background:var(--red-b)', 'Invalid spelling &mdash; not possible in Khasi', FLAG.invalidWhy)
+  + key(unk, 'background:var(--amber-b)', 'Unknown word &mdash; not in the dictionary', FLAG.unknownWhy)
+  + key(alts, 'border-bottom:2px dotted var(--green);background:var(--green-s2)',
+        'Correct &mdash; another spelling exists',
+        'Already correct. The standard spelling (with \u00ef or \u00f1) is offered beside it; click the word to choose.')
+  + key(held, 'background:var(--slate-s)', 'Withheld (name)', 'Names and acronyms are never corrected.')
+  + (joins ? key(joins, 'background:var(--amber-b)', FLAG.join + ' &mdash; to join', FLAG.joinWhy) : '')
   + ($("opt-rw") && $("opt-rw").checked
-      ? '<span title="' + esc(FLAG.realwordWhy) + '"><i class="sw" style="border-bottom:2px dashed var(--amber);'
-        + 'background:transparent"></i>' + FLAG.realword + ' &mdash; '
-        + (rws ? rws + ' to review' : 'nothing flagged') + '</span>' : '')
+      ? key(rws, 'border-bottom:2px dashed var(--amber);background:transparent',
+            FLAG.realword + ' &mdash; to review', FLAG.realwordWhy) : '')
   + '</div>'
   // The corrections table is gone. Every column it carried — status, the
   // suggested word, the match percentage — is now in the popover on the
@@ -1360,7 +1591,7 @@ function openVariantMenu(i, anchor){
   showPop(anchor, "", '<div class="ph"><b>' + esc(v.word) + '</b><i>also written</i></div>'
     + opts
     + '<div class="pf">'
-    + '<button class="btn sm" onclick="closePop();inspectWord(' + jsq(v.word) + ')">Details</button>'
+    + '<button class="btn sm" onclick="closePop();inspectWord(' + jsq(v.word) + ')">Word details &rarr;</button>'
     + '<button class="btn sm" onclick="closePop();ignoreVariant(' + i + ')">Keep as is</button>'
     + '</div>');
 }
@@ -1406,7 +1637,7 @@ function openFixMenu(i, anchor){
     + (opts || '<div class="opt" style="cursor:default"><span class="g">'
         + esc(c.reason || 'No close spelling was found.') + '</span></div>')
     + '<div class="pf">'
-    + '<button class="btn sm" onclick="closePop();gotoWord(' + i + ')">Details</button>'
+    + '<button class="btn sm" onclick="closePop();gotoWord(' + i + ')">Word details &rarr;</button>'
     + '</div>');
 }
 
@@ -1458,7 +1689,9 @@ function placePop(pop, anchor){
 // still fires when the click lands on something that stops propagation.
 document.addEventListener("click", e => {
   const p = $("altpop");
-  if (p && !p.contains(e.target) && e.target !== popAnchor) closePop();
+  // contains(), not ===: a click on the icon inside a button is still a
+  // click on the button, and must toggle its menu closed, not reopen it.
+  if (p && !p.contains(e.target) && !(popAnchor && popAnchor.contains(e.target))) closePop();
 }, true);
 window.addEventListener("resize", closePop);
 
@@ -1536,8 +1769,7 @@ async function loadAnalysis(word){
    function used to open with its own <h3>word</h3>, which is why the merged
    panel showed the headword twice. */
 function analysisHtml(a){
-  const ph = a.phonology || {}, m = a.morphology || {},
-        as = a.assimilation || {}, cf = a.compound_fusion || {};
+  const ph = a.phonology || {}, m = a.morphology || {}, as = a.assimilation || {};
   const d = ph.details || {};
   let h = '';
 
@@ -1577,12 +1809,12 @@ function analysisHtml(a){
   // by the word. It exists only for a headword; the counts below are all the
   // validator can say about a form the lexicon does not carry.
   if ((ph.syllables || []).length)
-    bits.push(['<span title="The lexicon\'s syllabification, curated per entry '
+    bits.push(['<span data-tip="The lexicon\'s syllabification, curated per entry '
                + 'against War (2001).">Syllables</span>',
                ph.syllables.map(s => '<span class="op">' + esc(s) + '</span>').join(
                  '<span class="sub" style="margin:0 3px">·</span>')]);
   if (ph.pattern)
-    bits.push(['<span title="Syllable structure. C = consonant, V = vowel; a '
+    bits.push(['<span data-tip="Syllable structure. C = consonant, V = vowel; a '
                + 'digraph such as ng or kh counts as one C, and a diphthong '
                + 'nucleus as VV. Dots separate syllables.">Pattern</span>',
                '<code>' + esc(ph.pattern) + '</code>']);
@@ -1595,11 +1827,11 @@ function analysisHtml(a){
 
   const parts = (a.word || "").split("-").filter(Boolean);
   if (parts.length > 1)
-    bits.push(['<span title="Hyphen-separated parts. The phonotactic rules are '
+    bits.push(['<span data-tip="Hyphen-separated parts. The phonotactic rules are '
                + 'applied to each part on its own, so a hyphenated word passes '
                + 'only if every part does.">Parts</span>',
                parts.map(p => '<span class="op">' + esc(p) + '</span>').join(" ")]);
-  if (d.length) bits.push(['<span title="Letters excluding hyphens.">Letters</span>',
+  if (d.length) bits.push(['<span data-tip="Letters excluding hyphens.">Letters</span>',
                            d.length]);
   (ph.warnings || []).forEach(w => bits.push(['Note', esc(w)]));
   if (bits.length) pIn += '<dl class="kv">'
@@ -1656,7 +1888,7 @@ function analysisHtml(a){
     // the ACCEPTED badge again, and the Root row already shows what matched.
     if (m.status !== "direct_match" && (m.status_label || m.status))
       mIn += '<p class="sub" style="margin:10px 0 0"'
-          + (m.status ? ' title="engine status: ' + esc(m.status) + '"' : '') + '>'
+          + (m.status ? ' data-tip="engine status: ' + esc(m.status) + '"' : '') + '>'
           + esc(m.status_label || m.status) + '</p>';
 
     // What else the parser weighed and set aside.
@@ -1672,9 +1904,8 @@ function analysisHtml(a){
        + (as.prefix ? '<br>Underlying: <b>' + esc(as.prefix) + '</b> + <b>'
             + esc(as.root) + '</b>' : '') + '</div>');
 
-  if (cf.detected)
-    h += sec('Compound fusion',
-        '<div class="note">' + esc(cf.description || cf.type || "") + '</div>');
+  // No "Compound fusion" section (removed on request, 2 October 2026). The
+  // API still reports compound_fusion for any other client.
 
   // The per-candidate edit operations are NOT rendered here any more. They
   // used to form a "Why these corrections" block at the foot of the panel,
@@ -1702,9 +1933,9 @@ function wordPanel(w, r, a, note){
   const gate = r ? r.gate : null;
   const ok = r ? r.is_correct : true;
   const badge = ok ? '<span class="tag ok">ACCEPTED</span>'
-      : isEnglish(r) ? '<span class="tag err" title="' + esc(FLAG.englishWhy) + '">ENGLISH WORD</span>'
-      : isInvalid(gate) ? '<span class="tag err" title="' + esc(FLAG.invalidWhy) + '">INVALID SPELLING</span>'
-                        : '<span class="tag warn" title="' + esc(FLAG.unknownWhy) + '">UNKNOWN WORD</span>';
+      : isEnglish(r) ? '<span class="tag err" data-tip="' + esc(FLAG.englishWhy) + '">ENGLISH WORD</span>'
+      : isInvalid(gate) ? '<span class="tag err" data-tip="' + esc(FLAG.invalidWhy) + '">INVALID SPELLING</span>'
+                        : '<span class="tag warn" data-tip="' + esc(FLAG.unknownWhy) + '">UNKNOWN WORD</span>';
   const ipa = ((a && a.phonology && a.phonology.ipa) || {}).surface || "";
 
   /* The word's OWN gloss, when the lexicon has an entry for it.
@@ -1721,7 +1952,7 @@ function wordPanel(w, r, a, note){
   const borrowed  = !ownGloss && !!rootGloss;
 
   let h = '<div class="wordhead"><span class="w">' + esc(w) + '</span>' + badge
-    + (window.speechSynthesis ? '<button class="speak" title="Read aloud with the browser '
+    + (window.speechSynthesis ? '<button class="speak" aria-label="Read aloud" data-tip="Read aloud with the browser '
       + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(' + jsq(w) + ')">'
       + '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>' : "")
     + '</div><div class="bd">'
@@ -1763,7 +1994,7 @@ function wordPanel(w, r, a, note){
                : '<span class="sn">' + esc(s) + '</span>';
     }).join("") + '</p>';
     if (imitList.length)
-      h += '<p class="wp-imit"><span class="lbl" title="' + esc(IMIT_TIP) + '">Imitative</span>'
+      h += '<p class="wp-imit"><span class="lbl" data-tip="' + esc(IMIT_TIP) + '">Imitative</span>'
          + imitList.map(c => '<span class="pair">' + esc(c) + '</span>').join("") + '</p>';
     // Grammar of the word, as a labelled line rather than muted prose.
     //
@@ -1777,10 +2008,10 @@ function wordPanel(w, r, a, note){
     if (dpos || mo.article || mo.gender)
       h += '<p class="wp-gram">'
          + (dpos ? '<span class="tag pos"'
-             + (shifted ? ' title="' + esc(mo.derived_pos) + ' — derived from a '
+             + (shifted ? ' data-tip="' + esc(mo.derived_pos) + ' — derived from a '
                           + esc(mo.pos) + ' root"' : '')
              + '>' + esc(dpos) + '</span>' : '')
-         + (mo.article ? '<span class="ga" title="Noun-class proclitic'
+         + (mo.article ? '<span class="ga" data-tip="Noun-class proclitic'
              + (mo.article_gloss ? ' — ' + esc(mo.article_gloss) : '')
              + '. Khasi marks the class of a noun with a preceding particle.">'
              + esc(mo.article) + '</span>' : '')
@@ -1800,7 +2031,7 @@ function wordPanel(w, r, a, note){
   if (ipa)
     h += '<p class="ipa" style="margin:2px 0 10px">' + esc(ipa)
        + (((a.phonology || {}).ipa || {}).length_uncertain
-           ? ' <span class="tag mut" title="Khasi vowel length is contrastive but '
+           ? ' <span class="tag mut" data-tip="Khasi vowel length is contrastive but '
              + 'unmarked in spelling (War 2001, pp.49-54), so it cannot be recovered '
              + 'from the written form.">vowel length uncertain</span>' : '')
        + '</p>';
@@ -2114,7 +2345,7 @@ function voteCard(r, onPick){
     : '<tr><td colspan="2" class="sub">no positive signal</td></tr>';
   return '<h3>' + esc(r.word) + ' '
     + (ok ? '<span class="tag ok">ACCEPTED</span>'
-          : '<span class="tag ' + (isInvalid(r.gate)?"err":"warn") + '" title="'
+          : '<span class="tag ' + (isInvalid(r.gate)?"err":"warn") + '" data-tip="'
             + esc(isInvalid(r.gate) ? FLAG.invalidWhy : FLAG.unknownWhy) + '">'
             + (isInvalid(r.gate) ? "INVALID SPELLING" : "UNKNOWN WORD") + '</span>')
     + '</h3>'
@@ -2143,7 +2374,7 @@ function voteCard(r, onPick){
     + (r.suggestions.length
         ? '<p class="sub" style="margin-top:12px">Suggestions</p><div class="chips">'
           + topSuggestions(r.suggestions).map((s,i) => '<button class="chip"'
-            + ((r.glosses && r.glosses[i]) ? ' title="' + esc(glossPlain(r.glosses[i])) + '"' : '')
+            + ((r.glosses && r.glosses[i]) ? ' data-tip="' + esc(glossPlain(r.glosses[i])) + '"' : '')
             + ' onclick="' + onPick(s) + '">' + esc(s) + ' <span class="tag mut">'
             + pctBar(matchPct(r.distances && r.distances[i], i), r.distances && r.distances[i])
             + '</span></button>').join("")
@@ -2158,7 +2389,7 @@ function voteCard(r, onPick){
         ? '<div class="altrow" style="margin-top:12px;border:0">'
           + '<span class="sub" style="margin:0">also written</span>'
           + '<span class="chips">' + r.variants.map(v =>
-            '<button class="chip alt" title="Check ' + esc(v.variant) + ' instead'
+            '<button class="chip alt" data-tip="Check ' + esc(v.variant) + ' instead'
             + (v.gloss ? " — " + esc(glossPlain(v.gloss)) : "") + '"'
             + ' onclick="' + onPick(v.variant) + '">' + esc(v.variant)
             + '</button>').join("") + '</span>'
@@ -2296,7 +2527,101 @@ identifier.</li>
 <p>Corrections are offered. Nothing is ever applied on your behalf.</p>`;
 }
 
+/* ---------------- display: text size and theme ---------------- */
+/* Both are per computer (localStorage), so the presenting laptop keeps its
+   setting between rehearsal and the demo. The early script in the page head
+   applies the saved values before the first paint. */
+function storeSetting(k, v){ try { localStorage.setItem(k, v); } catch (e) {} }
+function markTextSize(k){
+  document.querySelectorAll(".seg button").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.size === k)));
+}
+function setTextSize(k){
+  document.documentElement.dataset.text = k;
+  storeSetting("ks-text", k);
+  markTextSize(k);
+  closePop();      // a pop-up placed for the old size would now sit wrongly
+}
+function currentTheme(){
+  const t = document.documentElement.dataset.theme;
+  if (t === "light" || t === "dark") return t;
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+// The button names the theme it switches TO.
+function syncThemeButton(){
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  $("theme-label").textContent = next === "light" ? "Light" : "Dark";
+  $("theme-btn").setAttribute("data-tip", "Switch to the " + next + " theme");
+  $("theme-btn").setAttribute("aria-label", "Switch to the " + next + " theme");
+}
+function toggleTheme(){
+  document.documentElement.dataset.theme = currentTheme() === "dark" ? "light" : "dark";
+  storeSetting("ks-theme", document.documentElement.dataset.theme);
+  syncThemeButton();
+}
+
+/* ---------------- hover hints ---------------- */
+/* Every hint on the page is a data-tip attribute drawn here, not a title
+   attribute: the browser draws a title as a plain black box that no page can
+   style. data-tip-head adds a heading; a flagged word's class picks the
+   colour. Shown after a short pause, as the browser's own is, so moving the
+   pointer across the text does not flash a hint on every word; never while
+   a pop-up menu is open, since the menu says more. */
+let tipEl = null, tipFor = null, tipNext = null, tipTimer = 0;
+function tipKind(el){
+  if (el.matches(".err, .tag.err")) return "err";
+  if (el.matches(".warn, .rw, .tag.warn")) return "warn";
+  if (el.matches(".alt, .chip.alt")) return "alt";
+  return "";
+}
+function showTip(el){
+  hideTip();
+  const text = el.getAttribute("data-tip");
+  if (!text || popAnchor || !el.isConnected) return;
+  const head = el.getAttribute("data-tip-head");
+  const t = document.createElement("div");
+  t.className = "tip " + tipKind(el);
+  t.id = "tip";
+  t.setAttribute("role", "tooltip");
+  t.innerHTML = (head ? '<span class="tk">' + esc(head) + '</span>' : "") + esc(text);
+  document.body.appendChild(t);
+  const r = el.getBoundingClientRect(), b = t.getBoundingClientRect();
+  const x = Math.max(8, Math.min(r.left + r.width / 2 - b.width / 2, innerWidth - b.width - 8));
+  let y = r.top - b.height - 10;
+  const below = y < 8;
+  if (below) y = r.bottom + 10;
+  t.style.left = x + "px";
+  t.style.top = y + "px";
+  t.style.setProperty("--ax", Math.max(14, Math.min(r.left + r.width / 2 - x, b.width - 14)) + "px");
+  t.classList.toggle("below", below);
+  el.setAttribute("aria-describedby", "tip");
+  tipEl = t; tipFor = el;
+}
+function hideTip(){
+  clearTimeout(tipTimer);
+  tipNext = null;
+  if (tipFor) tipFor.removeAttribute("aria-describedby");
+  if (tipEl) tipEl.remove();
+  tipEl = tipFor = null;
+}
+document.addEventListener("mouseover", e => {
+  const el = e.target.closest ? e.target.closest("[data-tip]") : null;
+  if (el && (el === tipFor || el === tipNext)) return;
+  hideTip();
+  if (el) { tipNext = el; tipTimer = setTimeout(() => showTip(el), 350); }
+});
+document.addEventListener("focusin", e => {
+  const el = e.target.closest ? e.target.closest("[data-tip]") : null;
+  if (el && el.matches(":focus-visible")) showTip(el);
+});
+document.addEventListener("focusout", hideTip);
+document.addEventListener("pointerdown", hideTip, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
+addEventListener("scroll", hideTip, true);
+
 /* ---------------- boot ---------------- */
+markTextSize(document.documentElement.dataset.text || "large");
+syncThemeButton();
 updateCount();
 routeFromHash();          // #word, #learn, #about are linkable; #example runs the sample
 fetch("/health").then(r => r.json()).then(d => {
