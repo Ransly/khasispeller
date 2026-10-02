@@ -555,3 +555,18 @@ def test_a_bare_root_is_its_own_root(sp):
              and (r.get("lemma") or {}).get("root")
              and not same(r["lemma"]["root"], w)]
     assert not wrong, wrong[:10]
+
+
+@pytest.mark.parametrize("word, root, marked, form", [
+    ("bynriew", "briew", "b‹yn›riew", "-yn-"),
+    ("shnong", "shong", "sh‹n›ong", "-n-"),
+])
+def test_an_infix_is_shown_inside_its_root(client, word, root, marked, form):
+    """The panel listed `yn` above `briew` the way it lists a prefix above its
+    root, which reads as yn + briew. An infix row now carries its own form
+    and what it makes, and the derivation line marks where it goes."""
+    m = client.post("/analyse", json={"word": word}).json()["morphology"]
+    assert m["root"] == root
+    assert m["chain"] == [root, marked]
+    (row,) = [a for a in m["affixes"] if a["role"] == "infix"]
+    assert row["form"] == form and row["label"].startswith("infix, makes")

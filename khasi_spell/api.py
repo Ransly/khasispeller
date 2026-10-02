@@ -337,7 +337,44 @@ _STATUS_LABEL = {
 }
 
 
-def _affix_detail(p2: dict) -> dict:
+# What each infix of the lexicon's morphology.infixes block makes, in words,
+# and the class it takes. The engine's one-word label for the first code is
+# "verb", which is wrong for `bynriew` 'human being': the code itself says a
+# verb OR an abstract noun.
+_INFIX_MAKES = {
+    "noun_to_verb_or_abstract": ("a verb or an abstract noun", ["noun"]),
+    "verb_to_noun":             ("a noun", ["verb"]),
+    "verbal_derivation":        ("a verb", []),
+    "adj_to_abstract_noun":     ("an abstract noun", ["adjective"]),
+}
+
+
+def _infix_detail(form: str, word: str, root: str) -> dict:
+    """An infix row the panel can read, and the word with the infix marked.
+
+    The panel listed `yn` above `briew` exactly as it lists a prefix above
+    its root, which reads as yn + briew. An infix sits INSIDE the root —
+    b‹yn›riew, sh‹n›ong — so the row carries its own form (-yn-), what the
+    lexicon says it makes, and the word with the infix marked, for the
+    derivation line (briew → b‹yn›riew). The marking is shown only when the
+    infix's own pattern, taken out, gives back the root.
+    """
+    marker = (form or "").strip("-")
+    ix = next((x for x in morphology.INFIXES if x.get("marker") == marker), None)
+    if not ix:
+        return {}
+    fn = ix.get("function") or ""
+    makes, takes = _INFIX_MAKES.get(fn, (fn.replace("_", " "), []))
+    out = {"form": f"-{marker}-", "function": fn,
+           "label": f"infix, makes {makes}", "applies_to": takes}
+    pat = ix.get("pattern")
+    m = pat.match(word.lower()) if hasattr(pat, "match") and word else None
+    if m and root and (m.group(1) + m.group(2)) == root.lower():
+        out["marked"] = f"{m.group(1)}‹{marker}›{m.group(2)}"
+    return out
+
+
+def _affix_detail(p2: dict, word: str = "") -> dict:
     """Per-affix function, the derivational order, and rejected parses.
 
     `morphology.parse()` records what every affix DOES — `jing-` is the
@@ -364,16 +401,22 @@ def _affix_detail(p2: dict) -> dict:
                 "function":   info.get(f"{key}_function") or "",
                 "applies_to": info.get(f"{key}_applies_to") or [],
             })
+        marked = None
         for key in ("infix", "suffix", "clitic"):
             form = info.get(key)
             if form:
-                affixes.append({
+                row = {
                     "form":       form,
                     "role":       key,
                     "label":      info.get(f"{key}_function_label") or "",
                     "function":   info.get(f"{key}_function") or "",
                     "applies_to": info.get(f"{key}_applies_to") or [],
-                })
+                }
+                if key == "infix":
+                    detail = _infix_detail(form, word, p2.get("root") or "")
+                    marked = detail.pop("marked", None)
+                    row.update(detail)
+                affixes.append(row)
         if affixes:
             out["affixes"] = affixes
 
@@ -382,6 +425,8 @@ def _affix_detail(p2: dict) -> dict:
         if info.get("derivational_chain"):
             out["chain"] = [s.strip() for s in
                             str(info["derivational_chain"]).split("→") if s.strip()]
+        elif marked:
+            out["chain"] = [p2.get("root"), marked]       # briew → b‹yn›riew
 
         # The POS the derivation arrives at, which need not be the root's:
         # jing- takes a verb and yields a noun.
@@ -799,7 +844,7 @@ def analyse_word(req: WordRequest):
             # panel could show "jing- + ïa- + lehkai" without being able to say
             # that jing- nominalises and ïa- is the reciprocal, which is the
             # part a reader of Khasi actually wants. See _affix_detail.
-            **_affix_detail(p2),
+            **_affix_detail(p2, a.get("input") or ""),
         },
         "assimilation": {
             "rule": p3.get("rule_detected"),
