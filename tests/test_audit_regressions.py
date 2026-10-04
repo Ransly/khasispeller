@@ -959,3 +959,49 @@ def test_a_failing_language_model_is_not_described_to_the_caller(client, monkeyp
     assert r.status_code == 503
     assert "dpg-secret" not in r.text and "khasi\"" not in r.text
     assert "unavailable right now" in r.json()["detail"]
+
+
+# ----------------------------------------------------------------------
+# A prefix written twice is reported, and a rejected word is never offered
+# "another spelling" (2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word, once", [
+    ("jingjingiamareh", "jing\u00efamareh"),   # the standard spelling first
+    ("jingjing\u00efamareh", "jing\u00efamareh"),
+    ("pynpynlong", "pynlong"),
+    ("nongnongtrei", "nongtrei"),
+])
+def test_a_doubled_prefix_is_reported_with_the_word_once(sp, word, once):
+    """`jingjingiamareh` was rejected with nothing to suggest, so it was not
+    flagged at all, and the page offered it "also written jingjingïamareh"."""
+    r = sp.check(word)
+    assert not r.is_correct and r.method == "doubled_prefix"
+    assert r.suggestions[0] == once and r.variants == []
+    t = sp.check_text(f"ka {word} bha", context=True, skip_foreign=True)
+    (c,) = t.corrections
+    assert "written twice" in c.reason and t.variants == []
+
+
+def test_a_silently_rejected_word_gets_no_alternative_spelling(sp, monkeypatch):
+    """Without the doubled-prefix reason the word is rejected and unreported;
+    it must still not be offered a diacritic form as if it were correct."""
+    monkeypatch.setattr(type(sp.analyser.spell), "_doubled_prefix", staticmethod(lambda w: None))
+    t = sp.check_text("ka jingjingiamareh bha", context=True, skip_foreign=True)
+    assert t.corrections == [] and t.variants == []
+
+
+def test_an_accepted_word_keeps_its_alternative_spelling(sp):
+    t = sp.check_text("ka iathuh bha", context=True, skip_foreign=True)
+    assert [v.word for v in t.variants] == ["iathuh"]
+
+
+def test_a_word_starting_like_a_doubled_prefix_is_not_misread(sp):
+    assert sp.check("ïaïaid").is_correct                       # ïa- + the root ïaid
+    assert sp.check("iingg").method != "doubled_prefix"         # not i- twice
+
+
+def test_the_plain_spelling_stays_on_offer_after_the_standard_one(sp):
+    assert sp.check("jingjingiamareh").suggestions[:2] == ["jing\u00efamareh", "jingiamareh"]
+    t = sp.check_text("Ka jingjingiamareh ka long.", context=True, skip_foreign=True)
+    assert t.corrected == "Ka jing\u00efamareh ka long."

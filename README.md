@@ -557,6 +557,14 @@ the determiners, pronouns, prepositions and conjunctions, plus `ka ki u i ba
 ne ha na ia sha la ym bad`, which the lexicon partly labels as content words
 — `pynka`, `pynki`, `pynba` were accepted. On 1,000 news lines this adds
 one flag (`pyniad`, offered `pynïad`); the benchmarks are unchanged.
+A word that opens with a doubled prefix is always reported, as *Prefix
+written twice*, with the word with the prefix once offered first
+(`jingjingiamareh` → `jingïamareh`, the standard spelling, with `jingiamareh`
+second; `pynpynlong` → `pynlong`): rejected with
+nothing close to suggest, it used to pass unreported, and the page then
+offered it "also written jingjingïamareh" as if it were correct. No rejected
+word is offered an alternative spelling now; when one of its spellings is
+accepted (`suhjain` → `suhjaiñ`), that spelling is its correction.
 
 **A missing space is not a compound** (maintainer ruling, 4 October 2026).
 The compound check accepted any string that divides into two content words,

@@ -541,6 +541,11 @@ class KhasiSpeller:
         """
         word = _nfc(word)
         raw = self._load().spell.suggest(word, n=n)
+        if raw.get("method") == "doubled_prefix" and raw.get("suggestions"):
+            raw = dict(raw)
+            # Lower case, as a single word's suggestions always are.
+            raw["suggestions"], raw["suggestion_distances"] = self._standard_first(
+                word.lower(), raw["suggestions"], raw.get("suggestion_distances") or [])
         gate = raw.get("gate_reached", GATE_CHECKED)
         return WordResult(
             word=word,
@@ -555,7 +560,12 @@ class KhasiSpeller:
             morphologically_valid=bool(raw.get("morphologically_valid")),
             phonotactically_valid=bool(raw.get("phonotactically_valid")),
             confidence=raw.get("confidence"),
-            variants=[v.to_dict() for v in self._word_variants(word)],
+            # A rejected word keeps only the alternatives the checker accepts
+            # (`saitjain` -> `saitjaiñ`), never one as wrong as itself
+            # (`jingjingiamareh` -> `jingjingïamareh`).
+            variants=[v.to_dict() for v in self._word_variants(word)
+                      if raw.get("is_known")
+                      or self._load().spell.suggest(v.variant, n=1).get("is_known")],
             gloss=self._glosses([word])[0],
         )
 
@@ -738,6 +748,56 @@ class KhasiSpeller:
             self._corpus_count_table = corpus_counts()
         return self._corpus_count_table
 
+    def _standard_first(self, typed: str, suggestions: list, distances: list) -> tuple:
+        """*suggestions* with the first one's standard spelling put before it.
+
+        A doubled prefix is answered with the word written once, built from
+        the letters typed: `jingjingiamareh` -> `jingiamareh`, which the page
+        would then offer "also written jingïamareh". In formal Khasi the
+        diacritic spelling is the correct one, so it is offered first, with
+        the plain form kept second. Only a spelling the checker accepts.
+        """
+        first = suggestions[0]
+        spell = self._load().spell
+        for v in self.variants(first):
+            if v.variant != first and spell.suggest(v.variant, n=1).get("is_known"):
+                std = _tokens.match_case(typed, v.variant)
+                rest = [x for x in suggestions if x != std]
+                dist = [1.0] + list(distances)
+                return [std] + rest, dist[:len(rest) + 1]
+        return list(suggestions), list(distances)
+
+    def _settle_rejected_variants(self, flags: list) -> tuple:
+        """Split variant offers into true offers and corrections.
+
+        An offer means "this word is correct, and is also written so". A word
+        the engine rejected with nothing to suggest is not reported (see
+        check_sentence), so it reached the variant pass looking correct and
+        was offered a spelling as if it were a word: `jingjingiamareh` showed
+        as correct, "also written jingjingïamareh". Now a rejected word keeps
+        only the spellings the checker accepts, and those become its
+        correction (`suhjain` -> `suhjaiñ`); with none left it gets no offer.
+        """
+        spell = self._load().spell
+        offers, fixes = [], []
+        for f in flags:
+            if spell.suggest(f.word, n=1).get("is_known"):
+                offers.append(f)
+                continue
+            good = [v["variant"] for v in f.variants
+                    if spell.suggest(v["variant"], n=1).get("is_known")]
+            if not good:
+                continue
+            good = [_tokens.match_case(f.word, v) for v in good]
+            fixes.append(Correction(
+                original=f.word, suggestion=good[0], start=f.start, end=f.end,
+                suggestions=good, distances=[1.0] * len(good),
+                glosses=self._glosses(good), gate=GATE_CHECKED,
+                method="variant_spelling",
+                reason=f"Not accepted as written; the dictionary spells it {good[0]}.",
+            ))
+        return offers, fixes
+
     def _collect_variants(self, text: str, flagged: set) -> list["VariantFlag"]:
         """
         Accepted words that have another attested spelling.
@@ -823,6 +883,12 @@ class KhasiSpeller:
             for c in (raw.get("corrections") or [])
         ]
         corrections.sort(key=lambda c: c.start)
+        for c in corrections:
+            if c.method == "doubled_prefix" and c.suggestions:
+                c.suggestions, c.distances = self._standard_first(
+                    c.original, c.suggestions, c.distances)
+                c.suggestion = c.suggestions[0]
+                c.glosses = self._glosses(c.suggestions)
 
         # Withhold proper nouns and acronyms. Done before re-ranking so the
         # language model is not asked to score candidates for a token that
@@ -871,14 +937,17 @@ class KhasiSpeller:
                     print(f"[khasi-spell] context re-ranking skipped: {exc}")
                     self._lm_warned = True
 
-        # One reconstruction, from the corrections as finally ranked and
-        # filtered, so `corrected` can never disagree with `corrections`.
-        corrected = self._apply(text, corrections)
-
         # No spelling offers inside a web or email address either.
         flags = self._collect_variants(
             text, [(c.start, c.end) for c in corrections]
             + _tokens.unchecked_spans(text)[0]) if variants else []
+        flags, fixes = self._settle_rejected_variants(flags)
+        if fixes:
+            corrections = sorted(corrections + fixes, key=lambda c: c.start)
+
+        # One reconstruction, from the corrections as finally ranked and
+        # filtered, so `corrected` can never disagree with `corrections`.
+        corrected = self._apply(text, corrections)
 
         return TextResult(
             text=text,

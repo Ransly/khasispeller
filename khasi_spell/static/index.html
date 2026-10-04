@@ -1611,6 +1611,7 @@ function markup(res, selectable){
            + ' data-tip="' + (isPossible(c) ? "Capitalised, so it may be a name."
                           : isLookalike(c) ? "A letter here is from another alphabet."
                           : isDigitWord(c) ? "A digit is typed inside this word."
+                          : isDoubled(c) ? "A prefix is written twice."
                           : isSplit(c) ? "Two words written as one."
                           : isEnglish(c) ? "Not a Khasi word."
                           : isInvalid(c.gate) ? "Not possible in Khasi."
@@ -1673,14 +1674,16 @@ function isPossible(c){ return !!c && c.possible_misspelling === true; }
 function isLookalike(c){ return !!c && c.method === "lookalike_letters"; }
 /* A digit inside a word (`shn0ng`): wrong as typed, so red, read whole. */
 function isDigitWord(c){ return !!c && c.method === "digit_in_word"; }
+/* A prefix written twice (`jingjingiamareh`), refused by ruling: red. */
+function isDoubled(c){ return !!c && c.method === "doubled_prefix"; }
 /* Two words written as one (`kakam` for `ka kam`): the counterpart of
    "Written apart", offered the two-word form first. */
 function isSplit(c){ return !!c && c.method === "runtogether_split"; }
 function isRed(c){ return !isPossible(c) && (isInvalid(c.gate) || isEnglish(c) || isLookalike(c)
-                                              || isDigitWord(c)); }
+                                              || isDigitWord(c) || isDoubled(c)); }
 function flagLabel(c){
   return isPossible(c) ? FLAG.possible : isLookalike(c) ? FLAG.lookalike
-       : isDigitWord(c) ? FLAG.digit
+       : isDigitWord(c) ? FLAG.digit : isDoubled(c) ? FLAG.doubled
        : isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
        : isJoin(c) ? FLAG.join : isSplit(c) ? FLAG.split : FLAG.unknown;
 }
@@ -1689,6 +1692,7 @@ const FLAG = {
   unknown: "Unknown word",
   lookalike: "Look-alike letter",
   digit: "Digit in a word",
+  doubled: "Prefix written twice",
   split: "Missing space",
   splitWhy: "Two words written as one. The corpus writes them apart far more often "
     + "(ka kam, not kakam). Add the space.",
@@ -1917,7 +1921,8 @@ function openFixMenu(i, anchor){
     + flagLabel(c).toLowerCase() + '</i></div>'
     + (isPossible(c) ? '<div class="opt" style="cursor:default"><span class="g">'
         + esc(FLAG.possibleWhy) + '</span></div>' : '')
-    + ((isLookalike(c) || isDigitWord(c)) && c.reason && opts
+    + ((isLookalike(c) || isDigitWord(c) || isDoubled(c) || c.method === "variant_spelling")
+        && c.reason && opts
         ? '<div class="opt" style="cursor:default"><span class="g">'
           + esc(c.reason) + '</span></div>' : '')
     // With no candidate to offer, say WHY the word was flagged rather than

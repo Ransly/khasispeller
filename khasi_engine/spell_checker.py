@@ -2382,7 +2382,22 @@ class KhasiSpellChecker:
             suggestion_distances = suggestion_distances[:n]
             method = "runtogether_split"
 
-        if not suggestions:
+        # A prefix written twice (`jingjingiamareh`). The morphology refuses
+        # it — a prefix never stacks on itself (maintainer ruling 2026-10-04)
+        # — but with nothing close to offer the word was not reported at all,
+        # and the page then offered it an alternative spelling as if it were
+        # correct. Say what is wrong, and offer the word with the prefix once
+        # when that is acceptable.
+        reason = None
+        doubled = self._doubled_prefix(word_lower)
+        if doubled:
+            pfx, once = doubled
+            reason = f"The prefix {pfx}- is written twice."
+            if self.suggest(once, n=1).get("is_known"):
+                suggestions = ([once] + [s for s in suggestions if s != once])[:n]
+                suggestion_distances = ([1.0] + list(suggestion_distances))[:n]
+            method = "doubled_prefix"
+        elif not suggestions:
             method = "none"
 
         return {
@@ -2395,7 +2410,36 @@ class KhasiSpellChecker:
             "in_lexicon":         self._db.is_known(word_lower),
             "gate_reached":       3,
             "confidence":         conf,
+            **({"reason": reason} if reason else {}),
         }
+
+    @staticmethod
+    def _doubled_prefix(word: str):
+        """(prefix, *word* with it once) when *word* opens with a prefix
+        written twice — `jingjingiamareh`, `pynpynlong` — else None.
+
+        Only productive prefixes of two letters or more, so `iingg` is not
+        read as i- twice, and ïa- and ia- count as one. Used for words already
+        rejected: an accepted word that merely begins this way (`ïaïaid`, ïa-
+        + the root ïaid) never reaches it.
+        """
+        try:
+            from khasi_engine import morphology as _morph
+            prefixes = getattr(_morph, "PREFIXES", {}) or {}
+        except Exception:
+            return None
+        key = lambda p: "ia" if p in ("ia", "ïa") else p
+        for p in sorted(prefixes, key=len, reverse=True):
+            if len(p) < 2 or not prefixes[p].get("productive", False):
+                continue
+            if not word.startswith(p):
+                continue
+            rest = word[len(p):]
+            for q in sorted(prefixes, key=len, reverse=True):
+                if (key(q) == key(p) and rest.startswith(q)
+                        and len(rest) > len(q) + 1):
+                    return p, rest
+        return None
 
     # _rank_by_morphology() was removed 2026-08-26: dead since the merge in
     # suggest() started scoring candidates inline. It had no callers and no
