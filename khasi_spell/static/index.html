@@ -1488,8 +1488,13 @@ async function checkText(){
     // nothing happen. Bring the summary up — only when it starts low on the
     // screen, so a tall display does not jump.
     const card = $("results").firstElementChild;
-    if (card && card.getBoundingClientRect().top > innerHeight * 0.55)
+    if (card && card.getBoundingClientRect().top > innerHeight * 0.55){
+      // Clear the pinned header. On a phone it wraps to three rows, taller
+      // than the 110px the stylesheet allows, and would cover the heading.
+      const bar = document.querySelector(".topbar");
+      if (bar) card.style.scrollMarginTop = Math.max(110, bar.offsetHeight + 18) + "px";
       card.scrollIntoView({behavior: "smooth", block: "start"});
+    }
     const n = res.corrections.length, v = (res.variants || []).filter(isLive).length;
     const rwn = res.realword.length;
     announce(
