@@ -44,6 +44,7 @@ from khasi_engine import morphology                     # noqa: E402
 from khasi_engine import tokens as _tokens              # noqa: E402
 from khasi_engine.database import canonical_pos         # noqa: E402
 from khasi_spell.speller import KhasiSpeller            # noqa: E402
+from khasi_spell import syllables as _syllables         # noqa: E402
 
 
 _speller: Optional[KhasiSpeller] = None
@@ -768,25 +769,50 @@ def _stitch_derived_phonology(db, word: str, layers: dict):
 def _stored_phonology(sp, word: str) -> dict:
     """The lexicon's own phonological analysis of *word*, when it has one.
 
-    Returns `{"syllables": [...], "pattern": "CVC.CVC", "traits": [...]}`, or
-    `{}` for a form the lexicon does not carry. `traits` flattens the entry's
-    boolean flags into the ones worth showing a reader, already worded —
-    the raw dict is nine keys, most of them false most of the time.
+    Returns `{"syllables": [...], "pattern": "CVC.CVC", "traits": [...]}`.
+    `traits` flattens the entry's boolean flags into the ones worth showing
+    a reader, already worded — the raw dict is nine keys, most of them false
+    most of the time. For a form the lexicon cannot syllabify, even from its
+    pieces, the syllables and pattern are worked out by rule and flagged
+    `syllables_by_rule`; `{}` only when the rules cannot say either.
     """
     try:
         db = sp.analyser.db
         entry = (db.lookup(word) or [None])[0]
+
+        def _by_rule():
+            """Last resort: the syllables by rule — see khasi_spell.syllables.
+
+            `ïatreilang` is ïa- + treilang, and treilang (trei + lang) has no
+            entry, so neither the lexicon nor its pieces could syllabify it
+            and the panel showed a letter count. Parsed as if the word were
+            unknown, so a headword that was never syllabified still gets its
+            prefix boundaries: on a direct match the parser reports none.
+            """
+            w = _tokens.nfc(word).lower()
+            try:
+                layers = morphology.parse(
+                    w, lambda x: [] if x == w else db.lookup(x)).get("layers") or {}
+            except Exception:
+                layers = {}
+            syl = _syllables.syllabify(
+                w, [layers[k] for k in ("prefix", "prefix2", "prefix3") if layers.get(k)],
+                layers.get("suffix") or "")
+            if not syl:
+                return {}
+            return {"syllables": syl, "pattern": _syllables.pattern(syl),
+                    "syllables_by_rule": True}
 
         def _assembled():
             """Fallback used when the lexicon has no syllabification to show."""
             try:
                 parsed = morphology.parse(word.lower(), db.lookup)
             except Exception:
-                return {}
+                return _by_rule()
             layers = parsed.get("layers") or {}
             syl, pat = _stitch_derived_phonology(db, word.lower(), layers)
             if not syl:
-                return {}
+                return _by_rule()
             out = {"syllables": list(syl),
                    "derived_from": layers.get("root")}
             if pat:
@@ -821,10 +847,13 @@ def _stored_phonology(sp, word: str) -> dict:
                 derived = {"syllables": assembled.get("syllables"),
                            "pattern": assembled.get("pattern"),
                            "diphthong_nucleus": derived.get("diphthong_nucleus"),
-                           "has_long_vowel": derived.get("has_long_vowel")}
+                           "has_long_vowel": derived.get("has_long_vowel"),
+                           "by_rule": assembled.get("syllables_by_rule")}
         out = {}
         if derived.get("syllables"):
             out["syllables"] = list(derived["syllables"])
+            if derived.get("by_rule"):
+                out["syllables_by_rule"] = True
         if derived.get("pattern"):
             out["pattern"] = derived["pattern"]
         if derived.get("diphthong_nucleus"):
@@ -924,9 +953,10 @@ def analyse_word(req: WordRequest):
             # diphthong, whether it ends in a glottal. Nothing read it, so a
             # panel headed "Phonology" could only show letter counts.
             #
-            # Present only for a headword: these fields are curated per entry
-            # (rebuilt against War 2001 in the v3.8 pass), not derived live, so
-            # a form the lexicon does not carry has no syllabification to show.
+            # The lexicon's fields are curated per entry (rebuilt against War
+            # 2001 in the v3.8 pass). A derived form gets its pieces' entries
+            # stitched together; anything else, syllables worked out by rule,
+            # flagged `syllables_by_rule` so the panel can say so.
             **_stored_phonology(sp, a.get("input") or ""),
         },
         "morphology": {

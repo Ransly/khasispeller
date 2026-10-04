@@ -2075,13 +2075,18 @@ function analysisHtml(a){
   // cannot see. Show the parts themselves, and only when there is more than
   // one: for an unhyphenated word the single part just repeats the headword.
   // The lexicon's own analysis first — this is the phonology a reader means
-  // by the word. It exists only for a headword; the counts below are all the
-  // validator can say about a form the lexicon does not carry.
+  // by the word. A form the lexicon cannot syllabify, even from its pieces,
+  // gets syllables worked out by rule, and says so (khasi_spell/syllables.py).
   if ((ph.syllables || []).length)
-    bits.push(['<span data-tip="The lexicon\'s syllabification, curated per entry '
-               + 'against War (2001).">Syllables</span>',
-               ph.syllables.map(s => '<span class="op">' + esc(s) + '</span>').join(
-                 '<span class="sub" style="margin:0 3px">·</span>')]);
+    bits.push([ph.syllables_by_rule
+        ? '<span data-tip="Worked out by rule: the lexicon has no syllables for this '
+          + 'word. The same rules give the lexicon\'s own syllables for 98.6% of the '
+          + 'words it syllabifies.">Syllables</span>'
+        : '<span data-tip="The lexicon\'s syllabification, curated per entry '
+          + 'against War (2001).">Syllables</span>',
+        ph.syllables.map(s => '<span class="op">' + esc(s) + '</span>').join(
+          '<span class="sub" style="margin:0 3px">·</span>')
+        + (ph.syllables_by_rule ? ' <span class="tag mut">by rule</span>' : '')]);
   if (ph.pattern)
     bits.push(['<span data-tip="Syllable structure. C = consonant, V = vowel; a '
                + 'digraph such as ng or kh counts as one C, and a diphthong '

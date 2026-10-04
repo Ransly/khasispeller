@@ -602,3 +602,43 @@ def test_the_root_carries_its_own_word_class(client):
     fm = client.post("/analyse", json={"word": "pynlong"}).json()["morphology"]["form_map"]
     root = fm["segments"][-1]
     assert root["kind"] == "root" and root["lexical"] == "long" and root["pos"] == "verb"
+
+
+# ----------------------------------------------------------------------
+# Phonology for a word the lexicon cannot syllabify (2026-10-04)
+# ----------------------------------------------------------------------
+
+def test_a_word_the_lexicon_cannot_syllabify_gets_syllables_by_rule(client):
+    """`ïatreilang` showed "well formed" and a letter count: it has no entry,
+    and neither has its root treilang (trei + lang), so nothing could be
+    assembled. The rules fill the gap and the panel says where they came from."""
+    p = client.post("/analyse", json={"word": "ïatreilang"}).json()["phonology"]
+    assert p["syllables"] == ["ïa", "trei", "lang"]
+    assert p["pattern"] == "VV.CCVV.CVC"
+    assert p["syllables_by_rule"] is True
+    lexicon = client.post("/analyse", json={"word": "bynriew"}).json()["phonology"]
+    assert lexicon["syllables"] == ["byn", "riew"] and "syllables_by_rule" not in lexicon
+
+
+def test_the_rules_agree_with_the_lexicon(sp):
+    """khasi_spell/syllables.py quotes 98.6%: each single word the lexicon
+    syllabifies, parsed as if unknown, gets the lexicon's own syllables."""
+    import re
+    from khasi_engine import morphology
+    from khasi_engine import tokens as T
+    from khasi_spell.api import _own_syllables
+    from khasi_spell.syllables import syllabify
+    db = sp.analyser.db
+    total = same = 0
+    for w, r in _single_word_records(sp):
+        w = T.nfc(w).lower()
+        gold = _own_syllables(w, ((r.get("phonology") or {}).get("derived") or {}).get("syllables"))
+        if not re.fullmatch(r"[a-zïñ]+", w) or not gold or "".join(gold) != w:
+            continue
+        layers = morphology.parse(w, lambda x: [] if x == w else db.lookup(x)).get("layers") or {}
+        got = syllabify(w, [layers[k] for k in ("prefix", "prefix2", "prefix3") if layers.get(k)],
+                        layers.get("suffix") or "")
+        total += 1
+        same += got == gold
+    assert total > 7000
+    assert same / total >= 0.98, f"{same}/{total}"
