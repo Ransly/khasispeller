@@ -153,6 +153,12 @@ def rerank(
         cands = list(getattr(corr, "suggestions", None) or [])
         if len(cands) < 2:
             continue
+        # A missing space keeps its two-word form first. The split keeps
+        # every letter the writer typed, and the corpus writes it apart far
+        # more often; context alone could promote a word that drops letters:
+        # `ki arsngi kiba` became `ki sngi kiba`, losing `ar` "two".
+        if getattr(corr, "method", "") == "runtogether_split":
+            continue
 
         idx = by_offset.get(corr.start)
         if idx is None:

@@ -56,7 +56,10 @@ UNLISTED_DERIVED_FORMS = [
     # and the parse-plausibility signal correctly rejects it.
     "nongsngew",   # nong- + sngew (root: 3,129 corpus uses; form: 0)
     "nonglah",     # nong- + lah   (root: 19,535 uses; form: 0)
-    "babam",       # ba-   + bam   (root:  2,403 uses; form: 0)
+    "nongkynmaw",  # nong- + kynmaw (root: 1,006 uses; form: 0)
+    # 'babam' was here as ba- + bam, but ba is not a registered prefix: it
+    # passed only as the compound bab + am. Never written solid in the corpus
+    # (ba bam), it is a missing space, refused since 2026-10-04.
 ]
 
 

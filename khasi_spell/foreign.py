@@ -69,6 +69,12 @@ gazetteer of Khasi place and personal names would be the principled fix,
 and would let this suppression be narrowed to "capitalised *and* unknown to
 the gazetteer".
 
+Since 2026-10-04 the blind spot is narrower: a withheld capitalised or
+all-caps word that looks like a typo rather than a name — a Khasi word within
+one change, and unseen in the corpus — is reported after all, as a possible
+misspelling that is never applied automatically. See
+KhasiSpeller._capitalised_typo in khasi_spell/speller.py.
+
 Nothing is deleted. Suppressed tokens are returned on `TextResult.skipped`
 so a caller can surface them if it wants; they are simply kept out of
 `corrections`, which is what gets auto-applied.

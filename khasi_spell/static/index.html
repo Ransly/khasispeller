@@ -1191,13 +1191,19 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g,
 const jsq = s => esc(JSON.stringify(String(s == null ? "" : s)));
 
 /* A word, exactly as the server tokenises it (khasi_engine/tokens.py):
-   Latin letters including ï ñ á é í ó ú ý, joined by an internal apostrophe
-   (straight or typographic), a hyphen, or scan debris such as ^. The page
+   Latin letters including ï ñ á é í ó ú ý and full-width letters, joined by
+   an internal apostrophe (straight or typographic), a hyphen, scan debris
+   such as ^, or an invisible character (soft hyphen, zero-width space);
+   Cyrillic and Greek look-alikes count only beside Latin letters. The page
    used a narrower pattern, so its word count and its clickable words could
    split a word the server treated as one. A fresh RegExp each call, since a
    /g pattern carries state between uses. */
-const WORD_SRC = "[A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff]+"
-  + "(?:['\u2019\u02bc^~\u00ab\u00bb\u2022|\\\\{}\\[\\]\\-][A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff]+)*";
+const W_LETTERS = "A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff\uff21-\uff3a\uff41-\uff5a";
+const W_LOOK = "\u0430\u0435\u043e\u0440\u0441\u0443\u0445\u0456\u0458\u0455\u0501\u04bb\u04cf\u0410\u0412\u0415\u041a\u041c\u041d\u041e\u0420\u0421\u0422\u0425\u0406\u0408\u0405\u03bf\u03b1\u03b9\u03c1\u03c5\u03bd\u03ba\u039f\u0391\u0392\u0395\u0397\u0399\u039a\u039c\u039d\u03a1\u03a4\u03a5\u03a7\u0396";
+const W_RUN = "[" + W_LOOK + "]{0,3}[" + W_LETTERS + "][" + W_LETTERS + W_LOOK + "]*";
+const WORD_SRC = W_RUN
+  + "(?:['\u2019\u02bc^~\u00ab\u00bb\u2022|\\\\{}\\[\\]\\-\u00ad\u200b\u200c\u200d\u2060\ufeff]"
+  + W_RUN + ")*";
 const wordRe = () => new RegExp(WORD_SRC, "g");
 
 /* "[Imit. x-y.]" is the source dictionary's imitative — in its own words,
@@ -1433,6 +1439,26 @@ function clearAll(){
   lastResult = null; flagged = []; cursor = 0; updateCount(); renderDetail();
 }
 
+/* The server counts characters as Python does, one per Unicode code point;
+   this page indexes strings as JavaScript does, in UTF-16 units, where an
+   emoji (any character beyond U+FFFF) takes two. Unconverted, every highlight
+   after such a character slid, and applying a fix replaced the wrong letters:
+   "😀😀 ka shnongg bha" came back "😀😀 kshnonggg bha". Converted once, as
+   the result arrives, so highlighting, fixes and copying all use one scale. */
+function toPageOffsets(res){
+  const text = res.text || "";
+  if (!/[\uD800-\uDBFF]/.test(text)) return;        // nothing beyond U+FFFF
+  const at = [0];                                   // code point -> UTF-16 index
+  for (const ch of text) at.push(at[at.length - 1] + ch.length);
+  const move = x => {
+    if (!x || typeof x.start !== "number") return;
+    if (at[x.start] !== undefined) x.start = at[x.start];
+    if (at[x.end] !== undefined) x.end = at[x.end];
+  };
+  [res.corrections, res.variants, res.skipped, res.realword]
+    .forEach(list => (list || []).forEach(move));
+}
+
 async function checkText(){
   const text = $("text").value.trim();
   if (!text) { announce("Nothing to check. Type or paste some Khasi text first."); return; }
@@ -1454,6 +1480,7 @@ async function checkText(){
         if (rw.text === res.text) res.realword = rw.flags || [];
       } catch (e) { res.realword = []; }
     }
+    toPageOffsets(res);
     res._ms = performance.now() - t0;
     lastResult = res;
     flagged = res.corrections.slice();
@@ -1580,9 +1607,12 @@ function markup(res, selectable){
            + 'event.preventDefault();openFixMenu(' + s.idx + ', this)}"'
            // The hover hint: what kind of word this is, as a heading, then
            // what it means and what clicking does.
-           + ' data-tip-head="' + (isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
-                                  : isJoin(c) ? FLAG.join : FLAG.unknown) + '"'
-           + ' data-tip="' + (isEnglish(c) ? "Not a Khasi word."
+           + ' data-tip-head="' + flagLabel(c) + '"'
+           + ' data-tip="' + (isPossible(c) ? "Capitalised, so it may be a name."
+                          : isLookalike(c) ? "A letter here is from another alphabet."
+                          : isDigitWord(c) ? "A digit is typed inside this word."
+                          : isSplit(c) ? "Two words written as one."
+                          : isEnglish(c) ? "Not a Khasi word."
                           : isInvalid(c.gate) ? "Not possible in Khasi."
                           : isJoin(c) ? "Join it to the next word."
                                       : "Not in the dictionary.")
@@ -1634,14 +1664,37 @@ function isJoin(c){ return !!c && JOIN_METHODS.includes(c.method); }
 /* An English word (`hospital`, `state`): rejected by ruling, with no Khasi
    suggestion, and counted with the invalid spellings. */
 function isEnglish(c){ return !!c && c.method === "english_word"; }
-function isRed(c){ return isInvalid(c.gate) || isEnglish(c); }
+/* A capitalised word checked although it may be a name (speller.py,
+   _capitalised_typo). Always the softer amber label, even when it breaks a
+   spelling rule: a foreign name can do that too. */
+function isPossible(c){ return !!c && c.possible_misspelling === true; }
+/* A letter from another alphabet that looks Latin, such as a Cyrillic o
+   (spell_checker.py, "lookalike_letters"): wrong as typed, so red. */
+function isLookalike(c){ return !!c && c.method === "lookalike_letters"; }
+/* A digit inside a word (`shn0ng`): wrong as typed, so red, read whole. */
+function isDigitWord(c){ return !!c && c.method === "digit_in_word"; }
+/* Two words written as one (`kakam` for `ka kam`): the counterpart of
+   "Written apart", offered the two-word form first. */
+function isSplit(c){ return !!c && c.method === "runtogether_split"; }
+function isRed(c){ return !isPossible(c) && (isInvalid(c.gate) || isEnglish(c) || isLookalike(c)
+                                              || isDigitWord(c)); }
 function flagLabel(c){
-  return isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
-       : isJoin(c) ? FLAG.join : FLAG.unknown;
+  return isPossible(c) ? FLAG.possible : isLookalike(c) ? FLAG.lookalike
+       : isDigitWord(c) ? FLAG.digit
+       : isEnglish(c) ? FLAG.english : isInvalid(c.gate) ? FLAG.invalid
+       : isJoin(c) ? FLAG.join : isSplit(c) ? FLAG.split : FLAG.unknown;
 }
 const FLAG = {
   invalid: "Invalid spelling",
   unknown: "Unknown word",
+  lookalike: "Look-alike letter",
+  digit: "Digit in a word",
+  split: "Missing space",
+  splitWhy: "Two words written as one. The corpus writes them apart far more often "
+    + "(ka kam, not kakam). Add the space.",
+  possible: "Possible misspelling",
+  possibleWhy: "Capitalised, so it may be a name. But it is in neither the dictionary "
+    + "nor the corpus, and a Khasi word is one change away. If it is a name, leave it.",
   join: "Written apart",
   joinWhy: "A prefix that cannot stand alone, or a word broken by a line-end "
     + "hyphen, is written apart from the rest of its word. Join them.",
@@ -1667,10 +1720,13 @@ function renderResults(res){
   const total = (res.text.match(wordRe()) || []).length;
   const errs  = res.corrections.filter(c => isRed(c)).length;
   const joins = res.corrections.filter(c => !isRed(c) && isJoin(c)).length;
-  const unk   = res.corrections.filter(c => !isRed(c) && !isJoin(c)).length;
+  const poss  = res.corrections.filter(c => isPossible(c)).length;
+  const splits = res.corrections.filter(c => !isRed(c) && isSplit(c)).length;
+  const unk   = res.corrections.filter(c => !isRed(c) && !isJoin(c) && !isPossible(c)
+                                          && !isSplit(c)).length;
   const rws   = (res.realword || []).length;
   // A join covers two tokens of the count; a word-choice flag is a real word.
-  const valid = Math.max(0, total - errs - unk - 2 * joins);
+  const valid = Math.max(0, total - errs - unk - poss - splits - 2 * joins);
 
   // One key entry per colour in the text, with its count. The four count
   // tiles that stood above the key are gone (2 October 2026): they repeated
@@ -1707,6 +1763,10 @@ function renderResults(res){
   + '<div class="legend">'
   + key(errs, 'background:var(--red-b)', 'Invalid spelling &mdash; not possible in Khasi', FLAG.invalidWhy)
   + key(unk, 'background:var(--amber-b)', 'Unknown word &mdash; not in the dictionary', FLAG.unknownWhy)
+  + (poss ? key(poss, 'background:var(--amber-b)', FLAG.possible + ' &mdash; capitalised',
+                FLAG.possibleWhy) : '')
+  + (splits ? key(splits, 'background:var(--amber-b)', FLAG.split + ' &mdash; add a space',
+                  FLAG.splitWhy) : '')
   + key(alts, 'border-bottom:2px dotted var(--green);background:var(--green-s2)',
         'Correct &mdash; another spelling exists',
         'Already correct. The standard spelling (with \u00ef or \u00f1) is offered beside it; click the word to choose.')
@@ -1855,6 +1915,11 @@ function openFixMenu(i, anchor){
   showPop(anchor, "fix",
       '<div class="ph"><b>' + esc(c.original) + '</b><i>'
     + flagLabel(c).toLowerCase() + '</i></div>'
+    + (isPossible(c) ? '<div class="opt" style="cursor:default"><span class="g">'
+        + esc(FLAG.possibleWhy) + '</span></div>' : '')
+    + ((isLookalike(c) || isDigitWord(c)) && c.reason && opts
+        ? '<div class="opt" style="cursor:default"><span class="g">'
+          + esc(c.reason) + '</span></div>' : '')
     // With no candidate to offer, say WHY the word was flagged rather than
     // why the search came back empty. The engine carries the phonology
     // module's own wording — "Illegal characters: f — not in Khasi
@@ -2818,7 +2883,8 @@ this system describes performance on artificially introduced errors.</li>
 <li><b>The lexicon is incomplete.</b> It derives from a scanned printed
 dictionary, still carries scanning damage, and misses words in ordinary use.</li>
 <li><b>Proper nouns are withheld, not checked.</b> A misspelled name is never
-corrected.</li>
+corrected. A capitalised word one change from a Khasi word, and unknown to the
+corpus, is shown as a possible misspelling instead.</li>
 <li><b>English inside Khasi text is usually flagged.</b> There is no language
 identifier.</li>
 </ul>

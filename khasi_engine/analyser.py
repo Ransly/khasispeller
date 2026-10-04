@@ -177,8 +177,40 @@ class KhasiAnalyser:
             if p4.get("type") == "compound_fusion":
                 if self._outranked_by_attested(w) is not None:
                     return False
+                if self._fusion_is_a_missing_space(w):
+                    return False
             return True
 
+        return False
+
+    def _fusion_is_a_missing_space(self, word: str) -> bool:
+        """Is the two-word reading of *word* really two words run together?
+
+        `compound_fusion` accepts any string that divides into two content
+        words, so a missing space read as a compound: `kakam` as kak + am,
+        where the writer meant `ka kam` — written apart 8,617 times in the
+        corpus, solid 10. Maintainer ruling 2026-10-04: refused when
+
+          * the run-together table lists the word (khasi_spell.splits), which
+            also puts the two-word form first among the suggestions; or
+          * it has no hyphen and was never written solid in the corpus. Of
+            2,000 pairs of adjacent news words joined, 224 were accepted this
+            way (jiedshen, leiton, utit), while real compounds are written:
+            of 72 news words accepted only as a compound, 68 occur elsewhere
+            in the corpus (rilum, dohiong, ingdorbar).
+
+        A hyphen marks a compound the writer intended (nar-jot), so it is
+        exempt from the second test, and without corpus counts that test is
+        off.
+        """
+        w = (word or "").lower().strip()
+        if self.spell._split_suggestion(w):
+            return True
+        if "-" not in w:
+            from khasi_engine.spell_checker import corpus_counts
+            counts = corpus_counts()
+            if counts and counts.get(_tokens.corpus_form(w), 0) == 0:
+                return True
         return False
 
     # Distance at which an attested word outranks a speculative analysis. One
@@ -441,6 +473,9 @@ class KhasiAnalyser:
                 # _is_morphologically_valid or the word is still never
                 # flagged.
                 if known and self._outranked_by_attested(w) is not None:
+                    known = False
+                # …nor a missing space read as a compound: kakam is ka kam.
+                if known and self._fusion_is_a_missing_space(w):
                     known = False
             out = {"valid": True, "has_affix": True, "reason": "complex"}
             if known is not None:
@@ -920,6 +955,70 @@ class KhasiAnalyser:
                 })
         return out
 
+    # Digits typed for the letters they resemble.
+    _DIGIT_LETTERS = {"0": "o", "1": "il", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b"}
+
+    def _digit_word_corrections(self, digit_words) -> list:
+        """A correction for each word with a digit inside.
+
+        `shn0ng` was split at the digit into `shn` and `ng`, and each piece
+        was "corrected". The word is now answered whole. Two readings are
+        tried: each digit as the letter it resembles (`shn0ng` -> `shnong`),
+        then the digits left out, for a stray key (`sh1nong` -> `shnong`). A
+        reading is offered only when it is a real word — a lexicon word, or
+        one the corpus writes at least ten times that the checker accepts —
+        since a parse alone would accept `shlnong` (sh + -l- + nong). With no
+        such reading the word is still flagged, whole and without a
+        suggestion: as typed it cannot be a Khasi word.
+        """
+        import itertools
+        from khasi_engine.spell_checker import corpus_counts
+        counts = corpus_counts()
+
+        def real(r):
+            if self.db.is_known(r):
+                return True
+            return (counts.get(_tokens.corpus_form(r), 0) >= 10
+                    and bool(self.spell.suggest(r, n=1).get("is_known")))
+
+        out = []
+        for start, end, word in digit_words:
+            digits = [i for i, ch in enumerate(word) if ch.isdigit()]
+            readings = []                                   # (reading, why)
+            if len(digits) <= 3 and all(word[i] in self._DIGIT_LETTERS for i in digits):
+                for letters in itertools.product(*(self._DIGIT_LETTERS[word[i]] for i in digits)):
+                    chars = list(word)
+                    for i, letter in zip(digits, letters):
+                        chars[i] = letter
+                    shown = ", ".join(f"{word[i]} for {l}" for i, l in zip(digits, letters))
+                    readings.append(("".join(chars), f"a digit typed for a letter ({shown})"))
+            readings.append(("".join(ch for ch in word if not ch.isdigit()), "a stray digit"))
+            found = {}
+            for r, why in readings:
+                if r.lower() not in found and real(r.lower()):
+                    found[r.lower()] = why
+            offer = [_tokens.match_case(word, r) for r in found][:5]
+            if offer:
+                reason = f"Contains {next(iter(found.values()))}: it reads '{offer[0]}'."
+            else:
+                reason = "Contains a digit inside the word, so as typed it is not a Khasi word."
+            out.append({
+                "original": word,
+                "suggestion": offer[0] if offer else None,
+                "start": start,
+                "end": end,
+                "suggestions_top5": offer,
+                # Each reading is the word with the digit read or dropped —
+                # no further change — so it is shown as a full match.
+                "suggestion_distances": [0.0] * len(offer),
+                "method": "digit_in_word",
+                "morphologically_valid": False,
+                "phonotactically_valid": False,
+                "gate_reached": 3,
+                "reason": reason,
+            })
+        return out
+
     def _hyphen_break_corrections(self, text: str) -> list:
         """Rejoin a word broken across a line by a hyphen.
 
@@ -941,18 +1040,30 @@ class KhasiAnalyser:
         whichever the lexicon actually recognises wins.
         """
         out = []
-        pattern = rf"\b({self._WORD_RE})-[ \t]+({self._WORD_RE})"
+        # Each half at most a word long, and never starting inside a
+        # hyphenated run. Unbounded, the scan restarted after every hyphen and
+        # ran to the end of the run each time: 48,000 characters of `ka-ka-…`
+        # took 35 s. Nothing longer than the spell checker's limit is a word.
+        word = rf"[{_tokens.LETTERS}{_tokens.APOSTROPHES}\-]{{1,{KhasiSpellChecker.MAX_WORD_CHARS}}}"
+        pattern = rf"(?<!-)\b({word})-[ \t]+({word})"
+        # One search per distinct pair, as check_sentence does per word: a
+        # text of 12,000 `ka- ka` breaks ran 12,000 identical searches (116 s).
+        memo: dict = {}
         for m in re.finditer(pattern, text):
             left, right = m.group(1), m.group(2)
-            best = None
-            for joined in (f"{left}{right}".lower(), f"{left}-{right}".lower()):
-                if self.db.is_known(joined):
-                    best = joined
-                    break
-                sugg = (self.spell.suggest(joined, n=3).get("suggestions")
-                        or [])
-                if sugg and best is None:
-                    best = sugg[0]
+            key = (left.lower(), right.lower())
+            if key not in memo:
+                best = None
+                for joined in (f"{left}{right}".lower(), f"{left}-{right}".lower()):
+                    if self.db.is_known(joined):
+                        best = joined
+                        break
+                    sugg = (self.spell.suggest(joined, n=3).get("suggestions")
+                            or [])
+                    if sugg and best is None:
+                        best = sugg[0]
+                memo[key] = best
+            best = memo[key]
             if not best or best == m.group(0).lower():
                 continue
             best = _tokens.match_case(m.group(0), best)
@@ -1003,6 +1114,18 @@ class KhasiAnalyser:
                            if not any(c["start"] < e and c["end"] > st
                                       for st, e in spans)]
             corrections = sorted(corrections + joins, key=lambda c: c["start"])
+        # Addresses and letters fused to numbers are not words (gmail, com;
+        # 1st, 79.2mm): nothing inside them is flagged. A word with a digit
+        # inside (`shn0ng`) is answered whole, or left alone.
+        skip, digit_words = _tokens.unchecked_spans(text)
+        blocked = skip + [(a, b) for a, b, _ in digit_words]
+        if blocked:
+            corrections = [c for c in corrections
+                           if not any(c["start"] < e and c["end"] > st
+                                      for st, e in blocked)]
+        digit_fixes = self._digit_word_corrections(digit_words)
+        if digit_fixes:
+            corrections = sorted(corrections + digit_fixes, key=lambda c: c["start"])
         corrected   = text
         offset      = 0
         last_end    = 0

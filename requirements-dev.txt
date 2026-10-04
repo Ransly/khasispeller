@@ -1,2 +1,4 @@
 -r requirements-api.txt
 pytest>=8.0.0
+# FastAPI's TestClient runs on httpx; the API tests could not start without it.
+httpx>=0.27

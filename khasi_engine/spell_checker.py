@@ -52,9 +52,9 @@ Return ranked suggestions
 
 The `method` field takes exactly one of: "empty", "user_dictionary",
 "semantically_invalid_standalone", "levenshtein_phonotactic",
-"confidence_gate", "hyphenated_part", "english_word", "levenshtein_primary",
-"levenshtein_speller_combined", "hybrid_fasttext", "runtogether_split",
-"none".
+"confidence_gate", "hyphenated_part", "english_word", "too_long",
+"levenshtein_primary", "levenshtein_speller_combined", "hybrid_fasttext",
+"runtogether_split", "none".
 
 Sentence checking
 ─────────────────
@@ -779,6 +779,61 @@ def _english_words() -> frozenset:
         except Exception:
             _ENGLISH_WORDS = frozenset()
     return _ENGLISH_WORDS
+
+
+_CORPUS_COUNTS: Optional[dict] = None
+
+
+def corpus_counts() -> dict:
+    """Raw corpus counts (data/corpus_freq.json), in corpus spelling.
+
+    Loaded once and shared: the analyser asks whether a fused compound has
+    ever been written solid, and khasi_spell asks whether a capitalised word
+    is a known name. Empty when the file is absent, and every caller then
+    leaves its rule off.
+    """
+    global _CORPUS_COUNTS
+    if _CORPUS_COUNTS is None:
+        import json as _json
+        from khasi_engine import paths as _paths
+        try:
+            _CORPUS_COUNTS = _json.loads(
+                _paths.data_file("corpus_freq.json").read_text(encoding="utf-8")
+            ).get("counts") or {}
+        except Exception:
+            _CORPUS_COUNTS = {}
+    return _CORPUS_COUNTS
+
+
+_NAME_ONLY_WORDS: Optional[frozenset] = None
+
+
+def _name_only_words() -> frozenset:
+    """
+    English words held back from the English list as names or titles.
+
+    scripts/build_english_list.py holds back a word whose corpus uses are at
+    least 95% capitalised: `United` (1,746 of 1,766), `Hoping` (508 of 520),
+    `Smit`, `Martin`, `Limited`. Held back, such a word was accepted in any
+    case, so lower-case `killing`, `helping` and `traditional` passed as
+    Khasi — 52 of them, against the 2026-10-01 ruling that English words are
+    rejected. Maintainer decision 2026-10-04: accepted when written with a
+    capital, rejected as English in lower case. Words held back as Khasi
+    (`longing` "household") or as Khasi derivations (`jingle`) are not here.
+    """
+    global _NAME_ONLY_WORDS
+    if _NAME_ONLY_WORDS is None:
+        import json as _json
+        from khasi_engine import paths as _paths
+
+        path = _paths.data_file("english_in_corpus.json")
+        try:
+            held = _json.loads(path.read_text(encoding="utf-8")).get("held_back") or {}
+            _NAME_ONLY_WORDS = frozenset(
+                w for w, why in held.items() if str(why).startswith("name:"))
+        except Exception:
+            _NAME_ONLY_WORDS = frozenset()
+    return _NAME_ONLY_WORDS
 
 
 class _DeleteIndex:
@@ -1567,7 +1622,7 @@ class KhasiSpellChecker:
             return False
         # Nor is an English word, unless the Khasi lexicon records it
         # (maintainer ruling 2026-10-01; see _english_words).
-        if low in _english_words() and not self._db.is_known(low):
+        if (low in _english_words() or low in _name_only_words()) and not self._db.is_known(low):
             return False
         if word:
             w = word.lower()
@@ -1608,10 +1663,28 @@ class KhasiSpellChecker:
     _W_FREQUENT      = 2
     _W_THRESHOLD     = 3
     _FREQ_HIGH_BAR   = 10  # min corpus freq to count as "frequent"
+    # The longest token suggest() will search for. Candidate generation (the
+    # delete index, the compound splitter) grows with the cube of the length:
+    # a 1,000-letter token took 9 s and 480 MB, one of 2,000 had not finished
+    # after a minute, so a single request could stall or crash the service.
+    # No real word comes close — the lexicon's longest single token is 27
+    # characters, the corpus's 31 — and at 50 the slowest input measured
+    # (a repeated prefix) takes 0.11 s.
+    MAX_WORD_CHARS   = 50
     # Open word classes — the ones a productive derivation can be built on.
     # Used by _root_is_substantive() to tell a prefix that is also a content
     # word (sngew VERB) from one that is not (ia PREPOSITION).
     _OPEN_CLASS = frozenset({"NOUN", "VERB", "ADJ", "ADJECTIVE", "ADV", "ADVERB"})
+    # Grammar words take no prefix — maintainer ruling 2026-10-04. pyn- + ka,
+    # jing- + ki, pyn- + ba and jing- + ne were accepted as derivations. Some
+    # of these the lexicon labels as content words (`ba` verb, `ne` and `u`
+    # noun, `ym` adverb), so the class test alone cannot refuse them.
+    _NO_PREFIX_ROOTS = frozenset({"ka", "ki", "u", "i", "ba", "ne", "ha", "na",
+                                  "ia", "ïa", "sha", "la", "ym", "bad"})
+    # Lexicon classes that are grammar words. "other" and "phrase" are mixed
+    # bags and stay out.
+    _CLOSED_CLASS_LABELS = frozenset({"determiner", "pronoun", "preposition",
+                                      "conj", "particle", "interjection"})
 
     def _root_is_substantive(self, root: str) -> bool:
         """A parse's root must be a WORD — not a morpheme, not a fragment.
@@ -1642,7 +1715,19 @@ class KhasiSpellChecker:
         r = (root or "").lower()
         if not r:
             return False
+        if r in self._NO_PREFIX_ROOTS:
+            return False
         matches = self._db.lookup(r) or []
+        # A word the lexicon records only as a grammar word — determiner,
+        # pronoun, preposition, conjunction — is not a root either. Until
+        # 2026-10-04 only the closed-class PREFIXES (ia, ïa) were refused, so
+        # pyn- + ka and jing- + ki passed. Lookup can fall through to other
+        # spellings, so only the root's own entries count.
+        own = {(m.get("grammatical_class") or "").strip().lower()
+               for m in matches if (m.get("surface_form") or "").lower() == r}
+        own.discard("")
+        if own and own <= self._CLOSED_CLASS_LABELS:
+            return False
         try:
             from khasi_engine import morphology as _morph
             if r in {k.lower() for k in getattr(_morph, "PREFIXES", {})}:
@@ -1873,6 +1958,37 @@ class KhasiSpellChecker:
                     "method": "empty", "in_lexicon": False, "gate_reached": 0}
         word_lower = word.lower()
 
+        # A Cyrillic or Greek letter drawn like a Latin one (`shn\u043eng`, with a
+        # Cyrillic \u043e) leaves the word looking right while it matches nothing.
+        # Reported with the letter named, and the Latin spelling offered when
+        # that is a word — otherwise its own suggestions.
+        latin = _tokens.latinise(word)
+        if latin != word:
+            import unicodedata as _ud
+            inner = self.suggest(latin, n=n)
+            if inner.get("is_known"):
+                offer, dist = [latin], [0.0]
+            else:
+                offer = list(inner.get("suggestions") or [])[:n]
+                dist = list(inner.get("suggestion_distances") or [])[:len(offer)]
+            foreign = sorted({ch for ch in word if _tokens.latinise(ch) != ch})
+            named = ", ".join(f"{ch} ({_ud.name(ch, 'letter').title()})" for ch in foreign)
+            note = (f"Contains a letter from another alphabet that looks Latin: {named}. "
+                    f"Typed with Latin letters it reads '{latin}'.")
+            return {
+                "is_known":              False,
+                "morphologically_valid": False,
+                "phonotactically_valid": False,
+                "suggestions":           offer,
+                "suggestion_distances":  dist,
+                "method":                "lookalike_letters",
+                "in_lexicon":            False,
+                "gate_reached":          3,
+                "confidence":            {"score": 0, "signals": {},
+                                          "threshold": self._W_THRESHOLD, "veto": note},
+                "reason":                note,
+            }
+
         # A word the user taught this checker (KhasiSpeller.add_word) is
         # accepted before any gate: names and loans such as `Meghalaya` break
         # Khasi phonotactics by design, and teaching them is the only way to
@@ -1889,6 +2005,26 @@ class KhasiSpellChecker:
                 "confidence":            {"score": self._W_THRESHOLD,
                                           "signals": {"user_dictionary": self._W_THRESHOLD},
                                           "threshold": self._W_THRESHOLD},
+            }
+
+        # Far longer than any Khasi word: answered without a search, which at
+        # this length would take minutes (see MAX_WORD_CHARS). A long headword,
+        # such as a hyphenated phrase the lexicon records, still passes.
+        if len(word_lower) > self.MAX_WORD_CHARS and not self._db.is_known(word_lower):
+            note = (f"Too long to check as one word: {len(word_lower)} characters, "
+                    f"and the limit is {self.MAX_WORD_CHARS}. Is a space missing?")
+            return {
+                "is_known":              False,
+                "morphologically_valid": False,
+                "phonotactically_valid": False,
+                "suggestions":           [],
+                "suggestion_distances":  [],
+                "method":                "too_long",
+                "in_lexicon":            False,
+                "gate_reached":          3,
+                "confidence":            {"score": 0, "signals": {},
+                                          "threshold": self._W_THRESHOLD, "veto": note},
+                "reason":                note,
             }
 
         # ── Gate 0: Semantically invalid standalone check ─────────────
@@ -1975,7 +2111,11 @@ class KhasiSpellChecker:
         # 2026-10-01) unless the Khasi lexicon records the spelling: corpus
         # frequency used to carry `hospital` and `state` over the bar, and a
         # spurious parse carried `within` and `tablet`. See _english_words.
-        english = not in_lexicon and word_lower in _english_words()
+        english = not in_lexicon and (
+            word_lower in _english_words()
+            # A name or title word (`United`, `Hoping`) is English in lower
+            # case and accepted with a capital. See _name_only_words.
+            or (word_lower in _name_only_words() and not word[:1].isupper()))
         if conf["score"] >= conf["threshold"] and not ends_in_y and not english:
             veto = self._hyphenated_part_veto(word_lower, conf, in_lexicon)
             if veto is not None:
@@ -1998,6 +2138,8 @@ class KhasiSpellChecker:
         # what it is rather than that it ends in y.
         if english:
             note = f"'{word_lower}' is an English word, not a Khasi word"
+            if word_lower in _name_only_words():
+                note += "; with a capital it is accepted as a name"
             return {
                 "is_known":              False,
                 "morphologically_valid": False,
@@ -2340,10 +2482,12 @@ class KhasiSpellChecker:
         # One decision per distinct word: suggest() is a pure function of the
         # normalised word for a given checker, and long documents repeat
         # their unknown words many times.
-        memo: dict[str, dict] = {}
+        memo: dict[tuple, dict] = {}
         for match in _WORD_PATTERN.finditer(sentence):
             w    = match.group(0)
-            key  = _tokens.canonical(w).lower()
+            # The capital is part of the key: a name word is accepted as
+            # `United` and rejected as `united` (see _name_only_words).
+            key  = (_tokens.canonical(w).lower(), w[:1].isupper())
             gate = memo.get(key)
             if gate is None:
                 gate = memo[key] = self.suggest(w, n=5)

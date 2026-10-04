@@ -390,8 +390,10 @@ def test_service_index_lists_analyse(client):
 
 
 def test_health_reports_resources(client):
+    """Which data files are present — but not where (2026-10-04): the data
+    folder's path is in the startup log, not in a public response."""
     res = client.get("/health").json()["resources"]
-    assert res["gazetteer"] and "data_dir" in res
+    assert res["gazetteer"] and "data_dir" not in res
 
 
 def test_cli_json_is_valid_and_includes_real_word_results(capsys):
@@ -642,3 +644,318 @@ def test_the_rules_agree_with_the_lexicon(sp):
         same += got == gold
     assert total > 7000
     assert same / total >= 0.98, f"{same}/{total}"
+
+
+# ----------------------------------------------------------------------
+# One request must not hold the service (2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word", [
+    "ab" * 1000,                      # 2,000 letters
+    "-".join(["ka"] * 1000),          # one hyphenated token
+    "'a" * 300,
+])
+def test_a_very_long_word_is_answered_at_once(sp, word):
+    """The suggestion search grows with the cube of a word's length, and the
+    alternative-spelling generator with its square: a 1,000-letter word took
+    9 s and 480 MB, and 2,000 letters did not finish. Anything over
+    KhasiSpellChecker.MAX_WORD_CHARS is now answered without a search."""
+    import time
+    t0 = time.time()
+    r = sp.check(word)
+    assert time.time() - t0 < 2
+    assert not r.is_correct and r.method == "too_long" and r.suggestions == []
+
+
+def test_a_long_token_in_text_is_flagged_with_a_reason(sp):
+    import time
+    t0 = time.time()
+    r = sp.check_text("ka shnong " + "ab" * 2500 + " bha", context=True, skip_foreign=True)
+    assert time.time() - t0 < 5
+    (c,) = r.corrections
+    assert c.method == "too_long" and "Is a space missing?" in (c.reason or "")
+
+
+@pytest.mark.parametrize("text", ["-".join(["ka"] * 16000), "ka- " * 12000])
+def test_hyphen_heavy_text_is_checked_quickly(sp, text):
+    """Rejoining line-break hyphens rescanned each hyphenated run from every
+    hyphen (35 s for 48,000 characters of ka-ka-…), searched every repeated
+    pair again, and tested each token against every flag (116 s for 12,000
+    `ka- ka`)."""
+    import time
+    t0 = time.time()
+    sp.check_text(text, context=True, skip_foreign=True)
+    assert time.time() - t0 < 15
+
+
+def test_the_word_limit_spares_real_words(sp):
+    for w in ["shun-thlongmluh-thlongsying", "jingpynryngkangpar"]:   # the longest in the lexicon
+        assert sp.check(w).is_correct, w
+
+
+def test_a_line_break_hyphen_is_still_rejoined(sp):
+    r = sp.check_text("ka kiiyn- nah", context=True, skip_foreign=True)
+    assert [(c.original, c.suggestion, c.method) for c in r.corrections] == [
+        ("kiiyn- nah", "khynnah", "hyphen_line_break")]
+
+
+def test_batch_caps_each_word_as_word_does(client):
+    assert client.post("/batch", json={"words": ["ka", "x" * 101]}).status_code == 422
+    assert client.post("/batch", json={"words": ["ka", "x" * 100]}).status_code == 200
+
+
+# ----------------------------------------------------------------------
+# Capitalised misspellings are no longer all withheld as names (2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("text, word, fix", [
+    ("ka Shnongg ba khraw", "Shnongg", "Shnong"),
+    ("KA SHNONGG BA KHRAW", "SHNONGG", "SHNONG"),
+])
+def test_a_capitalised_misspelling_is_a_possible_misspelling(sp, text, word, fix):
+    """Every capitalised word mid-sentence was withheld as a presumed name,
+    so `ka Shnongg ba khraw` passed. Near a Khasi word and unseen in the
+    corpus, it is now flagged — softly, and never applied automatically."""
+    r = sp.check_text(text, context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert (c.original, c.suggestion, c.possible_misspelling) == (word, fix, True)
+    assert r.corrected == text
+
+
+def test_names_and_acronyms_stay_withheld(sp):
+    r = sp.check_text("ka Meghalaya bad u Conrad bad ka KHADC bad ka MDA",
+                      context=True, skip_foreign=True)
+    assert r.corrections == []
+    assert {s["word"] for s in r.skipped} == {"Meghalaya", "Conrad", "KHADC", "MDA"}
+
+
+def test_a_sentence_start_is_checked_as_before(sp):
+    r = sp.check_text("Shnongg ba khraw", context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert not c.possible_misspelling and r.corrected == "Shnong ba khraw"
+
+
+def test_without_the_corpus_the_rule_stays_off(sp, monkeypatch):
+    """With no corpus counts every rare name would look like a typo."""
+    monkeypatch.setattr(sp, "_corpus_count_table", {})
+    r = sp.check_text("ka Shnongg ba khraw", context=True, skip_foreign=True)
+    assert r.corrections == [] and [s["word"] for s in r.skipped] == ["Shnongg"]
+
+
+def test_correct_never_applies_a_possible_misspelling(client):
+    d = client.post("/correct", json={"text": "ka Shnongg ba khraw bad ka shnongg"}).json()
+    assert d["corrected"] == "ka Shnongg ba khraw bad ka shnong"
+    assert (d["changes"], d["possible_misspellings"], d["flagged_without_suggestion"]) == (1, 1, 0)
+
+
+# ----------------------------------------------------------------------
+# Name words are English in lower case (maintainer ruling 2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word", ["killing", "united", "hoping", "traditional"])
+def test_a_name_word_is_english_in_lower_case(sp, word):
+    """Held back from the English list because the corpus writes them with a
+    capital (`United`, `Hoping`), these were accepted in any case."""
+    r = sp.check(word)
+    assert not r.is_correct and r.method == "english_word"
+    assert sp.check(word.capitalize()).is_correct
+
+
+def test_khasi_words_with_an_english_spelling_stay_accepted(sp):
+    for w in ["longing", "jingle"]:          # 'household'; jing- + le
+        assert sp.check(w).is_correct, w
+
+
+def test_the_capital_is_kept_apart_within_one_text(sp):
+    r = sp.check_text("Ka United ka long, bad ka united", context=True, skip_foreign=True)
+    assert [(c.original, c.method) for c in r.corrections] == [("united", "english_word")]
+    assert "united" not in sp.check("unitd").suggestions
+
+
+# ----------------------------------------------------------------------
+# Repeated prefixes and prefixed grammar words (maintainer ruling 2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word", [
+    "pynpynlong", "pynpynpynlong", "jingjingstad", "nongnongtrei", "jingpynjingpynstad",
+    "pynka", "jingka", "pynki", "pynba", "jingne",
+])
+def test_doubled_prefixes_and_prefixed_grammar_words_are_rejected(sp, word):
+    assert not sp.check(word).is_correct
+
+
+@pytest.mark.parametrize("word", [
+    "ïaïaid", "ïaïap",                   # ïa- on roots that begin with ïa
+    "jingpynstad", "jingïalehkai", "jingpynïakhlad", "jingïapyndom", "nongsngew",
+    "pynkhraw", "jingpynkhraw",          # pyn- on an adjective
+    "jingïatreilang",
+])
+def test_genuine_prefix_stacks_still_pass(sp, word):
+    assert sp.check(word).is_correct
+
+
+# ----------------------------------------------------------------------
+# A missing space is not a compound (maintainer ruling 2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word, split", [
+    ("kakam", "ka kam"),          # read as kak + am
+    ("kadei", "ka dei"),
+    ("kapor", "ka por"),
+])
+def test_a_run_together_word_is_offered_its_two_words(sp, word, split):
+    r = sp.check(word)
+    assert not r.is_correct and r.method == "runtogether_split" and r.suggestions[0] == split
+
+
+@pytest.mark.parametrize("word", ["hakam", "jiedshen", "leiton", "utit"])
+def test_an_unseen_fusion_of_two_words_is_rejected(sp, word):
+    """Two content words joined and never written solid in the corpus were
+    accepted as a compound: 224 of 2,000 joined news-word pairs."""
+    assert not sp.check(word).is_correct
+
+
+@pytest.mark.parametrize("word", ["dohiong", "bamsmai", "phetkrad", "nar-jot"])
+def test_attested_compounds_still_pass(sp, word):
+    assert sp.check(word).is_correct
+
+
+def test_context_does_not_drop_the_letters_of_a_split(sp):
+    """`ki arsngi kiba` was re-ranked to `ki sngi kiba`, losing `ar` 'two'."""
+    r = sp.check_text("ha kine ki arsngi kiba mynta", context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert c.suggestion == "ar sngi"
+
+
+# ----------------------------------------------------------------------
+# Hidden and look-alike characters (2026-10-04)
+# ----------------------------------------------------------------------
+
+def test_a_soft_hyphen_inside_a_word_is_read_through(sp):
+    assert sp.check_text("ka shn\u00adong bha", context=True, skip_foreign=True).corrections == []
+    r = sp.check_text("ka shn\u200bongg bha", context=True, skip_foreign=True)
+    assert [(c.original, c.suggestion) for c in r.corrections] == [("shn\u200bongg", "shnong")]
+
+
+def test_full_width_letters_are_checked(sp):
+    w = "\uff53\uff48\uff4e\uff4f\uff4e\uff47"
+    assert sp.check_text(f"ka {w} bha", context=True, skip_foreign=True).corrections == []
+    r = sp.check_text(f"ka {w}\uff47 bha", context=True, skip_foreign=True)
+    assert [c.suggestion for c in r.corrections] == ["shnong"]
+
+
+@pytest.mark.parametrize("text, word, fix", [
+    ("ka shn\u043eng bha", "shn\u043eng", "shnong"),
+    ("Ka Shillong bad ka Shn\u043eng", "Shn\u043eng", "Shnong"),   # capitalised: still flagged
+])
+def test_a_look_alike_letter_is_named_and_fixed(sp, text, word, fix):
+    r = sp.check_text(text, context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert (c.original, c.suggestion, c.method) == (word, fix, "lookalike_letters")
+    assert "Cyrillic Small Letter O" in c.reason and not c.possible_misspelling
+
+
+def test_cyrillic_words_are_left_alone(sp):
+    assert sp.check_text("ka \u0441\u043eн bha", context=True, skip_foreign=True).corrections == []
+
+
+# ----------------------------------------------------------------------
+# Numbers, addresses and digits inside words (2026-10-04)
+# ----------------------------------------------------------------------
+
+def test_ordinals_units_and_addresses_are_not_flagged(sp):
+    """Pieces of these were 125 of 2,584 flags in 1,000 news lines."""
+    text = ("ka 12th bad ka 1st Division, 79.2mm, 5:30pm, ML04A; peit ha "
+            "www.mpsc.nic.in, http://meghalaya.gov.in/covid/ ne edrid@gmail.com")
+    assert sp.check_text(text, context=True, skip_foreign=True).corrections == []
+
+
+@pytest.mark.parametrize("text, word, fix", [
+    ("ka shn0ng bha", "shn0ng", "shnong"),      # 0 for o
+    ("ka sh1nong bha", "sh1nong", "shnong"),    # a stray digit
+    ("ka iing ba kh0raw", "kh0raw", "khraw"),
+    ("Ka Shillong bad ka Shn0ng", "Shn0ng", "Shnong"),
+])
+def test_a_digit_inside_a_word_is_answered_whole(sp, text, word, fix):
+    r = sp.check_text(text, context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert (c.original, c.suggestion, c.method) == (word, fix, "digit_in_word")
+
+
+def test_a_digit_word_with_no_real_reading_is_flagged_without_a_guess(sp):
+    r = sp.check_text("ka3tarik bha", context=True, skip_foreign=True)
+    (c,) = r.corrections
+    assert (c.original, c.suggestion, c.method) == ("ka3tarik", None, "digit_in_word")
+
+
+def test_no_spelling_offer_inside_an_address(sp):
+    assert sp.check_text("peit ha www.iathuh.com", context=True, skip_foreign=True).variants == []
+
+
+# ----------------------------------------------------------------------
+# Infixes are an inherited set, not a living process (maintainer ruling
+# 2026-10-04)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("word", ["shlnong", "pynu", "jynong", "slia", "pynan"])
+def test_an_invented_infixed_form_is_rejected(sp, word):
+    """`shlnong` was accepted as sh‹l›nong (shnong + -l-), `pynu` as p‹yn›u
+    (pu + -yn-): any infix in any root."""
+    assert not sp.check(word).is_correct
+    from khasi_engine import morphology
+    assert morphology.parse(word, sp.analyser.db.lookup)["status"] != "infix_detected"
+
+
+def test_shlnong_is_offered_shnong(sp):
+    assert sp.check("shlnong").suggestions[0] == "shnong"
+
+
+@pytest.mark.parametrize("word", [
+    "bynriew", "kynjat", "shlur", "kper", "kyrmen", "snad", "khnang",   # recorded
+    "kynshaid",                                                        # the -yn- example
+    "klob", "hynin",                                                   # written in the corpus
+])
+def test_attested_infixed_words_still_pass(sp, word):
+    assert sp.check(word).is_correct
+
+
+# ----------------------------------------------------------------------
+# Other sites and the API documentation are closed by default (2026-10-04)
+# ----------------------------------------------------------------------
+
+def test_other_sites_and_api_docs_are_closed_by_default(client):
+    """CORS defaulted to "*", so any website could have its visitors'
+    browsers query the service and its licensed glosses, and /docs mapped
+    every endpoint. CORS_ORIGINS and KHASI_SPELL_API_DOCS=1 reopen them."""
+    r = client.post("/word", json={"word": "shnong"}, headers={"Origin": "https://example.com"})
+    assert r.status_code == 200 and "access-control-allow-origin" not in r.headers
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+    assert client.get("/").status_code == 200
+
+
+# ----------------------------------------------------------------------
+# Responses say what is running, not where it lives (2026-10-04)
+# ----------------------------------------------------------------------
+
+def test_health_names_no_paths(client):
+    """/health gave the data folder, the language-model file and the
+    embedding model by absolute path."""
+    import json as _json
+    body = _json.dumps(client.get("/health").json())
+    for key in ('"path"', '"model_path"', '"data_dir"', '"url"'):
+        assert key not in body
+    assert "/home/" not in body and "/opt/" not in body
+
+
+def test_a_failing_language_model_is_not_described_to_the_caller(client, monkeypatch):
+    """The 503 carried the exception text, and a database error can name the
+    host and user."""
+    from khasi_spell import api
+    def broken(*a, **k):
+        raise RuntimeError('connection to server at "dpg-secret.render.com", user "khasi" failed')
+    monkeypatch.setattr(api._speller, "check_realword", broken)
+    r = client.post("/realword", json={"text": "ka shnong"})
+    assert r.status_code == 503
+    assert "dpg-secret" not in r.text and "khasi\"" not in r.text
+    assert "unavailable right now" in r.json()["detail"]

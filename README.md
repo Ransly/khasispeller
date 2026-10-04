@@ -135,7 +135,8 @@ and `autocorrect/` sit at the root.
 Installing buys you the `khasi-spell` command from any directory. Use an
 editable install (`-e`): a regular `pip install .` does not copy the `data/`
 folder, so set `KHASI_DATA_DIR` to it if you install that way. `/health`
-lists which data files the service found.
+lists which data files the service found, and the startup log prints the
+folder it reads them from (public responses name no paths).
 
 ```bash
 python3 -m pip install -U pip setuptools     # see the note below
@@ -183,8 +184,11 @@ python3 -m pip install -r requirements-api.txt
 python3 -m uvicorn khasi_spell.api:app --port 8000
 ```
 
-Then open **<http://localhost:8000>** for the web interface, or `/docs` for the
-generated API documentation.
+Then open **<http://localhost:8000>** for the web interface. The generated API
+documentation at `/docs` is off unless `KHASI_SPELL_API_DOCS=1` is set, and
+other websites may call the service from a browser only when listed in
+`CORS_ORIGINS` (comma-separated; `*` for all). Both used to be open, which
+made bulk copying of the licensed glosses easy.
 
 ### Web interface
 
@@ -536,6 +540,77 @@ never writes in lower case (`Blah`, `Hoping`, `Smit`); Khasi derivations
 (`jingle` = jing- + le); and `longing`, the Khasi "household". Running-text
 flags rose from 3.43% to 3.70% of tokens; detection and top-1 were unchanged.
 
+Since 4 October 2026 (maintainer ruling) a word held back as a name is
+accepted only when written with a capital: `United`, `Hoping`, `Smit` pass,
+while lower-case `united`, `killing`, `traditional` are English words like
+`hospital`, and none of them is offered as a suggestion. 52 such words had
+been accepted in any case. The Khasi words held back (`longing`, `jingle`)
+are unaffected. On 1,000 news lines this adds one flag (a lower-case
+`united`); the benchmarks are unchanged.
+
+**Prefix stacks** (maintainer ruling, 4 October 2026). A prefix never stacks
+on itself — `pynpynlong`, `jingjingstad`, `nongnongtrei` were accepted as
+derivations — and a word that is already prefixed takes another prefix only
+if it suits that word's class. Read from each entry's own annotation, so
+`ïaïaid` (ïa- + the root ïaid) still passes. Grammar words take no prefix:
+the determiners, pronouns, prepositions and conjunctions, plus `ka ki u i ba
+ne ha na ia sha la ym bad`, which the lexicon partly labels as content words
+— `pynka`, `pynki`, `pynba` were accepted. On 1,000 news lines this adds
+one flag (`pyniad`, offered `pynïad`); the benchmarks are unchanged.
+
+**A missing space is not a compound** (maintainer ruling, 4 October 2026).
+The compound check accepted any string that divides into two content words,
+so a run-together read as a compound: `kakam` as kak + am, where the writer
+meant `ka kam` (written apart 8,617 times in the corpus, solid 10). A
+two-word reading is now refused when the run-together table lists the word —
+which also puts the two-word form first, labelled *Missing space* on the
+page — or when the word has no hyphen and has never been written solid in
+the corpus. Of 2,000 pairs of adjacent news words joined, 230 were accepted
+before and 6 after. Real compounds are written: of 72 news words accepted
+only as compounds, 68 occur elsewhere in the corpus. On 1,000 news lines
+this flags 29 run-together spellings, every one listed in the table (`kadei`
+→ `ka dei` 7 times, `udei`, `kapor`, `mihnoh` → `mih noh`); word-benchmark
+detection rose from 97.96% to 98.30% and top-1 from 73.47% to 73.81%.
+Context re-ranking no longer reorders a two-word suggestion: `ki arsngi kiba`
+was being offered `sngi`, which drops `ar` "two".
+
+**Infixes are an inherited set** (maintainer ruling, 4 October 2026). The
+five infixes (-yn-, -yr-, -n-, -p-, -l-) occur in a closed set of old words —
+the lexicon records seven: `bynriew`, `kynjat`, `shnong`, `snad`, `khnang`,
+`kper`, `kyrmen` — but the parser applied them to any root, accepting
+`shlnong` as sh‹l›nong (shnong + -l-) and `pynu` as p‹yn›u (pu + -yn-). An
+infixed reading is now offered only for a word the corpus writes or one of
+the infix's own examples (`kynshaid`). Real text is unaffected (the 1,000 news
+lines flag exactly as before: the words that passed only this way, `klob`,
+`hynin`, `myna`, are all written elsewhere), while benchmark typos that passed
+this way (`jynong`, `slia`, `pynan`) are caught: word-benchmark detection
+98.30% → 99.32%, top-5 92.18% → 93.20%.
+
+**Hidden and look-alike characters** (4 October 2026). A word is read
+through the invisible characters that come with text copied from PDFs and
+web pages — soft hyphen, zero-width space, zero-width (non-)joiner, word
+joiner, byte-order mark — and they are dropped when it is looked up; before,
+they split `shnong` written with a soft hyphen into fragments that were each
+"corrected". Full-width letters (`ｓｈｎｏｎｇ`) are checked as letters instead
+of skipped. A Cyrillic
+or Greek letter drawn like a Latin one (`shnоng`, Cyrillic о) keeps the word
+whole and flags it as a *Look-alike letter*, naming the letter and offering
+the Latin spelling; Russian or Greek text is still left alone. None of these
+characters occurs in the corpus or the benchmarks, so ordinary text is
+unaffected.
+
+**Numbers, addresses and digits inside words** (4 October 2026). Nothing
+inside a web or email address is flagged, nor letters fused to a number — an
+ordinal or unit (`12th`, `79.2mm`, `5:30pm`), a code (`covid19`) or a
+registration plate (`ML04A`): their pieces were 125 of 2,584 flags in 1,000
+news lines (`th`, `st`, `com`, `www`, `gmail`), and the flag rate fell from
+3.23% to 3.08% of tokens. A lower- or mixed-case word with a digit inside is
+read whole instead of being split at the digit, and flagged as a *Digit in a
+word*: `shn0ng` (0 for o) and `sh1nong` (a stray digit) are offered `shnong`
+when that reading is a real word, and `ka3tarik` is flagged without a guess.
+The detection scans each run once — written as single regular expressions it
+took 100 s on 48,000 characters of `ka-ka-ka`. The benchmarks are unchanged.
+
 **Acceptance.** The vote's frequency signal reads a table built from the
 lexicon, so no corpus word could earn it: `jylla` scored 1 of the 3 needed.
 Admitted words — and the reduced spelling the corpus writes them in
@@ -884,13 +959,21 @@ python3 -m pytest tests/test_spellchecker.py -q   # spelling only
 python3 -m pytest tests -q -k "derived"  # just the morphology gate
 ```
 
-`pytest` is the only test dependency. If it is not installed:
-`python3 -m pip install pytest`.
+The test dependencies are `pytest` and `httpx` (FastAPI's test client):
+`python3 -m pip install -r requirements-dev.txt`.
 
 The suite needs the lexicon; without it (no `data/khasi_db.json`, no
 `DATABASE_URL`) the tests that load it are skipped with that reason and the
 rest still run. It ignores `.env`, so run it against PostgreSQL by exporting
-`DATABASE_URL`, which also enables the PostgreSQL-only tests.
+`DATABASE_URL`, which also enables the PostgreSQL-only tests — but never
+against a real database. `python3 scripts/test_with_local_postgres.py` starts
+a throwaway local PostgreSQL, loads the lexicon and the n-gram model into it
+with the migration scripts, runs the suite there (pytest arguments pass
+through) and removes it again.
+
+Production runs Python 3.11 (`runtime.txt`), and the pinned versions in
+`requirements-api.txt` were tested on it; run the suite in a 3.11
+environment before changing them.
 
 Most of the runtime is the one-off lexicon load; fixtures are module-scoped
 so each file costs roughly one construction.
@@ -1754,6 +1837,21 @@ with the suggestion that *would* have been offered, so a caller can surface
 them; they are only kept out of `corrections`, which is what gets applied.
 `--check-names` on the CLI, `skip_foreign=False` in the library, or
 `{"skip_foreign": false}` on the API restores the old behaviour.
+
+**Capitalised misspellings.** Withholding every capital also hid capitalised
+misspellings: `ka Shnongg ba khraw` passed. Since 4 October 2026 a withheld
+capitalised or all-caps word is checked after all when it looks like a typo
+rather than a name — a Khasi word within one change, and the word itself
+never seen in the corpus, where real names are common (`meghalaya` 9,651,
+`conrad` 2,126). All-caps words shorter than five letters stay withheld as
+acronyms. Such a word is reported as a *possible misspelling*
+(`possible_misspelling: true`), shown in amber, and never applied
+automatically: not in `corrected`, not by `/correct`, which counts them as
+`possible_misspellings`. Of the 235 benchmark errors not at a sentence start,
+written with a capital, it catches 186 — 171 with the right word first; none
+were caught before. On 1,000 news lines, each with its own words removed from
+the corpus counts, it adds 63 flags (0.08% of tokens), every one a rare name.
+See `KhasiSpeller._capitalised_typo`.
 
 **The honest limitation.** That "0 / 558" is partly an artefact — every
 benchmark error was injected into a lowercased word, so no capitalised

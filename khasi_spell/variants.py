@@ -690,6 +690,12 @@ def find(word: str, analyser: Any, max_subs: int = MAX_SUBSTITUTIONS) -> list[Sp
     w = unicodedata.normalize("NFC", word).lower().replace("\u2019", "'").replace("\u02bc", "'")
     if not w:
         return []
+    # Nothing the lexicon attests is anywhere near this long, and _generate
+    # grows with the square of the length: a 2,000-letter token took 33 s
+    # and 1.5 GB. The spell checker's own limit, so there is one number.
+    from khasi_engine.spell_checker import KhasiSpellChecker
+    if len(w) > KhasiSpellChecker.MAX_WORD_CHARS:
+        return []
     db = analyser.db
     found: dict[str, SpellingVariant] = {}
 

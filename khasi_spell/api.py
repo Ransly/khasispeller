@@ -19,7 +19,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 try:
     from fastapi import FastAPI, HTTPException, Response
@@ -62,6 +62,10 @@ async def lifespan(app: FastAPI):
         print(f"[khasi-spell] loaded {_DOTENV_NOTE}")
     print("[khasi-spell] lexicon source: "
           + ("PostgreSQL" if os.environ.get("DATABASE_URL") else "JSON file"))
+    # Where the data files are read from: in the log, which only the
+    # operator sees, rather than in /health (see _public).
+    from khasi_engine import paths as _paths
+    print(f"[khasi-spell] data folder: {_paths.data_dir()}")
     # Load the lexicon once at start-up rather than on the first request,
     # so no user ever pays the ~15-20 s cost.
     global _speller
@@ -90,33 +94,40 @@ async def lifespan(app: FastAPI):
     _speller = None
 
 
+# The interactive API documentation (/docs, /redoc, /openapi.json) is off
+# unless KHASI_SPELL_API_DOCS=1. Public, it mapped every endpoint for anyone
+# copying the lexicon's glosses in bulk, and the glosses are licensed
+# (LICENSE-DATA). The service index at /api stays.
+_API_DOCS = os.environ.get("KHASI_SPELL_API_DOCS", "").strip().lower() in ("1", "true", "yes", "on")
+
 app = FastAPI(
     title="Khasi Spellchecker",
     version="1.0.0",
     description="Morphology-gated spelling correction for the Khasi language.",
     lifespan=lifespan,
+    docs_url="/docs" if _API_DOCS else None,
+    redoc_url="/redoc" if _API_DOCS else None,
+    openapi_url="/openapi.json" if _API_DOCS else None,
 )
 
-# CORS — by default allow any origin (handy for dev). In production set
-# CORS_ORIGINS to a comma-separated list to restrict it, e.g.:
+# CORS — off unless CORS_ORIGINS lists the other sites allowed to call the
+# service from a browser, comma-separated, e.g.:
 #   CORS_ORIGINS=https://khasi-spell.vercel.app,https://www.khasi-nlp.org
-#
-# Without this every browser call from another origin is blocked, so the
-# service is reachable by curl and by its own bundled page at "/" and by
-# nothing else. Same shape as the parent project's app.py so the two behave
-# identically once both are deployed.
-_cors_origins_env = os.environ.get("CORS_ORIGINS", "*").strip()
-_cors_origins = (
-    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-    if _cors_origins_env != "*" else ["*"]
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-print(f"[khasi-spell] CORS allowed origins: {_cors_origins}")
+# ("*" allows every site). The bundled page at "/" is this same site and
+# needs none of it. The default used to be "*", so any website could have
+# its visitors' browsers query the service and its licensed glosses. This
+# does not stop scripts; only a rate limit would.
+_cors_origins_env = os.environ.get("CORS_ORIGINS", "").strip()
+_cors_origins = (["*"] if _cors_origins_env == "*" else
+                 [o.strip() for o in _cors_origins_env.split(",") if o.strip()])
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+print(f"[khasi-spell] CORS allowed origins: {_cors_origins or 'this site only'}")
 
 
 # ----------------------------------------------------------------------
@@ -158,7 +169,10 @@ class RealWordRequest(BaseModel):
 
 
 class BatchRequest(BaseModel):
-    words: list[str] = Field(..., min_length=1, max_length=1000)
+    # Each word capped as /word caps it. Words had no limit here, and before
+    # the engine's own cap (KhasiSpellChecker.MAX_WORD_CHARS) one long word
+    # could hold the service for minutes.
+    words: list[Annotated[str, Field(max_length=100)]] = Field(..., min_length=1, max_length=1000)
     n: int = Field(default=5, ge=1, le=20)
 
 
@@ -209,7 +223,7 @@ def service_info() -> dict:
         # size and counts multi-word phrases; it is kept for compatibility.
         "word_forms": _speller.word_forms if ready else 0,
         "vocabulary_size": _speller.vocabulary_size if ready else 0,
-        "docs": "/docs",
+        "docs": "/docs" if _API_DOCS else None,   # KHASI_SPELL_API_DOCS=1
         "web_ui": "/",
         "endpoints": {
             "GET  /health": "readiness and vocabulary size",
@@ -230,10 +244,27 @@ def favicon():
     return Response(status_code=204)
 
 
+# Keys that say where something lives — a path on this server, a URL — are
+# left out of /health. It reported the data folder, the language-model file
+# and the embedding model by absolute path; a visitor needs to know what is
+# running, not where. The startup log still prints the data folder.
+_PRIVATE_KEYS = frozenset({"path", "model_path", "data_dir", "url", "dsn",
+                           "database_url", "host"})
+
+
+def _public(value):
+    """*value* without any key in _PRIVATE_KEYS, at any depth."""
+    if isinstance(value, dict):
+        return {k: _public(v) for k, v in value.items() if k not in _PRIVATE_KEYS}
+    if isinstance(value, list):
+        return [_public(v) for v in value]
+    return value
+
+
 @app.get("/health")
 def health():
     ready = _speller is not None and _speller.loaded
-    return {
+    return _public({
         "ok": ready,
         # Distinct single-token forms a correction can be drawn from. This is
         # the number to show a user. `vocabulary_size` is the frequency-table
@@ -254,7 +285,7 @@ def health():
         # non-editable install without KHASI_DATA_DIR used to lose all of
         # them without a word; say which are present.
         "resources": _resources() if ready else {},
-    }
+    })
 
 
 def _resources() -> dict:
@@ -264,8 +295,7 @@ def _resources() -> dict:
              "gazetteer": "gazetteer.json",
              "runtogether_splits": "runtogether_candidates_review.csv",
              "gloss_spelling_links": "spelling_links.json"}
-    return {"data_dir": str(paths.data_dir()),
-            **{k: paths.data_file(v).is_file() for k, v in names.items()}}
+    return {k: paths.data_file(v).is_file() for k, v in names.items()}
 
 
 @app.post("/v1/spellcheck")
@@ -309,16 +339,20 @@ def correct_text(req: TextRequest):
     # knows is wrong but cannot fix — `sbngaifi`, which contains an `f` —
     # is now reported with a null suggestion and left as written, so
     # len(corrections) overstates the edits made to the text.
+    # A possible misspelling (a capitalised word that may be a name) is
+    # reported but never applied, so it is not a change either.
+    possible = sum(1 for c in result.corrections if c.possible_misspelling)
+    unfixable = sum(1 for c in result.corrections if not c.suggestion)
     applied = sum(1 for c in result.corrections
-                  if (c.get("suggestion") if isinstance(c, dict)
-                      else getattr(c, "suggestion", None)))
+                  if c.suggestion and not c.possible_misspelling)
     return {
         "text": result.text,
         "corrected": result.corrected,
         "changes": applied,
         # Flagged but unfixable — the caller can show them without implying
         # the text was edited.
-        "flagged_without_suggestion": len(result.corrections) - applied,
+        "flagged_without_suggestion": unfixable,
+        "possible_misspellings": possible,
     }
 
 
@@ -1029,10 +1063,17 @@ def realword(req: RealWordRequest):
         # min_margin applies to this request only; it used to be stored on
         # the shared detector and became every later request's default.
         flags = sp.check_realword(text, min_margin=req.min_margin)
+    # The details go to the log, not the response: the exception text named
+    # the model file by its path on this server, and a database error can
+    # name the database host and user.
     except FileNotFoundError as exc:
-        raise HTTPException(503, str(exc)) from exc
+        print(f"[khasi-spell] /realword: {exc}")
+        raise HTTPException(503, "The word-choice check is not available on this "
+                                 "server: its language model is not installed.") from exc
     except Exception as exc:                  # e.g. the n-gram database is down
-        raise HTTPException(503, f"language model unavailable: {exc}") from exc
+        print(f"[khasi-spell] /realword: language model unavailable: {exc!r}")
+        raise HTTPException(503, "The word-choice check is unavailable right now. "
+                                 "Please try again later.") from exc
     return {"text": text,
             "flags": [f.to_dict() for f in flags],
             "count": len(flags)}

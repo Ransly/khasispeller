@@ -136,6 +136,10 @@ class Correction:
     # part of a compound. Carried to the UI so a word with no offerable
     # correction can still explain itself. None otherwise.
     reason: Optional[str] = None
+    # A capitalised word checked although it may be a name — see
+    # KhasiSpeller._capitalised_typo. Shown to the reader as a possible
+    # misspelling, and never applied automatically.
+    possible_misspelling: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -260,6 +264,7 @@ class KhasiSpeller:
                                    else corpus_pool_floor)
         self._corpus_pool_summary: Optional[dict] = None
         self._corpus_freq_summary: Optional[dict] = None
+        self._corpus_count_table: Optional[dict] = None   # see _corpus_counts
         self._realword: Any = None
         self._ngram_lm: Any = None
         self._lm_lock = threading.Lock()
@@ -641,7 +646,8 @@ class KhasiSpeller:
         out = text
         floor = None
         for c in sorted(corrections, key=lambda c: -c.start):
-            if not c.suggestion:
+            # A possible misspelling may be a name: it is the reader's call.
+            if not c.suggestion or c.possible_misspelling:
                 continue
             if floor is not None and c.end > floor:
                 continue
@@ -694,6 +700,44 @@ class KhasiSpeller:
         # (jingiathuh -> jingïathuh). Only unlisted words need the parse.
         return len(w) >= 6 and w not in db._surface_index
 
+    # A capitalised word mid-sentence, or an all-caps one, is withheld as a
+    # presumed name — and so was every capitalised misspelling: `ka Shnongg
+    # ba khraw` passed. It is checked after all when it looks like a typo
+    # rather than a name: a Khasi word within one change, and the word itself
+    # never seen in the corpus, where real names are common (meghalaya 9,651,
+    # conrad 2,126). All-caps words shorter than 5 letters stay withheld as
+    # acronyms (ITES, ZSU, BAC). Measured 2026-10-04: catches 186 of 235
+    # capitalised benchmark errors, 171 with the right word first (none were
+    # caught before), and adds 63 flags in 1,000 news lines (0.08% of
+    # tokens), every one a rare name — hence "possible", and never applied
+    # automatically.
+    _CAPS_MAX_DISTANCE = 1.0
+    _CAPS_MIN_ALLCAPS = 5
+
+    def _capitalised_typo(self, c: "Correction", why: Optional[str]) -> bool:
+        from khasi_spell import foreign
+        if why not in (foreign.CAPITALISED, foreign.ACRONYM):
+            return False                      # a known name stays withheld
+        if why == foreign.ACRONYM and len(c.original) < self._CAPS_MIN_ALLCAPS:
+            return False
+        if not c.suggestions or not c.distances or c.distances[0] > self._CAPS_MAX_DISTANCE:
+            return False
+        counts = self._corpus_counts()
+        if not counts:
+            return False      # without the corpus every rare name would look like a typo
+        return counts.get(_tokens.corpus_form(c.original).lower(), 0) == 0
+
+    def _corpus_counts(self) -> dict:
+        """Raw corpus counts (data/corpus_freq.json), loaded once; {} if absent.
+
+        The engine's copy (spell_checker.corpus_counts), so the file is held
+        in memory once.
+        """
+        if self._corpus_count_table is None:
+            from khasi_engine.spell_checker import corpus_counts
+            self._corpus_count_table = corpus_counts()
+        return self._corpus_count_table
+
     def _collect_variants(self, text: str, flagged: set) -> list["VariantFlag"]:
         """
         Accepted words that have another attested spelling.
@@ -709,11 +753,19 @@ class KhasiSpeller:
         """
         from khasi_spell import foreign
 
+        # The characters inside a flagged span, so each token's test reads its
+        # own characters rather than every flag: tested pairwise, a text with
+        # thousands of flags cost 36 million comparisons (16 s).
+        covered = bytearray(len(text))
+        for s, e in flagged:
+            s, e = max(s, 0), min(e, len(text))
+            if e > s:
+                covered[s:e] = b"\x01" * (e - s)
+
         out: list[VariantFlag] = []
         for m in self._TOKEN_RE.finditer(text):
             token = m.group(0)
-            if len(token) < 2 or any(s < m.end() and m.start() < e
-                                     for s, e in flagged):
+            if len(token) < 2 or covered.find(1, m.start(), m.end()) != -1:
                 continue
             if foreign.is_proper_case(
                     token, foreign.is_sentence_initial(text, m.start())):
@@ -781,10 +833,22 @@ class KhasiSpeller:
 
             kept = []
             for c in corrections:
+                # A letter from another alphabet, or a digit, inside a word is
+                # an error even in a name (`Shill\u043eng`, with a Cyrillic
+                # \u043e; `Shn0ng`).
+                if c.method in ("lookalike_letters", "digit_in_word"):
+                    kept.append(c)
+                    continue
                 why = foreign.classify(
                     c.original, foreign.is_sentence_initial(text, c.start)
                 )
                 if why is None:
+                    kept.append(c)
+                elif self._capitalised_typo(c, why):
+                    c.possible_misspelling = True
+                    c.reason = ("Capitalised, so it may be a name. If it is not, it is "
+                                "probably misspelled: it is in neither the dictionary nor "
+                                "the corpus, and a Khasi word is one change away.")
                     kept.append(c)
                 else:
                     skipped.append({"word": c.original, "start": c.start,
@@ -811,8 +875,10 @@ class KhasiSpeller:
         # filtered, so `corrected` can never disagree with `corrections`.
         corrected = self._apply(text, corrections)
 
-        flags = self._collect_variants(text, [(c.start, c.end) for c in corrections]) \
-            if variants else []
+        # No spelling offers inside a web or email address either.
+        flags = self._collect_variants(
+            text, [(c.start, c.end) for c in corrections]
+            + _tokens.unchecked_spans(text)[0]) if variants else []
 
         return TextResult(
             text=text,

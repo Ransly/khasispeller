@@ -770,6 +770,11 @@ def get_prefix_info(prefix_dash: str) -> Optional[dict]:
     return PREFIXES.get(key)
 
 
+def _prefix_key(pfx: str) -> str:
+    """One key for the two spellings of the reciprocal prefix, ïa- and ia-."""
+    return "ia" if pfx in ("ia", "ïa") else pfx
+
+
 def _try_stacked_prefixes(
     word: str,
     lexicon_lookup,
@@ -839,6 +844,15 @@ def _try_stacked_prefixes(
                 # fossilised prefix may never enter a stacking chain.
                 if not PREFIXES[pfx].get("productive", False):
                     continue
+                # A prefix never stacks on itself, here or deeper in the
+                # chain: pyn-pyn-long, jing-jing-stad, nong-nong-trei and
+                # jing-pyn-jing-pyn-stad are a doubled syllable, not a
+                # derivation. No lexicon word has one; the corpus has three
+                # rare forms (pynpyngngad 5 uses). ïa and ia are one prefix.
+                # ïaïaid is unaffected: ïa- + the root ïaid is found before a
+                # second ïa is tried. Maintainer ruling 2026-10-04.
+                if _prefix_key(pfx) in {_prefix_key(p) for p in prefixes_so_far}:
+                    continue
                 # Phase A — affix-order rank enforcement (slice 3). In
                 # strict mode, refuse to stack a prefix inside an outer
                 # prefix when both appear in the canonical-order list
@@ -881,7 +895,12 @@ def _try_stacked_prefixes(
                             if at and gclass not in [t.lower() for t in at]:
                                 return False
                         return True
-                    eligible = [m for m in matches if _stack_eligible(m)]
+                    # …and a root the lexicon records with one of the chain's
+                    # prefixes would repeat it (pyn- + pynlong).
+                    chain_keys = {_prefix_key(p) for p in new_chain}
+                    eligible = [m for m in matches if _stack_eligible(m)
+                                and _prefix_key((m.get("affix_profile") or {}).get("prefix") or "")
+                                not in chain_keys]
                     if not eligible:
                         pass  # fall through; try deeper recursion
                     else:
@@ -1108,6 +1127,15 @@ def _gen_prefix_candidates(stripped: str, lexicon_lookup) -> list[dict]:
             if not eligible:
                 continue
             matches = eligible
+        # Never the same prefix twice: pyn- + pynlong is pyn-pyn-long, since
+        # the lexicon records pynlong as pyn- + long. Read from the entry's
+        # own annotation, not its letters — ïaid begins with ïa but is a
+        # root, and `id` is a word too. Maintainer ruling 2026-10-04.
+        matches = [m for m in matches
+                   if _prefix_key((m.get("affix_profile") or {}).get("prefix") or "")
+                   != _prefix_key(pfx)]
+        if not matches:
+            continue
         out.append({
             "pass": True,
             "status": "derived_form",
@@ -1145,6 +1173,8 @@ def _gen_prefix_candidates(stripped: str, lexicon_lookup) -> list[dict]:
             if not (candidate_root.startswith(inner_pfx)
                     and len(candidate_root) > len(inner_pfx) + 1):
                 continue
+            if _prefix_key(inner_pfx) == _prefix_key(pfx):
+                continue                    # never the same prefix twice
             inner_info = PREFIXES[inner_pfx]
             if not inner_info.get("productive", False):
                 continue
@@ -1182,6 +1212,34 @@ def _first_consonant_unit(word: str) -> str:
     return word[:2] if word[:2].lower() in digraphs else word[:1]
 
 
+def _infixed_form_attested(word: str, infix_def: dict) -> bool:
+    """May *word* be read as an infixed form at all?
+
+    Khasi infixes are an inherited set, not a living process: the lexicon
+    records seven infixed words (bynriew, kynjat, shnong, snad, khnang, kper,
+    kyrmen). Applied to any root, they invented words — `shlnong` read as
+    sh‹l›nong (shnong + -l-), `pynu` as p‹yn›u (pu + -yn-). Maintainer ruling
+    2026-10-04: the reading is offered only for a word the corpus writes or
+    one of the infix's own examples (kynshaid). Measured: the news words that
+    passed only this way are all written elsewhere (klob 74 times, hynin 7,
+    myna 4); the benchmark typos that did (jynong, slia, pynan) never are.
+    Without corpus counts the old behaviour stands.
+    """
+    w = (word or "").lower()
+    examples = {e.split("->")[-1].strip().lower() for e in infix_def.get("examples") or []}
+    if w in examples:
+        return True
+    try:
+        from khasi_engine.spell_checker import corpus_counts
+        from khasi_engine.tokens import corpus_form
+        counts = corpus_counts()
+    except Exception:
+        return True
+    if not counts:
+        return True
+    return counts.get(corpus_form(w), 0) > 0
+
+
 def _gen_infix_candidates(stripped: str, lexicon_lookup) -> list[dict]:
     """Infix detection (old Step 4) as a candidate generator.
 
@@ -1210,6 +1268,8 @@ def _gen_infix_candidates(stripped: str, lexicon_lookup) -> list[dict]:
         candidate_root = c1 + rest
         matches = lexicon_lookup(candidate_root)
         if not matches:
+            continue
+        if not _infixed_form_attested(stripped, infix_def):
             continue
         out.append({
             "pass": True,
@@ -1249,6 +1309,22 @@ def _gen_phonotactic_candidates(stripped: str, lexicon_lookup) -> list[dict]:
         # isn't in the lexicon (this is the phonotactic-only fallback).
         if not pfx_info.get("productive", False):
             continue
+        # …but a stem that IS a prefixed lexicon word makes this a stack, and
+        # the outer prefix must then suit that word's class and must not
+        # repeat its prefix: jing- (verbs, adjectives) was put on the noun
+        # jingstad, and nong- on nongtrei. A plain root keeps the lenient
+        # path: pyn- + an adjective (pynkhraw) is ordinary Khasi though
+        # applies_to lists only verbs. Maintainer ruling 2026-10-04.
+        derived = [m for m in (lexicon_lookup(candidate_root) or [])
+                   if (m.get("affix_profile") or {}).get("prefix")]
+        if derived:
+            applies = [t.lower() for t in (pfx_info.get("applies_to") or [])]
+            if any(_prefix_key(m["affix_profile"]["prefix"]) == _prefix_key(pfx)
+                   for m in derived):
+                continue
+            if applies and not any((m.get("grammatical_class") or "").lower() in applies
+                                   for m in derived):
+                continue
         out.append({
             "pass": True,
             "status": "derived_form",
