@@ -522,26 +522,8 @@ dl.kv dd{margin:0;font-weight:600}
   font-size:calc(13px*var(--fs));color:var(--ink2);line-height:1.5}
 .wp-state .tag{flex:none;margin-top:1px}
 .wp-morph{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
-/* Morphology as two levels: surface (as written) above lexical (as built),
-   one column per piece, and the meaning of each piece beneath. */
-.ilg{display:grid;gap:5px 16px;align-items:baseline;justify-content:start;margin:2px 0 10px;
-  padding:10px 13px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
-/* #detail-body breaks words anywhere (long Khasi compounds); inside this
-   grid that let the labels shrink to one letter per line. Break between
-   words only, and never inside a label or a lexical piece. */
-.ilg, .ilg *{overflow-wrap:normal}
-.ilg-k,.ilg-l{white-space:nowrap}
-.ilg-k{font-size:calc(10.5px*var(--fs));font-weight:700;letter-spacing:.6px;
-  text-transform:uppercase;color:var(--mut2);cursor:help}
-.ilg-s{font-size:calc(15.5px*var(--fs));font-weight:700;color:var(--ink)}
-.ilg-s .chg,.ilg-s .inf{color:var(--amber)}
-.ilg-s .chg{font-weight:800}
-.ilg-s .inf{font-weight:800;text-decoration:underline;text-underline-offset:3px}
-.ilg-l{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(13px*var(--fs));
-  font-weight:600;color:var(--blue)}
-.ilg-l.root{color:var(--green)}
-.ilg-g{font-size:calc(12px*var(--fs));color:var(--ink2)}
-.ilg-g i{font-style:normal;color:var(--mut2)}
+/* Morphology in two directions: analysis (as written → pieces) and
+   generation (pieces → as written). */
 .ilg-dir{display:flex;gap:10px;align-items:baseline;margin:0 0 4px;
   font-size:calc(12.5px*var(--fs));color:var(--ink2)}
 .ilg-dir b{flex:none;min-width:6.6em;font-size:.82em;font-weight:700;letter-spacing:.5px;
@@ -857,7 +839,6 @@ textarea:focus{border-color:var(--blue)}
 .wp-sec{border-color:var(--edge2)}
 .wp-body{border-top-color:var(--edge2)}
 .sug{border-color:var(--edge2);border-radius:12px}
-.ilg{border-color:var(--edge2)}
 .wp-foot .btn:last-child{margin-left:auto}
 .pop{border-color:var(--edge);border-radius:12px}
 .chip{border-color:var(--edge)}
@@ -934,7 +915,6 @@ textarea:focus{border-color:var(--blue);
 .sug{border-color:transparent;background:var(--card);
   box-shadow:inset 0 0 0 1px var(--edge2);border-radius:12px}
 .sug:hover{background:var(--blue-s);box-shadow:inset 0 0 0 1.5px var(--blue)}
-.ilg{border-color:transparent;background:var(--card);box-shadow:inset 0 0 0 1px var(--edge2)}
 .legend .key{border-color:transparent;background:color-mix(in srgb, var(--ink) 8%, transparent)}
 .chip{border-radius:999px}
 
@@ -1024,7 +1004,6 @@ textarea:focus{border-color:var(--blue);
   .wp-ic .ic{width:16px;height:16px}
   .wp-body{padding:10px}
   .sug{padding:10px 11px}
-  .ilg{padding:8px 10px;gap:4px 10px}
   .ilg-dir{flex-wrap:wrap;gap:2px 8px}
   .ilg-dir b{min-width:0}
   .steps{font-size:calc(13px*var(--fs))}
@@ -2012,47 +1991,24 @@ async function loadAnalysis(word){
   renderDetail();
 }
 
-/* Morphology as two levels of one word. The SURFACE form is the word as
-   written, kept whole; the LEXICAL form is the pieces it is built from,
-   before any sound change, one column per piece. Letters that changed are
-   coloured in the written word (pyl in pyllait, from pyn-). Under them, what each piece means. Then the two directions:
-   analysis takes the written word to its pieces, generation builds the word
-   back — step by step for stacked prefixes, with the sound change when one
-   applies. An infix is written inside its root, so its surface row is the
-   whole word with the infix marked: b‹yn›riew. */
+/* Morphology in two directions: analysis takes the written word to the
+   pieces it is built from, generation builds the word back — step by step
+   for stacked prefixes, with the sound change when one applies (pyn- + lait
+   gives pyllait). A word that is one root says so in a line of its own.
+   The surface/lexical table that stood above these was removed on request
+   (4 October 2026). */
 function formMapHtml(fm, word){
   const segs = fm.segments || [];
   if (!segs.length) return "";
-  const n = segs.length;
-  const marked = s => esc(s).replace(/\u2039(.*?)\u203a/g, '<b class="inf">$1</b>');
-  // auto, not max-content: on a narrow screen a long meaning wraps inside its
-  // column instead of squeezing the labels to one letter wide.
-  let h = '<div class="ilg" style="grid-template-columns:auto repeat(' + n + ', auto)">';
-  h += '<span class="ilg-k" data-tip="The word as it is written.">Surface</span>';
-  // The written word stays whole — it is one word, not pieces with gaps.
-  // Only the letters that differ from the lexical form are coloured.
-  h += '<span class="ilg-s" style="grid-column:span ' + n + '">'
-     + (fm.marked ? marked(fm.marked)
-        : segs.map(s => s.changed
-            ? '<b class="chg" data-tip="Written ' + esc(s.surface) + ', from '
-              + esc(s.lexical) + '">' + esc(s.surface) + '</b>'
-            : esc(s.surface)).join(""))
-     + '</span>';
-  h += '<span class="ilg-k" data-tip="The pieces the word is built from, before any sound change.">Lexical</span>'
-     + segs.map(s => '<span class="ilg-l ' + esc(s.kind) + '">' + esc(s.lexical) + '</span>').join("");
-  h += '<span class="ilg-k" data-tip="What each piece means or does.">Meaning</span>'
-     + segs.map(s => '<span class="ilg-g">' + esc(s.gloss || s.kind)
-        + (s.pos ? ' <i>' + esc(s.pos) + '</i>' : '') + '</span>').join("");
-  h += '</div>';
-  if (n > 1) {
-    const lex = segs.map(s => s.lexical).join(" + ");
-    h += '<p class="ilg-dir"><b data-tip="From the written word to its pieces.">Analysis</b>'
-       + '<span>' + esc(word) + ' &rarr; ' + esc(lex) + '</span></p>';
-    h += '<p class="ilg-dir"><b data-tip="From the pieces back to the written word.">Generation</b>'
+  const head = '<p class="ilg-dir"><b data-tip="From the written word to its pieces.">Analysis</b><span>';
+  if (segs.length === 1)
+    return head + esc(word || segs[0].lexical)
+         + ' &mdash; a root on its own, with no prefix, suffix or infix</span></p>';
+  const lex = segs.map(s => s.lexical).join(" + ");
+  return head + esc(word) + ' &rarr; ' + esc(lex) + '</span></p>'
+       + '<p class="ilg-dir"><b data-tip="From the pieces back to the written word.">Generation</b>'
        + '<span>' + (fm.generation || [lex, word]).map(esc).join(' &rarr; ')
        + (fm.rule ? '<i class="ilg-rule">' + esc(fm.rule) + '</i>' : '') + '</span></p>';
-  }
-  return h;
 }
 
 /* What each Word Details section is: its colour class, icon, and one line
@@ -2158,7 +2114,7 @@ function analysisHtml(a){
     mIn = '<p>' + esc(m.status_label
         || "No parse — the analyser could not decompose this form.") + '</p>';
   } else if (m.form_map) {
-    // The word at its two levels, aligned piece by piece — see formMapHtml.
+    // Analysis and generation — see formMapHtml.
     mIn = formMapHtml(m.form_map, a.word || "");
     const rows = [];
     if (m.is_compound && (m.compound_roots || []).length)
