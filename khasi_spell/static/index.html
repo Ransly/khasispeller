@@ -392,6 +392,9 @@ mark[aria-expanded="true"]{box-shadow:0 0 0 2px var(--green-b)}
 .speak{width:38px;height:38px;border-radius:10px;border:0;background:var(--blue-s);
   color:var(--blue);display:grid;place-items:center;margin-left:auto}
 .speak:hover{background:var(--blue-b)}
+/* In the Phonology section's Pronunciation row, beside the IPA. */
+.speak.sm{width:30px;height:30px;margin:0 0 0 10px;display:inline-grid;vertical-align:middle;border-radius:8px}
+.speak.sm .ic{width:16px;height:16px}
 .tabs{display:flex;gap:2px;padding:12px 18px 0;border-bottom:1px solid var(--line)}
 .tabs button{padding:10px 15px;border:0;background:transparent;font-weight:600;
   font-size:calc(13px*var(--fs));color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -2116,7 +2119,7 @@ function analysisHtml(a){
   // re-check, or moving to the next word — and a section the reader had
   // collapsed would spring back open each time.
   const sec = (label, inner) => {
-    // Closed by default: the meaning, pronunciation and any corrections are
+    // Closed by default: the meaning and any corrections are
     // above, and that is the whole of what most readings need. The analysis
     // is there when it is asked for.
     const open = secOpen[label] === true;
@@ -2137,6 +2140,19 @@ function analysisHtml(a){
     : '<p class="wp-state"><span class="tag err">invalid</span><span>'
       + esc((ph.errors || [])[0] || "") + '</span></p>';
   const bits = [];
+  // The pronunciation, worked out by rule from the spelling (g2p.py). It sat
+  // under the meaning at the top of the panel; moved here on request
+  // (6 October 2026), first among the word's sounds.
+  const ipa = (ph.ipa || {}).surface || "";
+  const speak = speakButton(a.word || "");
+  if (ipa || speak)
+    bits.push(['<span data-tip="How the word is pronounced, in the International '
+               + 'Phonetic Alphabet, worked out by rule from the spelling.">Pronunciation</span>',
+               (ipa ? '<span class="ipa">' + esc(ipa) + '</span>' : '') + speak
+               + ((ph.ipa || {}).length_uncertain
+                   ? ' <span class="tag mut" data-tip="Khasi vowel length is contrastive but '
+                     + 'unmarked in spelling (War 2001, pp.49-54), so it cannot be recovered '
+                     + 'from the written form.">vowel length uncertain</span>' : '')]);
   if (d.initial_cluster) bits.push(['Initial cluster',
       esc(d.initial_cluster) + (d.cluster_valid ? " — permitted" : " — not permitted")]);
   // The API's `segments` is a COUNT of the hyphen-separated parts — see
@@ -2303,7 +2319,6 @@ function wordPanel(w, r, a, note){
       : isEnglish(r) ? '<span class="tag err" data-tip="' + esc(FLAG.englishWhy) + '">ENGLISH WORD</span>'
       : isInvalid(gate) ? '<span class="tag err" data-tip="' + esc(FLAG.invalidWhy) + '">INVALID SPELLING</span>'
                         : '<span class="tag warn" data-tip="' + esc(FLAG.unknownWhy) + '">UNKNOWN WORD</span>';
-  const ipa = ((a && a.phonology && a.phonology.ipa) || {}).surface || "";
 
   /* The word's OWN gloss, when the lexicon has an entry for it.
    *
@@ -2318,10 +2333,9 @@ function wordPanel(w, r, a, note){
   const gloss     = ownGloss || rootGloss;
   const borrowed  = !ownGloss && !!rootGloss;
 
+  // The read-aloud button moved to the Phonology section, beside the
+  // pronunciation (6 October 2026) — see speakButton.
   let h = '<div class="wordhead"><span class="w">' + esc(w) + '</span>' + badge
-    + (window.speechSynthesis ? '<button class="speak" aria-label="Read aloud" data-tip="Read aloud with the browser '
-      + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(' + jsq(w) + ')">'
-      + '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>' : "")
     + '</div><div class="bd">'
     + (note ? '<p class="sub" style="margin:0 0 8px">' + esc(note) + '</p>' : '');
 
@@ -2395,13 +2409,6 @@ function wordPanel(w, r, a, note){
           : sg.frequent ? ' &mdash; in common use in the corpus' : '')
        + '</p>';
   }
-  if (ipa)
-    h += '<p class="ipa" style="margin:2px 0 10px">' + esc(ipa)
-       + (((a.phonology || {}).ipa || {}).length_uncertain
-           ? ' <span class="tag mut" data-tip="Khasi vowel length is contrastive but '
-             + 'unmarked in spelling (War 2001, pp.49-54), so it cannot be recovered '
-             + 'from the written form.">vowel length uncertain</span>' : '')
-       + '</p>';
   // The summary is built as "classification — root: X — gloss", and both of
   // those tails are already on screen: the gloss on the line above, the root
   // in the Morphology block below. Keep the classification, drop the repeats.
@@ -2536,6 +2543,14 @@ function renderDetail(){
                   analysisCache[inspected.word.toLowerCase()], inspected.note);
 }
 
+/* Read aloud with the browser's voice, beside the pronunciation in the
+   Phonology section. No Khasi voice exists, so it is an approximation. */
+function speakButton(w){
+  if (!window.speechSynthesis) return "";
+  return '<button class="speak sm" aria-label="Read aloud" data-tip="Read aloud with the browser '
+    + 'voice. No Khasi voice exists, so this is an approximation." onclick="say(' + jsq(w) + ')">'
+    + '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></button>';
+}
 function say(w){
   try { window.speechSynthesis.cancel();
         window.speechSynthesis.speak(new SpeechSynthesisUtterance(w)); } catch (e) {}
