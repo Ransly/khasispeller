@@ -976,7 +976,13 @@ def analyse_word(req: WordRequest):
             "ipa": _ipa(a.get("input") or ""),
             "ok": p1.get("pass"),
             "errors": p1.get("errors") or [],
-            "warnings": p1.get("warnings") or [],
+            # Advisory notes from the phonotactic check, less the loanword note
+            # on a final -l or -s ("Final '-l' in 'shongskul' is not native to
+            # Khasi — likely a loanword"), which is shown for no word
+            # (maintainer request, 6 October 2026). The engine still makes it;
+            # tests/test_phonology_rules.py pins that.
+            "warnings": [w for w in (p1.get("warnings") or [])
+                         if "likely a loanword" not in w],
             "details": p1.get("details") or {},
             # Real phonology, as opposed to the validator's bookkeeping.
             #

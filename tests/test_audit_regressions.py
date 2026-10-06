@@ -1005,3 +1005,11 @@ def test_the_plain_spelling_stays_on_offer_after_the_standard_one(sp):
     assert sp.check("jingjingiamareh").suggestions[:2] == ["jing\u00efamareh", "jingiamareh"]
     t = sp.check_text("Ka jingjingiamareh ka long.", context=True, skip_foreign=True)
     assert t.corrected == "Ka jing\u00efamareh ka long."
+
+
+def test_the_loanword_note_is_shown_for_no_word(client):
+    """Maintainer request, 6 October 2026: the note "Final '-l' in
+    'shongskul' is not native to Khasi — likely a loanword" is not shown."""
+    for word in ["shongskul", "skul", "bus"]:
+        notes = client.post("/analyse", json={"word": word}).json()["phonology"]["warnings"]
+        assert not any("loanword" in n for n in notes), (word, notes)
