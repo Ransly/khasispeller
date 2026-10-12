@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import os
 import re
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 
 try:
-    from fastapi import FastAPI, HTTPException, Response
+    from fastapi import FastAPI, HTTPException, Request, Response
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse
     from pydantic import BaseModel, Field
@@ -45,6 +45,7 @@ from khasi_engine import tokens as _tokens              # noqa: E402
 from khasi_engine.database import canonical_pos         # noqa: E402
 from khasi_spell.speller import KhasiSpeller            # noqa: E402
 from khasi_spell import syllables as _syllables         # noqa: E402
+from khasi_spell import limits as _limits               # noqa: E402
 
 
 _speller: Optional[KhasiSpeller] = None
@@ -110,13 +111,42 @@ app = FastAPI(
     openapi_url="/openapi.json" if _API_DOCS else None,
 )
 
+# Service limits: a per-visitor rate limit, a request-size cap and a cap on
+# how many text checks run at once (khasi_spell/limits.py has the settings).
+# Before these, 50,000 characters of unknown words held a worker for half a
+# minute, and nothing stopped a script from sending such requests in a loop
+# or copying the lexicon's glosses word by word.
+_settings = _limits.Settings.from_env()
+_rate_limiter = _limits.RateLimiter(_settings.rules())
+_gate = _limits.HeavyGate(_settings.max_concurrent_checks,
+                          _settings.max_waiting_checks,
+                          _settings.busy_wait_seconds)
+# Added before CORS on purpose: the middleware added last is the outermost,
+# so a 429 or 413 from here still passes through CORS and gets its headers.
+app.add_middleware(_limits.ServiceLimits, settings=_settings, limiter=_rate_limiter)
+print(f"[khasi-spell] limits: {_settings.public()}, "
+      f"{_settings.max_concurrent_checks or 'unlimited'} text checks at once")
+
+
+@contextmanager
+def _heavy():
+    """Run a text check inside the busy gate; 503 when no slot comes free."""
+    try:
+        with _gate.slot():
+            yield
+    except _limits.Busy:
+        raise HTTPException(
+            503, "The checker is busy with other requests. Please try again "
+                 "in a few seconds.", headers={"Retry-After": "5"}) from None
+
+
 # CORS — off unless CORS_ORIGINS lists the other sites allowed to call the
 # service from a browser, comma-separated, e.g.:
 #   CORS_ORIGINS=https://khasi-spell.vercel.app,https://www.khasi-nlp.org
 # ("*" allows every site). The bundled page at "/" is this same site and
 # needs none of it. The default used to be "*", so any website could have
 # its visitors' browsers query the service and its licensed glosses. This
-# does not stop scripts; only a rate limit would.
+# does not stop scripts; the rate limit above is what slows those.
 _cors_origins_env = os.environ.get("CORS_ORIGINS", "").strip()
 _cors_origins = (["*"] if _cors_origins_env == "*" else
                  [o.strip() for o in _cors_origins_env.split(",") if o.strip()])
@@ -147,9 +177,11 @@ class WordRequest(BaseModel):
 # Upper bound on /check, /correct and /realword input. Checking is
 # synchronous and costs tens of milliseconds per unknown word, so a large,
 # mostly non-Khasi document held a worker for minutes (20,000 characters of
-# English-heavy text took 162 s before the 2026-09-30 speed-ups). 50,000
-# characters is a long article; send longer documents in parts.
-MAX_TEXT_CHARS = 50_000
+# English-heavy text took 162 s before the 2026-09-30 speed-ups, and 50,000
+# characters of unknown words still took about half a minute after them).
+# 20,000 characters is about ten pages; send longer documents in parts.
+# KHASI_SPELL_MAX_TEXT_CHARS changes it.
+MAX_TEXT_CHARS = _settings.max_text_chars
 
 
 class TextRequest(BaseModel):
@@ -235,6 +267,9 @@ def service_info() -> dict:
             "POST /batch": '{"words": [...]} -> up to 1000 words per call',
             "POST /v1/spellcheck": 'parent-platform compatible: {"text","mode"}',
         },
+        # Over a limit the service answers 429 (too many requests), 413
+        # (request too large) or 503 (busy), each with a "detail" message.
+        "limits": _settings.public(),
     }
 
 
@@ -262,7 +297,7 @@ def _public(value):
 
 
 @app.get("/health")
-def health():
+def health(request: Request):
     ready = _speller is not None and _speller.loaded
     return _public({
         "ok": ready,
@@ -285,6 +320,11 @@ def health():
         # non-editable install without KHASI_DATA_DIR used to lose all of
         # them without a word; say which are present.
         "resources": _resources() if ready else {},
+        "limits": _settings.public(),
+        # Which request field the rate limit reads the visitor's address
+        # from (never the address itself). Behind a proxy this must not be
+        # "connection": that is the proxy, the same for every visitor.
+        "visitor_address_from": _limits.client_address(request.scope)[1],
     })
 
 
@@ -309,7 +349,8 @@ def spellcheck_v1(req: SpellCheckRequest):
     sp = get_speller()
     if req.mode == "word":
         return sp.analyser.spell.suggest(req.text.strip(), n=5)
-    return sp.analyser.check_sentence(req.text)
+    with _heavy():
+        return sp.analyser.check_sentence(req.text)
 
 
 @app.post("/word")
@@ -325,16 +366,19 @@ def check_word(req: WordRequest):
 @app.post("/check")
 def check_text(req: TextRequest):
     """Check a span of text. Returns spans, suggestions and a corrected string."""
-    return get_speller().check_text(req.text, context=req.context,
-                                        skip_foreign=req.skip_foreign).to_dict()
+    sp = get_speller()
+    with _heavy():
+        return sp.check_text(req.text, context=req.context,
+                             skip_foreign=req.skip_foreign).to_dict()
 
 
 @app.post("/correct")
 def correct_text(req: TextRequest):
     """Return the text with every top-ranked correction applied."""
     sp = get_speller()
-    result = sp.check_text(req.text, context=req.context,
-                                        skip_foreign=req.skip_foreign)
+    with _heavy():
+        result = sp.check_text(req.text, context=req.context,
+                               skip_foreign=req.skip_foreign)
     # Count what actually changed, not what was flagged. A word the engine
     # knows is wrong but cannot fix — `sbngaifi`, which contains an `f` —
     # is now reported with a null suggestion and left as written, so
@@ -1068,7 +1112,10 @@ def realword(req: RealWordRequest):
     try:
         # min_margin applies to this request only; it used to be stored on
         # the shared detector and became every later request's default.
-        flags = sp.check_realword(text, min_margin=req.min_margin)
+        with _heavy():
+            flags = sp.check_realword(text, min_margin=req.min_margin)
+    except HTTPException:                     # the busy gate's own 503
+        raise
     # The details go to the log, not the response: the exception text named
     # the model file by its path on this server, and a database error can
     # name the database host and user.
@@ -1095,12 +1142,13 @@ def batch(req: BatchRequest):
     """
     sp = get_speller()
     results = []
-    for word in req.words:
-        r = sp.check(word, n=req.n)
-        results.append({
-            "word": word,
-            "is_correct": r.is_correct,
-            "suggestions": r.suggestions,
-            "gate": r.gate_name,
-        })
+    with _heavy():
+        for word in req.words:
+            r = sp.check(word, n=req.n)
+            results.append({
+                "word": word,
+                "is_correct": r.is_correct,
+                "suggestions": r.suggestions,
+                "gate": r.gate_name,
+            })
     return {"results": results, "count": len(results)}

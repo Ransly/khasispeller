@@ -138,3 +138,69 @@ def test_scores_are_safe_under_threads(pair):
         assert got == [f.slot_score(*s) for s in SLOTS * 20]
     finally:
         p._cache_size = 50_000
+
+
+# ----------------------------------------------------------------------
+# Timeouts (audit item 8)
+# ----------------------------------------------------------------------
+# Every request thread shares this one connection behind one lock, so a
+# query that stalled used to stall them all, with no limit.
+
+def test_the_connection_carries_a_statement_timeout(pair, monkeypatch):
+    from khasi_spell.ngram_pg import PgNgramLM
+    monkeypatch.setenv("KHASI_PG_STATEMENT_TIMEOUT_MS", "1234")
+    p = PgNgramLM(os.environ["DATABASE_URL"].strip()).load()
+    with p._conn.cursor() as cur:
+        cur.execute("SHOW statement_timeout")
+        assert cur.fetchone()[0] == "1234ms"
+
+
+def test_a_query_over_the_timeout_is_cancelled_and_the_connection_survives(pair, monkeypatch):
+    import psycopg2
+    from khasi_spell.ngram_pg import PgNgramLM
+    f, _ = pair
+    monkeypatch.setenv("KHASI_PG_STATEMENT_TIMEOUT_MS", "100")
+    p = PgNgramLM(os.environ["DATABASE_URL"].strip()).load()
+    with pytest.raises(psycopg2.errors.QueryCanceled):
+        with p._conn.cursor() as cur:
+            cur.execute("SELECT pg_sleep(3)")
+    slot = ("briew", ["ka", "sorkar"], ["ka", "la"])
+    assert p.slot_score(*slot) == f.slot_score(*slot)
+
+
+def test_a_timed_out_fetch_fails_once_instead_of_waiting_twice(pair, monkeypatch):
+    """A dropped connection is retried once; a timeout is not, because the
+    same query would only time out again while holding the shared lock."""
+    import psycopg2
+    from khasi_spell.ngram_pg import PgNgramLM
+    p = PgNgramLM(os.environ["DATABASE_URL"].strip()).load()
+    calls = []
+
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a):
+            calls.append(a)
+            raise psycopg2.errors.QueryCanceled("canceling statement due to statement timeout")
+
+    class Conn:
+        closed = False
+        def cursor(self): return Cursor()
+
+    p._conn = Conn()
+    with pytest.raises(psycopg2.errors.QueryCanceled):
+        p._fetch(["ka"])
+    assert len(calls) == 1
+
+
+def test_timeouts_come_from_the_environment(monkeypatch):
+    from khasi_engine.database import pg_connect_timeout
+    from khasi_spell.ngram_pg import statement_timeout_ms
+    monkeypatch.delenv("KHASI_PG_CONNECT_TIMEOUT", raising=False)
+    monkeypatch.delenv("KHASI_PG_STATEMENT_TIMEOUT_MS", raising=False)
+    assert (pg_connect_timeout(), statement_timeout_ms()) == (10, 10_000)
+    monkeypatch.setenv("KHASI_PG_CONNECT_TIMEOUT", "3")
+    monkeypatch.setenv("KHASI_PG_STATEMENT_TIMEOUT_MS", "0")
+    assert (pg_connect_timeout(), statement_timeout_ms()) == (3, 0)
+    monkeypatch.setenv("KHASI_PG_CONNECT_TIMEOUT", "soon")
+    assert pg_connect_timeout() == 10

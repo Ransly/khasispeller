@@ -545,6 +545,21 @@ def _flat_to_enriched(flat: dict, *, base: Optional[dict] = None) -> dict:
     return enriched
 
 
+def pg_connect_timeout() -> int:
+    """Seconds to wait for a PostgreSQL connection before giving up.
+
+    Without one, a database that is unreachable (asleep, restarting, wrong
+    host) made the caller wait as long as the operating system would: the
+    service hung at start-up, or a request thread hung for minutes.
+    KHASI_PG_CONNECT_TIMEOUT changes it; 0 waits indefinitely, as before.
+    """
+    raw = (os.environ.get("KHASI_PG_CONNECT_TIMEOUT") or "").strip()
+    try:
+        return max(0, int(raw)) if raw else 10
+    except ValueError:
+        return 10
+
+
 def _load_payload_from_pg(database_url: str) -> dict:
     """Fetch meta/phonology/morphology singletons + enriched lexicon from PG.
 
@@ -560,7 +575,7 @@ def _load_payload_from_pg(database_url: str) -> dict:
 
     payload: dict = {"meta": {}, "phonology": {}, "morphology": {},
                      "lexicon": []}
-    with psycopg2.connect(database_url) as conn:
+    with psycopg2.connect(database_url, connect_timeout=pg_connect_timeout()) as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # PostgreSQL is the single served source. The last four tables
             # here used to exist only in `data/khasi_db_extras.json`, which
@@ -782,7 +797,7 @@ def _pg_upsert_entry(database_url: str, enriched: dict) -> None:
         f"INSERT INTO lexicon_entries ({', '.join(cols)}) VALUES ({placeholders}) "
         f"ON CONFLICT (entry_id) DO UPDATE SET {update_set}, updated_at = now()"
     )
-    with psycopg2.connect(database_url) as conn:
+    with psycopg2.connect(database_url, connect_timeout=pg_connect_timeout()) as conn:
         with conn.cursor() as cur:
             try:
                 cur.execute(sql, row)
@@ -811,7 +826,7 @@ def _pg_delete_entry(database_url: str, entry_id: str) -> None:
     import psycopg2
     if database_url.startswith("postgresql+asyncpg://"):
         database_url = "postgresql://" + database_url[len("postgresql+asyncpg://"):]
-    with psycopg2.connect(database_url) as conn:
+    with psycopg2.connect(database_url, connect_timeout=pg_connect_timeout()) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM lexicon_entries WHERE entry_id = %s",

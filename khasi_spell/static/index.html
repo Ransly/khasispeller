@@ -213,6 +213,7 @@ textarea:focus{outline:none;background:var(--card);border-color:var(--blue);
   box-shadow:0 0 0 3px rgba(37,99,235,.16)}
 textarea::placeholder{color:var(--mut2)}
 .count{font-size:calc(12px*var(--fs));color:var(--mut);text-align:right;margin:7px 2px 12px}
+.count.over{color:var(--on-red)}
 
 /* ---------- marks ---------- */
 mark{border-radius:5px;padding:1px 3px;background:transparent;color:inherit}
@@ -1361,11 +1362,28 @@ function routeFromHash(){
 addEventListener("hashchange", routeFromHash);
 
 /* ---------------- api ---------------- */
+/* What to tell the user when the server refuses a request. Its own messages
+   (too many requests, busy, request too large) arrive as text and are shown
+   as they are. A text over the length limit arrives as a list of validation
+   problems, which used to print as "[object Object]". */
+function apiErrorMessage(status, statusText, data){
+  const d = data && data.detail;
+  if (typeof d === "string" && d) return d;
+  if (Array.isArray(d) && d.length){
+    const e = d[0] || {};
+    if (e.type === "string_too_long" && e.ctx && e.ctx.max_length)
+      return "The text is too long: the limit is "
+           + Number(e.ctx.max_length).toLocaleString("en-US")
+           + " characters. Please check it in parts.";
+    if (e.msg) return String(e.msg);
+  }
+  return status + " " + statusText;
+}
 async function api(path, body){
   const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
                               body: JSON.stringify(body)});
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || (r.status + " " + r.statusText));
+  if (!r.ok) throw new Error(apiErrorMessage(r.status, r.statusText, data));
   return data;
 }
 function busy(btn, on, label){
@@ -1374,10 +1392,22 @@ function busy(btn, on, label){
 }
 
 /* ---------------- text checking ---------------- */
+/* The longest text the server accepts; /health reports the real figure. The
+   server counts one per Unicode code point, so the page counts the same way
+   here (Array.from) and an emoji is one character, not two. */
+let maxTextChars = 20000;
+function countNote(chars, words, limit){
+  const base = chars.toLocaleString("en-US") + " characters · " + words + " words";
+  return chars > limit
+    ? base + " · over the limit of " + limit.toLocaleString("en-US") + ", check it in parts"
+    : base;
+}
 function updateCount(){
   const t = $("text").value;
   const w = (t.match(wordRe()) || []).length;
-  $("count").textContent = t.length + " characters · " + w + " words";
+  const chars = Array.from(t).length;
+  $("count").textContent = countNote(chars, w, maxTextChars);
+  $("count").classList.toggle("over", chars > maxTextChars);
 }
 /* Example texts for Try Example, each built to show different kinds of
    error. `errors` and `alts` name the words to point at in a demonstration —
@@ -3014,6 +3044,8 @@ fetch("/health").then(r => r.json()).then(d => {
   // vocabulary by about 2.5x under a label that said "Khasi word forms".
   const n = d && (d.word_forms || d.vocabulary_size);
   if (n) $("vocab").textContent = n.toLocaleString();
+  const lim = d && d.limits && d.limits.max_text_chars;
+  if (lim > 0){ maxTextChars = lim; updateCount(); }
 }).catch(() => { $("vocab").textContent = "—"; });
 document.addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter"){ e.preventDefault(); checkText(); }

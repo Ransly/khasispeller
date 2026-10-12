@@ -1013,3 +1013,88 @@ def test_the_loanword_note_is_shown_for_no_word(client):
     for word in ["shongskul", "skul", "bus"]:
         notes = client.post("/analyse", json={"word": word}).json()["phonology"]["warnings"]
         assert not any("loanword" in n for n in notes), (word, notes)
+
+
+# ----------------------------------------------------------------------
+# Service limits on the real routes (audit item 8, done 2026-10-12)
+# ----------------------------------------------------------------------
+# The limiter, the gate and the size cap have their own tests in
+# test_service_limits; these check that the routes are actually behind them.
+
+def test_text_over_the_limit_is_refused(client):
+    from khasi_spell import api
+    assert api.MAX_TEXT_CHARS == 20_000
+    for route in ("/check", "/correct", "/realword"):
+        r = client.post(route, json={"text": "a" * (api.MAX_TEXT_CHARS + 1)})
+        assert r.status_code == 422, route
+        err = r.json()["detail"][0]
+        assert err["type"] == "string_too_long", route
+        assert err["ctx"]["max_length"] == api.MAX_TEXT_CHARS, route
+
+
+def test_text_at_the_limit_is_checked(client):
+    text = ("ka shnong " * 2000)[:20_000]
+    assert len(text) == 20_000
+    assert client.post("/check", json={"text": text}).status_code == 200
+
+
+def test_health_reports_the_limits_and_where_the_visitor_is_read_from(client):
+    import json as _json
+    d = client.get("/health").json()
+    assert d["limits"]["max_text_chars"] == 20_000
+    assert d["visitor_address_from"] == "connection"
+    d = client.get("/health", headers={"CF-Connecting-IP": "203.0.113.9"}).json()
+    assert d["visitor_address_from"] == "cf-connecting-ip"
+    assert "203.0.113.9" not in _json.dumps(d)       # the source, never the address
+    assert client.get("/api").json()["limits"]["max_text_chars"] == 20_000
+
+
+def test_a_check_is_refused_when_the_checker_is_full(client, monkeypatch):
+    from khasi_spell import api, limits
+    gate = limits.HeavyGate(slots=1, max_waiting=0, wait_seconds=0)
+    monkeypatch.setattr(api, "_gate", gate)
+    heavy = (("/check", {"text": "ka shnong"}),
+             ("/correct", {"text": "ka shnong"}),
+             ("/realword", {"text": "ka shnong"}),
+             ("/batch", {"words": ["ka"]}),
+             ("/v1/spellcheck", {"text": "ka shnong", "mode": "sentence"}))
+    with gate.slot():                                # the one slot is taken
+        for route, body in heavy:
+            r = client.post(route, json=body)
+            assert r.status_code == 503, route
+            assert r.headers["retry-after"] == "5", route
+            assert "busy" in r.json()["detail"], route
+        # Looking one word up is not a text check and does not queue.
+        assert client.post("/word", json={"word": "ka"}).status_code == 200
+        assert client.post("/v1/spellcheck", json={"text": "ka", "mode": "word"}).status_code == 200
+    for route, body in heavy:                        # slot free: all answer
+        assert client.post(route, json=body).status_code == 200, route
+
+
+def test_too_many_requests_from_one_visitor_get_429(client, monkeypatch):
+    from khasi_spell import api
+    monkeypatch.setattr(api._rate_limiter, "_rules",
+                        {"lookups": [(2, 60)], "checks": [(1, 60)]})
+    monkeypatch.setattr(api._rate_limiter, "_state", {})
+    who = {"CF-Connecting-IP": "203.0.113.50"}
+    assert client.post("/word", json={"word": "ka"}, headers=who).status_code == 200
+    assert client.post("/analyse", json={"word": "ka"}, headers=who).status_code == 200
+    r = client.post("/word", json={"word": "ka"}, headers=who)
+    assert r.status_code == 429
+    assert int(r.headers["retry-after"]) >= 1
+    assert "Too many requests" in r.json()["detail"]
+    # Text checks are counted apart from look-ups.
+    assert client.post("/check", json={"text": "ka"}, headers=who).status_code == 200
+    assert client.post("/realword", json={"text": "ka"}, headers=who).status_code == 429
+    # Another visitor is unaffected, and so are the page and /health.
+    other = {"CF-Connecting-IP": "203.0.113.51"}
+    assert client.post("/word", json={"word": "ka"}, headers=other).status_code == 200
+    assert client.get("/health", headers=who).status_code == 200
+    assert client.get("/", headers=who).status_code == 200
+
+
+def test_oversized_request_is_refused_before_it_is_parsed(client):
+    body = b'{"text": "' + b"a" * 600_000 + b'"}'
+    r = client.post("/check", content=body, headers={"Content-Type": "application/json"})
+    assert r.status_code == 413
+    assert "too large" in r.json()["detail"]

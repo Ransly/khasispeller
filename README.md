@@ -190,6 +190,32 @@ other websites may call the service from a browser only when listed in
 `CORS_ORIGINS` (comma-separated; `*` for all). Both used to be open, which
 made bulk copying of the licensed glosses easy.
 
+### Service limits
+
+The service protects itself from heavy or repeated requests
+(`khasi_spell/limits.py`). Each limit has an environment variable; `0`
+switches that limit off (the text limit cannot be switched off).
+
+| Limit | Default | Variable | Over the limit |
+|---|---|---|---|
+| Text length for `/check`, `/correct`, `/realword` | 20,000 characters | `KHASI_SPELL_MAX_TEXT_CHARS` | 422 |
+| Request body size | 512 KB | `KHASI_SPELL_MAX_BODY_BYTES` | 413 |
+| Text checks per visitor (`/check`, `/correct`, `/realword`, `/batch`, `/v1/spellcheck`) | 90 a minute | `KHASI_SPELL_RATE_CHECKS_PER_MIN` | 429 + `Retry-After` |
+| Word look-ups per visitor (`/word`, `/analyse`) | 180 a minute, 2,000 an hour | `KHASI_SPELL_RATE_LOOKUPS_PER_MIN`, `KHASI_SPELL_RATE_LOOKUPS_PER_HOUR` | 429 + `Retry-After` |
+| Text checks running at once | 2, with 8 more waiting up to 15 s | `KHASI_SPELL_MAX_CONCURRENT_CHECKS`, `KHASI_SPELL_MAX_WAITING_CHECKS`, `KHASI_SPELL_BUSY_WAIT_SECONDS` | 503 + `Retry-After` |
+| PostgreSQL connection | 10 s | `KHASI_PG_CONNECT_TIMEOUT` | start-up fails instead of hanging |
+| One n-gram query | 10 s | `KHASI_PG_STATEMENT_TIMEOUT_MS` | `/check` ranks without context; `/realword` answers 503 |
+
+A visitor is identified by address: `CF-Connecting-IP` when the service is
+behind Cloudflare (as on Render), else the first entry of `X-Forwarded-For`,
+else the connection itself. People behind one shared address (a classroom, an
+office) share one allowance, and the defaults leave room for about thirty of
+them checking in the same minute. `GET /health` reports the limits in force
+and, as `visitor_address_from`, which of the three the address was read from:
+behind a proxy it must not say `connection`, because that is the proxy and
+every visitor would share one allowance. Counts are kept in memory, per
+process, so they reset on a restart and are not shared between workers.
+
 ### Web interface
 
 A single self-contained HTML page served at `/` — no build step, no CDN, no
@@ -1972,7 +1998,8 @@ Current figures are in *Benchmark* above. What still limits the checker:
   corrected; see *Proper nouns and acronyms*.
 - **Long texts are slow when they are mostly not Khasi.** Each unknown word
   costs tens of milliseconds, and English-heavy input is almost all unknown
-  words. `/check` caps input at 50,000 characters.
+  words. `/check` caps input at 20,000 characters, and no more than two text
+  checks run at once (see *Service limits*).
 
 The ~~struck-through~~ items below were limitations earlier and are fixed:
 

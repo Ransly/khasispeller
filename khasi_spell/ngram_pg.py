@@ -35,11 +35,30 @@ import threading
 from collections import OrderedDict
 from typing import Optional, Sequence
 
+from khasi_engine.database import pg_connect_timeout
 from khasi_spell.ngram import pad_context
 
 BOS, EOS = "<s>", "</s>"
 BACKOFF = 0.4
 FLOOR = 1e-10
+
+
+
+def statement_timeout_ms() -> int:
+    """Longest a single n-gram query may run, in milliseconds.
+
+    Every request thread shares one connection behind one lock (see
+    PgNgramLM.__init__), so a query that stalls stalls all of them. With a
+    limit the database cancels it, the caller gets an error, and /check
+    falls back to ranking without context while /realword answers 503.
+    KHASI_PG_STATEMENT_TIMEOUT_MS changes it; 0 leaves queries unlimited.
+    """
+    raw = (os.environ.get("KHASI_PG_STATEMENT_TIMEOUT_MS") or "").strip()
+    try:
+        return max(0, int(raw)) if raw else 10_000
+    except ValueError:
+        return 10_000
+
 
 # Grams held in memory after being fetched. The corpus is Zipfian and the
 # function words that dominate lookups are a tiny set, so a small cache
@@ -84,7 +103,8 @@ class PgNgramLM:
         """
         try:
             import psycopg2
-            with psycopg2.connect(database_url) as conn:
+            with psycopg2.connect(database_url,
+                                  connect_timeout=pg_connect_timeout()) as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT to_regclass('public.ngram_counts')")
                     if cur.fetchone()[0] is None:
@@ -115,8 +135,18 @@ class PgNgramLM:
 
     def _connect(self) -> None:
         import psycopg2
-        self._conn = psycopg2.connect(self._url)
+        self._conn = psycopg2.connect(self._url, connect_timeout=pg_connect_timeout())
         self._conn.autocommit = True
+        # Set after connecting rather than in the connection options: a
+        # pooler in front of the database rejects start-up options, and a
+        # refusal here must not cost the connection.
+        limit = statement_timeout_ms()
+        if limit:
+            try:
+                with self._conn.cursor() as cur:
+                    cur.execute("SET statement_timeout = %s", (limit,))
+            except Exception as exc:
+                print(f"[khasi-spell] n-gram database: statement timeout not set: {exc!r}")
 
     @property
     def loaded(self) -> bool:
@@ -194,6 +224,11 @@ class PgNgramLM:
                 with self._conn.cursor() as cur:
                     cur.execute(sql, (grams,))
                     return dict(cur.fetchall())
+            except psycopg2.errors.QueryCanceled:
+                # The statement timeout fired. The connection is still good
+                # and the query would only time out again: fail now rather
+                # than hold the lock for a second wait.
+                raise
             except (psycopg2.InterfaceError, psycopg2.OperationalError):
                 if attempt == 2:
                     raise
